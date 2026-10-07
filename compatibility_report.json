@@ -1,0 +1,203 @@
+{
+  "contract_version": "1.0",
+  "project": "credit_risk",
+  "verdict": "ACCEPTED",
+  "summary": {
+    "BLOCKER": 0,
+    "CONFIRM": 0,
+    "WARNING": 0,
+    "INFO": 0
+  },
+  "findings": [],
+  "levels": [
+    {
+      "name": "structure",
+      "status": "done",
+      "reason": null,
+      "duration_s": 0.001
+    },
+    {
+      "name": "manifest",
+      "status": "done",
+      "reason": null,
+      "duration_s": 0.002
+    },
+    {
+      "name": "static",
+      "status": "done",
+      "reason": null,
+      "duration_s": 0.311
+    },
+    {
+      "name": "data",
+      "status": "done",
+      "reason": null,
+      "duration_s": 0.025
+    },
+    {
+      "name": "dynamic",
+      "status": "done",
+      "reason": null,
+      "duration_s": 8.639
+    }
+  ],
+  "facts": {
+    "n_files": 7,
+    "size_mb": 0.23,
+    "requirements": {
+      "scikit-learn": "1.8.0",
+      "pandas": "3.0.2",
+      "numpy": "2.4.4",
+      "joblib": "1.5.3"
+    },
+    "manifest": {
+      "project": {
+        "name": "credit-risk",
+        "task": "classification"
+      },
+      "data": {
+        "path": "data.csv",
+        "target": "target"
+      },
+      "evaluation": {
+        "primary_metric": "roc_auc",
+        "min_threshold": 0.7
+      },
+      "entrypoints": {
+        "train": "train.py",
+        "predict": "predict.py"
+      }
+    },
+    "bandit": "ok",
+    "data": {
+      "path": "data.csv",
+      "rows": 1000,
+      "columns": 21,
+      "numeric_cols": 8,
+      "categorical_cols": 13,
+      "size_mb": 0.225,
+      "class_balance": {
+        "1": 700,
+        "0": 300
+      },
+      "missing_rate_total": 0.0
+    },
+    "env": {
+      "mode": "venv",
+      "python": "/home/sarra/.cache/contract-validator/venvs/8c0e494426a46f60/bin/python"
+    },
+    "dynamic": {
+      "main_s": 4.58,
+      "harness_s": 3.81,
+      "peak_mem_mb": 158.9,
+      "train_s": 0.894,
+      "deterministic": true
+    }
+  },
+  "observed_metrics": {
+    "accuracy": 0.715,
+    "precision": 0.8373983739837398,
+    "recall": 0.7357142857142858,
+    "f1": 0.7832699619771863,
+    "roc_auc": 0.7772619047619048
+  },
+  "sandbox": {
+    "backend": "subprocess",
+    "python": "/home/sarra/.cache/contract-validator/venvs/8c0e494426a46f60/bin/python",
+    "network_isolated": true,
+    "memory_mb": 4096,
+    "note": "repli local : moins étanche que Docker (pas de FS en lecture seule ni de non-root)"
+  },
+  "duration_s": 8.98,
+  "schema_version": "1.0",
+  "run_id": "2a7bb722a7c8",
+  "created_at": "2026-10-07T19:02:42+00:00",
+  "project_hash": "a50961ce81e1ff5627bf3c3b7ce537ae164c97afd1016f255c69469f2ea27fd4",
+  "hashed_files": 7,
+  "snapshot_path": "/home/sarra/validated/a50961ce81e1",
+  "confirmation": null,
+  "handoff": {
+    "status": "READY",
+    "can_proceed": true,
+    "requires_human_confirmation": false,
+    "reason": null,
+    "task": "classification",
+    "target": "target",
+    "primary_metric": "roc_auc",
+    "min_threshold": 0.7,
+    "data_path": "data.csv",
+    "data_summary": {
+      "path": "data.csv",
+      "rows": 1000,
+      "columns": 21,
+      "numeric_cols": 8,
+      "categorical_cols": 13,
+      "size_mb": 0.225,
+      "class_balance": {
+        "1": 700,
+        "0": 300
+      },
+      "missing_rate_total": 0.0
+    },
+    "feature_columns": [
+      "status",
+      "duration",
+      "credit_history",
+      "purpose",
+      "amount",
+      "savings",
+      "employment_duration",
+      "installment_rate",
+      "personal_status_sex",
+      "other_debtors",
+      "present_residence",
+      "property",
+      "age",
+      "other_installment_plans",
+      "housing",
+      "number_credits",
+      "job",
+      "people_liable",
+      "telephone",
+      "foreign_worker"
+    ],
+    "entrypoints": {
+      "main": "main.py",
+      "train": "train.py",
+      "predict": "predict.py"
+    },
+    "interfaces": {
+      "train": "train(data_path, output_dir) -> dict[str, float]  (écrit model.joblib dans output_dir)",
+      "load_model": "load_model(model_path)",
+      "predict": "predict(model, data: dict | list[dict] | DataFrame) -> list  (JSON-sérialisable)"
+    },
+    "model_artifact": "model.joblib",
+    "pinned_dependencies": {
+      "scikit-learn": "1.8.0",
+      "pandas": "3.0.2",
+      "numpy": "2.4.4",
+      "joblib": "1.5.3"
+    },
+    "observed_metrics": {
+      "accuracy": 0.715,
+      "precision": 0.8373983739837398,
+      "recall": 0.7357142857142858,
+      "f1": 0.7832699619771863,
+      "roc_auc": 0.7772619047619048
+    },
+    "deterministic": true,
+    "carry_forward": [
+      {
+        "code": "HANDOFF.IMBALANCED_CLASSES",
+        "message": "Classes déséquilibrées (ratio 2.3:1) : préférer roc_auc/f1 à accuracy, split stratifié.",
+        "source": "derived"
+      },
+      {
+        "code": "HANDOFF.SMALL_DATASET",
+        "message": "1000 lignes : métriques très variables, calibrer le seuil du quality gate sur plusieurs graines.",
+        "source": "derived"
+      }
+    ]
+  },
+  "report_sha256": "e8978382a319799cf7f623df5b461b579836b028138c5f61b96b63c9bc53f98c"
+}

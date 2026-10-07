@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+output/
+rapport*.json
+# générés par eval/make_variants.py (les tests les recréent)
+eval/projects/variants/

@@ -1,0 +1,16 @@
+[project]
+name = "agentic-mlops-validator"
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2", "pandas>=2", "pyyaml", "packaging"]
+
+[project.optional-dependencies]
+dev = ["pytest", "bandit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["validator*"]
+exclude = ["tests*", "eval*", ".venv*"]
