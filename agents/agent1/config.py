@@ -1,0 +1,14 @@
+"""Configuration for Agent 1."""
+
+BASELINE_TIMEOUT_SECONDS = 300
+BASELINE_OUTPUT_MAX_CHARS = 10_000
+CLASSIFICATION_MAX_UNIQUE = 10
+CLASSIFICATION_UNIQUE_RATIO = 0.2
+MAX_CYCLOMATIC_COMPLEXITY = 10
+IMBALANCE_RATIO = 0.2
+TARGET_COMMON_NAMES = ("target", "label", "y", "class", "price", "default", "churn")
+ID_NAME_PARTS = ("id", "index")
+ISSUE_TIER_BY_TOOL = {"ruff": 1, "radon": 2, "vulture": 3}
+MAX_ATTEMPTS = 3
+OUTPUT_TOLERANCE = 1e-6
+LLM_MODEL = "stub"
