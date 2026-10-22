@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "project_name": "credit-risk",
+  "analyzed_at": "2026-10-15T18:00:00Z",
+  "analysis_status": "complete",
+
+  "layout": {
+    "type": "flat",
+    "root": ".",
+    "has_package": false,
+    "has_src_dir": false,
+    "has_tests": false,
+    "has_notebooks": false
+  },
+
+  "summary": {
+    "total_files": 7,
+    "python_files": 4,
+    "total_size_kb": 220,
+    "largest_file": {"path": "data.csv", "size_bytes": 224872}
+  },
+
+  "files": [
+    {"path": "main.py", "kind": "python", "role": "script_entrypoint", "size_bytes": 423, "lines": 19, "sha256_prefix": "189022ead641"},
+    {"path": "train.py", "kind": "python", "role": "training", "size_bytes": 1815, "lines": 53, "sha256_prefix": "5a9d776166d1"},
+    {"path": "predict.py", "kind": "python", "role": "inference", "size_bytes": 413, "lines": 19, "sha256_prefix": "80885c94b00f"},
+    {"path": "preprocessing.py", "kind": "python", "role": "preprocessing", "size_bytes": 1442, "lines": 37, "sha256_prefix": "f3f2afaceeef"},
+    {"path": "data.csv", "kind": "data", "role": "training_dataset", "size_bytes": 224872, "lines": 1001, "sha256_prefix": "12e36a6cb8d2"},
+    {"path": "requirements.txt", "kind": "dependencies", "role": "dependency_file", "size_bytes": 61, "lines": 4, "sha256_prefix": "f9dfa2cbbebf"},
+    {"path": "mlops.yaml", "kind": "config", "role": "project_config", "size_bytes": 259, "lines": 12, "sha256_prefix": "bc831cf7097f"}
+  ],
+
+  "python_modules": {
+    "main.py": {
+      "functions": ["main"], "classes": [], "has_main_guard": true,
+      "imports": {"internal": ["predict", "train"], "external": ["pandas"], "stdlib": ["os"]}
+    },
+    "train.py": {
+      "functions": ["_models", "_evaluate", "train"], "classes": [], "has_main_guard": false,
+      "imports": {"internal": ["preprocessing"], "external": ["joblib", "pandas", "sklearn"], "stdlib": ["json", "pathlib"]}
+    },
+    "predict.py": {
+      "functions": ["load_model", "predict"], "classes": [], "has_main_guard": false,
+      "imports": {"internal": ["preprocessing"], "external": ["joblib", "pandas"], "stdlib": []}
+    },
+    "preprocessing.py": {
+      "functions": ["build_pipeline"], "classes": ["CreditFeatures"], "has_main_guard": false,
+      "imports": {"internal": [], "external": ["numpy", "pandas", "sklearn"], "stdlib": []}
+    }
+  },
+
+  "internal_dependency_graph": {
+    "main.py": ["predict.py", "train.py"],
+    "train.py": ["preprocessing.py"],
+    "predict.py": ["preprocessing.py"],
+    "preprocessing.py": []
+  },
+
+  "entrypoints": {
+    "executable_scripts": ["main.py"],
+    "training": {"file": "train.py", "function": "train", "signature": "train(data_path, output_dir)"},
+    "inference": {"file": "predict.py", "function": "predict", "signature": "predict(model, data)"},
+    "model_loader": {"file": "predict.py", "function": "load_model"},
+    "web_server": null
+  },
+
+  "artifacts": {
+    "present": [],
+    "produced_at_runtime": [
+      {"path": "output/model.joblib", "produced_by": "train.py"},
+      {"path": "output/metrics.json", "produced_by": "train.py"}
+    ]
+  },
+
+  "data_files": [
+    {"path": "data.csv", "format": "csv", "rows": 1000, "columns": 21, "has_header": true, "target_column": "target"}
+  ],
+
+  "config_files": [
+    {"path": "mlops.yaml", "format": "yaml", "keys": ["project", "data", "evaluation", "entrypoints"]}
+  ],
+
+  "docker_readiness": {
+    "has_dockerfile": false,
+    "has_dockerignore": false,
+    "has_compose": false,
+    "has_api": false,
+    "has_tests": false
+  },
+
+  "ignorable_paths": [".git", "__pycache__/", "*.pyc", ".venv/", "venv/", "output/", ".env"],
+
+  "files_needed_at_runtime": ["predict.py", "preprocessing.py"],
+  "files_needed_only_at_build": ["data.csv", "train.py"],
+
+  "issues": [
+    {"severity": "high", "code": "NO_MODEL_ARTIFACT", "message": "Aucun fichier modele dans le projet : il est genere par train.py."},
+    {"severity": "medium", "code": "NO_WEB_SERVER", "message": "Aucune API : main.py est un script train + predict."},
+    {"severity": "low", "code": "NO_TESTS", "message": "Aucun test dans le projet."}
+  ]
+}

@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.ipynb
+.env
+.git
+__pycache__/
+*.pyc
+.venv/
+venv/
+output/
+*.ipynb
+.env

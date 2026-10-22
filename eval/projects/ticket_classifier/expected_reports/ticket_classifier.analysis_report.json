@@ -1,0 +1,188 @@
+{
+  "schema_version": "1.0",
+  "project_name": "ticket-classifier",
+  "needs_user_input": false,
+  "python": {
+    "version": "3.12",
+    "package_manager": "pip",
+    "note": "Verifie sur Python 3.12."
+  },
+  "dependencies": {
+    "file": "requirements.txt",
+    "status": "reliable",
+    "packages": [
+      {
+        "name": "scikit-learn",
+        "version": "1.8.0"
+      },
+      {
+        "name": "pandas",
+        "version": "3.0.2"
+      },
+      {
+        "name": "numpy",
+        "version": "2.4.4"
+      },
+      {
+        "name": "joblib",
+        "version": "1.5.3"
+      }
+    ],
+    "missing_imports": [],
+    "api_packages_to_add": [
+      "fastapi",
+      "uvicorn[standard]",
+      "pydantic"
+    ],
+    "os_packages": []
+  },
+  "ml": {
+    "framework": "sklearn",
+    "framework_version": "1.8.0",
+    "model_type": "Pipeline(TfidfVectorizer -> LogisticRegression)",
+    "model_file": "artifacts/ticket_model.joblib",
+    "model_exists_in_project": false,
+    "model_generation": {
+      "required_before_serving": true,
+      "command": "python train.py",
+      "requires_files": [
+        "data/tickets.csv",
+        "train.py"
+      ],
+      "duration_estimate_s": 5,
+      "recommended_stage": "docker_build",
+      "note": "train.py utilise des chemins relatifs : a lancer depuis la racine du projet."
+    },
+    "model_format": "joblib",
+    "loader": "joblib.load",
+    "loader_location": "classifier.py:TicketClassifier.__init__",
+    "loader_kind": "class_constructor",
+    "model_path_env_var": "MODEL_PATH",
+    "custom_classes_module": null,
+    "other_artifacts": [
+      {
+        "path": "artifacts/metrics.json",
+        "role": "metrics"
+      }
+    ]
+  },
+  "inference": {
+    "entrypoint": {
+      "file": "classifier.py",
+      "import_path": "classifier",
+      "class_name": "TicketClassifier",
+      "kind": "method",
+      "function": "predict",
+      "constructor": "TicketClassifier(model_path=None)",
+      "signature": "TicketClassifier.predict(text: str) -> dict",
+      "loader_function": null,
+      "is_async": false,
+      "stateful": true
+    },
+    "supports_proba": false,
+    "scores_returned_by_entrypoint": true,
+    "preprocessing_location": "inside_model"
+  },
+  "io": {
+    "input_type": "text",
+    "input_schema": [
+      {
+        "name": "text",
+        "type": "str",
+        "required": true,
+        "min_length": 1
+      }
+    ],
+    "output_schema": [
+      {
+        "name": "label",
+        "type": "str"
+      },
+      {
+        "name": "scores",
+        "type": "dict[str,float]",
+        "meaning": "probabilite par classe"
+      }
+    ],
+    "class_labels": [
+      "account",
+      "billing",
+      "technical"
+    ],
+    "example_input": {
+      "text": "I was charged twice on my last invoice"
+    },
+    "example_output": {
+      "label": "billing",
+      "scores": {
+        "account": 0.0775,
+        "billing": 0.8458,
+        "technical": 0.0767
+      }
+    },
+    "example_source": "execution reelle de TicketClassifier().predict apres python train.py (aucun exemple dans le depot)",
+    "schema_confidence": "high"
+  },
+  "resources": {
+    "gpu_required": "no",
+    "recommended_base_image": "python:3.12-slim",
+    "estimated_model_size_mb": 0.05,
+    "estimated_image_size_mb": 450
+  },
+  "existing_app": {
+    "has_api": false,
+    "framework": null,
+    "app_module": null,
+    "port": null,
+    "has_dockerfile": false,
+    "env_vars": [
+      {
+        "name": "MODEL_PATH",
+        "default": "artifacts/ticket_model.joblib",
+        "used_in": "classifier.py"
+      }
+    ],
+    "external_services": []
+  },
+  "project": {
+    "file_tree": [
+      "README.md",
+      "classifier.py",
+      "data/tickets.csv",
+      "requirements.txt",
+      "train.py"
+    ],
+    "layout": "flat",
+    "ignorable_paths": [
+      ".git",
+      "__pycache__/",
+      "*.pyc",
+      ".venv/",
+      "venv/",
+      "artifacts/",
+      "README.md",
+      ".env"
+    ],
+    "keep_for_build_only": [
+      "data/tickets.csv",
+      "train.py"
+    ],
+    "runtime_files": [
+      "classifier.py",
+      "artifacts/ticket_model.joblib"
+    ]
+  },
+  "quality": {
+    "baseline_metrics": {
+      "accuracy": 1.0
+    },
+    "source": "train.py (execution reelle)"
+  },
+  "warnings": [
+    "Aucun modele dans le projet : il faut executer train.py au build (multi-stage conseille).",
+    "Inference par CLASSE a etat : l'API doit instancier TicketClassifier une seule fois (lifespan), pas a chaque requete.",
+    "Le dataset est synthetique : accuracy 1.0 non representative d'un usage reel.",
+    "train.py et classifier.py utilisent des chemins relatifs a la racine du projet."
+  ],
+  "unresolved": []
+}

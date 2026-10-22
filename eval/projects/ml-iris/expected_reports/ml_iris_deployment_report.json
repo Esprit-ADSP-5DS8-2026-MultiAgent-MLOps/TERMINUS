@@ -1,0 +1,188 @@
+{
+  "schema_version": "1.0",
+  "project_name": "ml-iris-pipeline",
+  "needs_user_input": false,
+  "python": {
+    "version": "not_pinned",
+    "package_manager": "pip",
+    "note": "Le dépôt ne précise pas la version de Python. Le code utilise des API compatibles avec une version moderne de Python 3 ; choisir et tester une version dans l'image Docker."
+  },
+  "dependencies": {
+    "file": "requirements.txt",
+    "status": "incomplete_version_pins",
+    "packages": [
+      {
+        "name": "scikit-learn",
+        "version": null
+      },
+      {
+        "name": "pandas",
+        "version": null
+      },
+      {
+        "name": "fastapi",
+        "version": null
+      },
+      {
+        "name": "uvicorn",
+        "version": null
+      },
+      {
+        "name": "joblib",
+        "version": null
+      },
+      {
+        "name": "python-multipart",
+        "version": null
+      }
+    ],
+    "missing_imports": [],
+    "api_packages_to_add": [],
+    "os_packages": [],
+    "note": "Les versions ne sont pas épinglées. pandas et python-multipart semblent non utilisés dans les deux scripts fournis, mais sont déclarés dans requirements.txt."
+  },
+  "ml": {
+    "framework": "scikit-learn",
+    "framework_version": null,
+    "model_type": "Pipeline(StandardScaler -> RandomForestClassifier)",
+    "model_file": "iris_model.pkl",
+    "model_exists_in_project": true,
+    "model_generation": {
+      "required_before_serving": false,
+      "command": "python train.py",
+      "requires_files": [],
+      "recommended_stage": "optional_retraining",
+      "note": "Le modèle sérialisé est déjà fourni. Le script train.py peut le régénérer à partir du dataset Iris inclus dans scikit-learn."
+    },
+    "model_format": "joblib/pickle",
+    "loader": "joblib.load",
+    "loader_location": "main.py:module level",
+    "loader_returns": "Pipeline scikit-learn avec StandardScaler et RandomForestClassifier",
+    "custom_classes_module": null,
+    "other_artifacts": []
+  },
+  "inference": {
+    "entrypoint": {
+      "file": "main.py",
+      "import_path": "main",
+      "function": "predict",
+      "signature": "predict(data: list)",
+      "loader_function": null,
+      "is_async": false,
+      "accepts": [
+        "list[float]"
+      ],
+      "note": "Le code attend quatre caractéristiques Iris dans l'ordre : sepal length, sepal width, petal length, petal width."
+    },
+    "pythonpath": [
+      "."
+    ],
+    "supports_proba": false,
+    "preprocessing_location": "inside_model"
+  },
+  "io": {
+    "input_type": "tabular",
+    "input_schema": [
+      {
+        "name": "sepal_length",
+        "type": "float",
+        "required": true
+      },
+      {
+        "name": "sepal_width",
+        "type": "float",
+        "required": true
+      },
+      {
+        "name": "petal_length",
+        "type": "float",
+        "required": true
+      },
+      {
+        "name": "petal_width",
+        "type": "float",
+        "required": true
+      }
+    ],
+    "input_constraints_note": "Le code ne valide pas explicitement la longueur ni le type des valeurs. L'ordre des quatre caractéristiques doit correspondre au dataset Iris de scikit-learn.",
+    "output_schema": [
+      {
+        "name": "flower_type",
+        "type": "string",
+        "meaning": "Classe prédite : Setosa, Versicolor ou Virginica"
+      }
+    ],
+    "class_labels": [
+      "Setosa",
+      "Versicolor",
+      "Virginica"
+    ],
+    "example_input": [
+      5.1,
+      3.5,
+      1.4,
+      0.2
+    ],
+    "example_output": {
+      "flower_type": "Setosa"
+    },
+    "example_source": "README.md et commentaire d'exemple dans main.py; sortie exemple indicative, non exécutée lors de cette analyse",
+    "schema_confidence": "high"
+  },
+  "resources": {
+    "gpu_required": "no",
+    "recommended_base_image": "python:3.12-slim",
+    "estimated_model_size_mb": 0.1766,
+    "estimated_image_size_mb": null,
+    "estimated_image_size_note": "À mesurer après le build ; dépend notamment des versions et des dépendances installées."
+  },
+  "existing_app": {
+    "has_api": true,
+    "framework": "FastAPI",
+    "app_module": "main:app",
+    "port": 8000,
+    "has_dockerfile": false,
+    "env_vars": [],
+    "external_services": []
+  },
+  "project": {
+    "file_tree": [
+      "README.md",
+      "iris_model.pkl",
+      "main.py",
+      "requirements.txt",
+      "train.py"
+    ],
+    "layout": "flat_layout",
+    "ignorable_paths": [
+      ".git",
+      "__pycache__/",
+      "*.pyc",
+      ".venv/",
+      "venv/",
+      ".env"
+    ],
+    "keep_for_build_only": [
+      "train.py"
+    ],
+    "runtime_files": [
+      "main.py",
+      "iris_model.pkl",
+      "requirements.txt"
+    ]
+  },
+  "quality": {
+    "baseline_metrics": {
+      "accuracy": null
+    },
+    "source": "train.py prints test accuracy when executed; no verified numeric result recorded in the repository.",
+    "note": "RandomForestClassifier does not set random_state, so the training result may vary between runs."
+  },
+  "warnings": [
+    "Les dépendances ne sont pas épinglées : le build n'est pas entièrement reproductible.",
+    "Le modèle est chargé au niveau module ; un fichier manquant ou incompatible empêche l'import de l'application.",
+    "L'endpoint /predict accepte une liste sans schéma strict ni validation explicite de quatre valeurs.",
+    "train.py n'indique pas random_state pour RandomForestClassifier, ce qui peut rendre les résultats variables."
+  ],
+  "unresolved": []
+}

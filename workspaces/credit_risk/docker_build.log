@@ -1,0 +1,73 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.11kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.7s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.0s done
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/python:3.12-slim
+#4 DONE 0.5s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 159B done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 19.96kB done
+#6 DONE 0.0s
+
+#7 [builder 1/6] FROM docker.io/library/python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
+#7 resolve docker.io/library/python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2 0.0s done
+#7 DONE 0.0s
+
+#8 [builder 2/6] WORKDIR /build
+#8 CACHED
+
+#9 [builder 3/6] COPY requirements.api.txt .
+#9 CACHED
+
+#10 [builder 4/6] RUN pip install --no-cache-dir --prefix=/install -r requirements.api.txt
+#10 CACHED
+
+#11 [builder 5/6] COPY . .
+#11 DONE 0.0s
+
+#12 [builder 6/6] RUN python -c "from train import train; train('data.csv', 'output')"
+#12 DONE 2.1s
+
+#13 [stage-1 4/8] COPY --from=builder /install /usr/local
+#13 CACHED
+
+#14 [stage-1 5/8] COPY --from=builder /build/output/model.joblib ./output/model.joblib
+#14 CACHED
+
+#15 [stage-1 6/8] COPY predict.py ./predict.py
+#15 CACHED
+
+#16 [stage-1 7/8] COPY preprocessing.py ./preprocessing.py
+#16 CACHED
+
+#17 [stage-1 2/8] WORKDIR /app
+#17 CACHED
+
+#18 [stage-1 3/8] RUN useradd --create-home --uid 1000 appuser
+#18 CACHED
+
+#19 [stage-1 8/8] COPY api.py .
+#19 CACHED
+
+#20 exporting to image
+#20 exporting layers done
+#20 exporting manifest sha256:555add88b68b7cd3f838fd61ad18c2fa412283be5fa831e110511eb4e7e546c1 done
+#20 exporting config sha256:8615268be1adac2638e1c3680f9800020cc93940b7e4154bbab7aa8bf573f1b5 done
+#20 exporting attestation manifest sha256:ea19fbe9ea22bfb3c4f5a5ff063c03a91f0fdc84a21ddd38229ca1b6df74d359 0.0s done
+#20 exporting manifest list sha256:5992db8306326a25adb41442776b5a632dec547ebf238912652e21f2b1ef9405 0.0s done
+#20 naming to docker.io/library/credit-risk:agent-build done
+#20 unpacking to docker.io/library/credit-risk:agent-build done
+#20 DONE 0.1s

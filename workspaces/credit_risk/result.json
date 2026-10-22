@@ -1,0 +1,101 @@
+{
+  "project_id": "credit_risk",
+  "ok": true,
+  "files": [
+    "api.py",
+    "requirements.api.txt",
+    "Dockerfile",
+    ".dockerignore"
+  ],
+  "validation": {
+    "ok": true,
+    "checks": [
+      {
+        "name": "file_exists",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "syntax",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "lint",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "import_app",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "routes",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "contract_input",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "contract_output",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      }
+    ]
+  },
+  "tests": {
+    "started": true,
+    "passed": 44,
+    "failed": 0,
+    "skipped": 0,
+    "error_category": null,
+    "failures": []
+  },
+  "fixes": [],
+  "docker": {
+    "ok": true,
+    "stage": "done",
+    "category": null,
+    "failure": "",
+    "image": "credit-risk:agent-build",
+    "image_id": "sha256:5992db8306326a25adb41442776b5a632dec547ebf238912652e21f2b1ef9405",
+    "size_mb": 156.4,
+    "attempts": 1,
+    "tests": {
+      "passed": 43,
+      "failed": 0,
+      "skipped": 1
+    },
+    "duration_s": 8.2
+  },
+  "push": {
+    "pushed": true,
+    "declined": false,
+    "repository": "syrineboh/credit-risk",
+    "tags": [
+      "20261021-5992db83",
+      "latest"
+    ],
+    "digest": "sha256:5992db8306326a25adb41442776b5a632dec547ebf238912652e21f2b1ef9405",
+    "error": null
+  },
+  "duration_s": 113.67
+}
