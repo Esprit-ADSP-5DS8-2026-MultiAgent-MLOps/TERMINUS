@@ -18,8 +18,9 @@ def _write_artifacts(state: Agent1State) -> tuple[str, str, list[dict[str, str]]
         artifact_root.mkdir(parents=True, exist_ok=True)
         if output_path.exists():
             shutil.rmtree(output_path)
-        workspace = Path(state.get("workspace_path", ""))
-        if workspace.is_dir():
+        workspace_value = str(state.get("workspace_path", ""))
+        workspace = Path(workspace_value) if workspace_value else None
+        if workspace is not None and workspace.is_dir():
             shutil.copytree(
                 workspace,
                 output_path,
@@ -36,7 +37,7 @@ def _write_artifacts(state: Agent1State) -> tuple[str, str, list[dict[str, str]]
                 if path.is_file()
                 and not any(part in {".venv", ".git", "__pycache__", ".pytest_cache"} or part.endswith(".egg-info") for part in path.relative_to(snapshot).parts)
             )
-        if workspace.is_dir():
+        if workspace is not None and workspace.is_dir():
             files.update(
                 path.relative_to(workspace)
                 for path in workspace.rglob("*")
@@ -46,7 +47,7 @@ def _write_artifacts(state: Agent1State) -> tuple[str, str, list[dict[str, str]]
         diff: list[str] = []
         for relative in sorted(files):
             before_path = snapshot / relative
-            after_path = workspace / relative
+            after_path = workspace / relative if workspace is not None else Path("/__agent1_missing__")
             try:
                 before = before_path.read_text(encoding="utf-8").splitlines(keepends=True) if before_path.is_file() else []
                 after = after_path.read_text(encoding="utf-8").splitlines(keepends=True) if after_path.is_file() else []
@@ -103,6 +104,19 @@ def build_output(state: Agent1State) -> dict[str, object]:
             "missing_module": baseline.get("missing_module"),
             "improved_project_path": improved_path,
             "patch_path": patch_path,
+            "ml_review": state.get("ml_review", {}),
+            "ml_review_after": state.get("ml_review_after", {}),
+            "ml_fixes": state.get("ml_fixes", {}),
+            "llm": {
+                "used": bool(state.get("llm", {}).get("used", False)),
+                "model": state.get("llm", {}).get("model", "openai/gpt-oss-20b"),
+                "endpoint_ok": bool(state.get("llm", {}).get("endpoint_ok", False)),
+                "endpoint_error": state.get("llm", {}).get("endpoint_error"),
+                "planned": int(state.get("llm", {}).get("planned", 0)),
+                "applied": int(state.get("llm", {}).get("applied", 0)),
+                "rejected": state.get("rejected", state.get("llm", {}).get("rejected", [])),
+                "note": state.get("llm_note", state.get("llm", {}).get("note", "")),
+            },
         },
         "problem_type": state.get("problem_type"),
         "subtype": state.get("subtype"),

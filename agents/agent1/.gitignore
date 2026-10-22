@@ -1,3 +1,9 @@
 .workspace/
 __pycache__/
 .pytest_cache/
+.env
+.env
+model/agent1-coder.Q4_K_M.gguf
+model/agent1-coder.Q4_K_M.gguf:Zone.Identifier
+model/Modelfile
+model/Modelfile:Zone.Identifier

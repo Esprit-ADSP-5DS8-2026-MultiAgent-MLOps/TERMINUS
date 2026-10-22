@@ -1,0 +1,251 @@
+{
+  "schema_version": "1.0",
+  "project_name": "diabetes-progression",
+  "needs_user_input": false,
+  "python": {
+    "version": "3.12",
+    "package_manager": "pip",
+    "note": "Layout src/ : PYTHONPATH=src requis pour importer dp_model. Verifie sur Python 3.12."
+  },
+  "dependencies": {
+    "file": "requirements.txt",
+    "status": "reliable",
+    "packages": [
+      {
+        "name": "scikit-learn",
+        "version": "1.8.0"
+      },
+      {
+        "name": "pandas",
+        "version": "3.0.2"
+      },
+      {
+        "name": "numpy",
+        "version": "2.4.4"
+      },
+      {
+        "name": "joblib",
+        "version": "1.5.3"
+      }
+    ],
+    "missing_imports": [],
+    "api_packages_to_add": [
+      "fastapi",
+      "uvicorn[standard]",
+      "pydantic"
+    ],
+    "os_packages": []
+  },
+  "ml": {
+    "framework": "sklearn",
+    "framework_version": "1.8.0",
+    "model_type": "Pipeline(StandardScaler -> Ridge)",
+    "model_file": "model/regressor.joblib",
+    "model_exists_in_project": true,
+    "model_generation": {
+      "required_before_serving": false,
+      "command": "python scripts/retrain.py",
+      "requires_files": [],
+      "recommended_stage": "docker_build",
+      "note": "Optionnel : le modele est deja fourni. Ne pas reentrainer au build."
+    },
+    "model_format": "joblib",
+    "loader": "joblib.load",
+    "loader_location": "src/dp_model/service.py:load_artifact",
+    "loader_returns": "bundle {model, features} : le loader ne retourne PAS le modele seul",
+    "custom_classes_module": null,
+    "other_artifacts": [
+      {
+        "path": "model/features.json",
+        "role": "feature_order"
+      }
+    ]
+  },
+  "inference": {
+    "entrypoint": {
+      "file": "src/dp_model/service.py",
+      "import_path": "dp_model.service",
+      "function": "score",
+      "signature": "score(artifact, rows) -> list[float]",
+      "loader_function": "load_artifact(model_dir)",
+      "is_async": false,
+      "accepts": [
+        "dict",
+        "list[dict]"
+      ]
+    },
+    "pythonpath": [
+      "src"
+    ],
+    "supports_proba": false,
+    "preprocessing_location": "inside_model"
+  },
+  "io": {
+    "input_type": "tabular",
+    "input_schema": [
+      {
+        "name": "age",
+        "type": "float",
+        "required": true,
+        "min": -0.1072,
+        "max": 0.1107
+      },
+      {
+        "name": "sex",
+        "type": "float",
+        "required": true,
+        "min": -0.0446,
+        "max": 0.0507
+      },
+      {
+        "name": "bmi",
+        "type": "float",
+        "required": true,
+        "min": -0.0903,
+        "max": 0.1706
+      },
+      {
+        "name": "bp",
+        "type": "float",
+        "required": true,
+        "min": -0.1124,
+        "max": 0.132
+      },
+      {
+        "name": "s1",
+        "type": "float",
+        "required": true,
+        "min": -0.1268,
+        "max": 0.1539
+      },
+      {
+        "name": "s2",
+        "type": "float",
+        "required": true,
+        "min": -0.1156,
+        "max": 0.1988
+      },
+      {
+        "name": "s3",
+        "type": "float",
+        "required": true,
+        "min": -0.1023,
+        "max": 0.1812
+      },
+      {
+        "name": "s4",
+        "type": "float",
+        "required": true,
+        "min": -0.0764,
+        "max": 0.1852
+      },
+      {
+        "name": "s5",
+        "type": "float",
+        "required": true,
+        "min": -0.1261,
+        "max": 0.1336
+      },
+      {
+        "name": "s6",
+        "type": "float",
+        "required": true,
+        "min": -0.1378,
+        "max": 0.1356
+      }
+    ],
+    "input_constraints_note": "min/max observes sur le dataset diabetes de scikit-learn, pas des regles metier. Valeurs deja STANDARDISEES (centrees, echelle ~0.05).",
+    "output_schema": [
+      {
+        "name": "prediction",
+        "type": "float",
+        "meaning": "progression de la maladie un an apres la mesure (echelle du dataset)"
+      }
+    ],
+    "class_labels": [],
+    "example_input": {
+      "age": 0.038076,
+      "sex": 0.05068,
+      "bmi": 0.061696,
+      "bp": 0.021872,
+      "s1": -0.044223,
+      "s2": -0.034821,
+      "s3": -0.043401,
+      "s4": -0.002592,
+      "s5": 0.019907,
+      "s6": -0.017646
+    },
+    "example_output": {
+      "prediction": 205.5
+    },
+    "example_source": "tests/test_service.py (EXAMPLE, EXPECTED)",
+    "schema_confidence": "high"
+  },
+  "resources": {
+    "gpu_required": "no",
+    "recommended_base_image": "python:3.12-slim",
+    "estimated_model_size_mb": 0.002,
+    "estimated_image_size_mb": 450
+  },
+  "existing_app": {
+    "has_api": false,
+    "framework": null,
+    "app_module": null,
+    "port": null,
+    "has_dockerfile": false,
+    "env_vars": [
+      {
+        "name": "DP_MODEL_DIR",
+        "default": "model",
+        "used_in": "src/dp_model/service.py"
+      }
+    ],
+    "external_services": []
+  },
+  "project": {
+    "file_tree": [
+      "requirements.txt",
+      "model/regressor.joblib",
+      "model/features.json",
+      "src/dp_model/__init__.py",
+      "src/dp_model/service.py",
+      "scripts/retrain.py",
+      "tests/test_service.py"
+    ],
+    "layout": "src_layout",
+    "ignorable_paths": [
+      ".git",
+      "__pycache__/",
+      "*.pyc",
+      ".venv/",
+      "venv/",
+      "tests/",
+      "scripts/",
+      ".env"
+    ],
+    "keep_for_build_only": [],
+    "runtime_files": [
+      "src/dp_model/__init__.py",
+      "src/dp_model/service.py",
+      "model/regressor.joblib",
+      "model/features.json"
+    ]
+  },
+  "quality": {
+    "baseline_metrics": {
+      "r2_train": 0.518
+    },
+    "source": "scripts/retrain.py (execution reelle)"
+  },
+  "warnings": [
+    "Modele fourni (binaire joblib) : scikit-learn doit rester epingle a 1.8.0, la version d'entrainement.",
+    "Le modele attend des features deja standardisees : une API exposee a des clients reels doit le documenter.",
+    "Le loader retourne un dictionnaire {model, features} : l'API doit le passer tel quel a score()."
+  ],
+  "unresolved": [
+    {
+      "field": "io.input_schema",
+      "question": "Les clients enverront-ils des valeurs deja standardisees (comme le dataset) ou des unites reelles ? Le modele n'accepte que des valeurs standardisees."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "features": [
+    "age",
+    "sex",
+    "bmi",
+    "bp",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "s5",
+    "s6"
+  ],
+  "target": "disease_progression"
+}

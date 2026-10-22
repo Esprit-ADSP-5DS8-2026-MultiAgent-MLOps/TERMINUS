@@ -48,12 +48,44 @@ class _TopLevelImportSorter(ast.NodeTransformer):
         return self.generic_visit(node)
 
 
-def _syntax_tree(path: Path) -> str:
-    """Return an AST representation ignoring docstrings and import order."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+class _AnnotationStripper(ast.NodeTransformer):
+    """Remove annotations and normalize annotated assignments to assignments."""
+
+    def visit_arg(self, node: ast.arg) -> ast.arg:
+        """Remove one parameter annotation."""
+        node.annotation = None
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        """Remove one function return annotation."""
+        node.returns = None
+        return self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        """Remove one async function return annotation."""
+        node.returns = None
+        return self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> ast.AST:
+        """Treat an annotated assignment as a regular assignment."""
+        if node.value is not None:
+            return ast.Assign(targets=[node.target], value=node.value)
+        return self.generic_visit(node)
+
+
+def normalized_ast_dump(source: str, remove_annotations: bool = False) -> str:
+    """Return a normalized AST dump shared by verification and LLM edit checks."""
+    tree = ast.parse(source)
     tree = _DocstringStripper().visit(tree)
     tree = _TopLevelImportSorter().visit(tree)
+    if remove_annotations:
+        tree = _AnnotationStripper().visit(tree)
     return ast.dump(tree, annotate_fields=True)
+
+
+def _syntax_tree(path: Path) -> str:
+    """Return an AST representation ignoring docstrings and import order."""
+    return normalized_ast_dump(path.read_text(encoding="utf-8"))
 
 
 def _ast_diff(current: Path, original: Path) -> str:

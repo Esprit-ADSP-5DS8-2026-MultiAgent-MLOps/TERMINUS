@@ -131,12 +131,16 @@ def _custom_issues(workspace: Path) -> list[dict[str, object]]:
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if ast.get_docstring(node) is None:
-                    issues.append(_issue(relative, node.lineno, "custom", "DOC001", "Missing docstring", 1))
+                    issue = _issue(relative, node.lineno, "custom", "DOC001", "Missing docstring", 1)
+                    issue.update({"function": node.name, "end_lineno": node.end_lineno})
+                    issues.append(issue)
                 if node.returns is None or any(
                     argument.annotation is None
                     for argument in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
                 ):
-                    issues.append(_issue(relative, node.lineno, "custom", "ANN001", "Missing type hint", 2))
+                    issue = _issue(relative, node.lineno, "custom", "ANN001", "Missing type hint", 2)
+                    issue.update({"function": node.name, "end_lineno": node.end_lineno})
+                    issues.append(issue)
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 value = node.value
                 if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", value):

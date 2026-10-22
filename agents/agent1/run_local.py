@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from . import build_graph
+from .config import get_llm_config
 from .runner import _run_agent1_state
 
 
@@ -24,6 +25,9 @@ def main() -> None:
     print(app.get_graph().draw_mermaid())
     state = _run_agent1_state(str(project_path), str(csv_path))
     baseline = state.get("baseline") or {}
+    llm_config = get_llm_config()
+    print(json.dumps({"base_url": llm_config["base_url"], "enable_llm": llm_config["enable_llm"]}, indent=2))
+    print(json.dumps({"ml_fixes": state.get("output", {}).get("ml_fixes", {})}, indent=2))
     print(
         json.dumps(
             {
@@ -38,6 +42,7 @@ def main() -> None:
             indent=2,
         )
     )
+    print(json.dumps({"llm": state["output"]["code_quality"]["llm"], "patch_path": state["output"]["code_quality"]["patch_path"]}, indent=2))
     print(json.dumps(state["output"], indent=2))
 
 

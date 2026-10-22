@@ -9,6 +9,9 @@ from .nodes.build_output import build_output
 from .nodes.capture_baseline import capture_baseline
 from .nodes.detect_problem_type import detect_problem_type
 from .nodes.load_project import load_project
+from .nodes.ml_fix import ml_fix
+from .nodes.ml_review import ml_review
+from .nodes.verify_ml import verify_ml
 from .nodes.plan_improvements import plan_improvements
 from .nodes.quality_analysis import quality_analysis
 from .nodes.revert_and_continue import revert_and_continue
@@ -41,6 +44,9 @@ def build_graph():
     graph.add_node("revert_and_continue", revert_and_continue)
     graph.add_node("analyze_data", analyze_data)
     graph.add_node("detect_problem_type", detect_problem_type)
+    graph.add_node("ml_review", ml_review)
+    graph.add_node("ml_fix", ml_fix)
+    graph.add_node("verify_ml", verify_ml)
     graph.add_node("build_output", build_output)
 
     graph.add_edge(START, "load_project")
@@ -61,6 +67,9 @@ def build_graph():
     graph.add_edge("retry", "plan_improvements")
     graph.add_edge("revert_and_continue", "analyze_data")
     graph.add_edge("analyze_data", "detect_problem_type")
-    graph.add_edge("detect_problem_type", "build_output")
+    graph.add_edge("detect_problem_type", "ml_review")
+    graph.add_edge("ml_review", "ml_fix")
+    graph.add_edge("ml_fix", "verify_ml")
+    graph.add_edge("verify_ml", "build_output")
     graph.add_edge("build_output", END)
     return graph.compile()
