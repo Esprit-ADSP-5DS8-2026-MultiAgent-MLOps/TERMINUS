@@ -8,3 +8,5 @@ output/
 rapport*.json
 # générés par eval/make_variants.py (les tests les recréent)
 eval/projects/variants/
+runs/
+infra/.env

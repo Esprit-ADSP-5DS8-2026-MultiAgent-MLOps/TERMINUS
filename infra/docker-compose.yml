@@ -1,0 +1,28 @@
+# Infrastructure partagée de la plateforme Agentic MLOps.
+# Pour l'instant : PostgreSQL pour la persistance de l'orchestrateur.
+# Les autres services (MLflow, MinIO, Prometheus, Grafana, Langfuse) seront ajoutés ici.
+#
+#   docker compose -f infra/docker-compose.yml up -d     # démarrer
+#   docker compose -f infra/docker-compose.yml down      # arrêter (les données restent)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mlops-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops}
+      POSTGRES_DB: ${POSTGRES_DB:-orchestrator}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-mlops} -d $${POSTGRES_DB:-orchestrator}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

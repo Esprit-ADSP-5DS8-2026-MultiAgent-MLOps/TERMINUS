@@ -2,7 +2,17 @@
 name = "agentic-mlops-validator"
 version = "1.0.0"
 requires-python = ">=3.10"
-dependencies = ["pydantic>=2", "pandas>=2", "pyyaml", "packaging"]
+dependencies = [
+    "pydantic>=2",
+    "pandas>=2",
+    "pyyaml",
+    "packaging",
+    "langgraph==1.2.14",
+    "langgraph-checkpoint-sqlite==3.1.2",
+    "langgraph-checkpoint-postgres==3.2.0",
+    "psycopg[binary]==3.3.6",
+    "streamlit==1.65.0",
+]
 
 [project.optional-dependencies]
 dev = ["pytest", "bandit"]
@@ -12,5 +22,5 @@ testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["validator*"]
+include = ["validator*", "common*", "orchestrator*"]
 exclude = ["tests*", "eval*", ".venv*"]
