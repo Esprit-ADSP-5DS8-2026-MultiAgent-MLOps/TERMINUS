@@ -267,15 +267,15 @@
     },
     {
       "type": "stat",
-      "title": "Features en drift",
-      "description": "",
+      "title": "Features en drift majeur",
+      "description": "Nombre de features avec PSI >= 0.25 dans la dernière fenêtre.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "mlmon_dataset_drift_share{project=\"credit_risk\"}",
+          "expr": "count(mlmon_feature_psi{project=\"credit_risk\"} >= 0.25) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "instant": false,
@@ -285,7 +285,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
+          "unit": "none",
           "decimals": null,
           "mappings": [],
           "thresholds": {
@@ -296,11 +296,11 @@
                 "color": "#30A46C"
               },
               {
-                "value": 0.2,
+                "value": 1,
                 "color": "#F5A524"
               },
               {
-                "value": 0.5,
+                "value": 3,
                 "color": "#E5484D"
               }
             ]
@@ -346,7 +346,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(mlmon_http_requests_total{project=\"credit_risk\",route=\"/predict\",status!~\"2..\"}[2m])) / clamp_min(sum(rate(mlmon_http_requests_total{project=\"credit_risk\",route=\"/predict\"}[2m])), 1e-9)",
+          "expr": "(sum(rate(mlmon_http_requests_total{project=\"credit_risk\",route=\"/predict\",status!~\"2..\"}[2m])) or vector(0)) / clamp_min(sum(rate(mlmon_http_requests_total{project=\"credit_risk\",route=\"/predict\"}[2m])), 1e-9)",
           "legendFormat": "",
           "refId": "A",
           "instant": false,

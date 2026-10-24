@@ -123,10 +123,14 @@ def build_dashboard(t: MonitoringTarget, bound: float | None = None, reference: 
               steps=perf_steps, description="CBPE (classification) ou DLE (régression)."), 4),
         (stat(f"{m} mesuré", f"mlmon_performance_realized{{{sel},metric=\"{m}\"}}", decimals=4, steps=perf_steps,
               description="Calculé quand la vérité terrain est arrivée via /feedback."), 4),
-        (stat("Features en drift", f"mlmon_dataset_drift_share{{{sel}}}", unit="percentunit",
-              steps=thresholds((None, GREEN), (0.2, ORANGE), (0.5, RED))), 4),
-        (stat("Erreurs /predict", f'sum(rate(mlmon_http_requests_total{{{sel},route="/predict",status!~"2.."}}[2m])) '
-              f"/ clamp_min(sum(rate({req}[2m])), 1e-9)", unit="percentunit", decimals=1,
+        # Un pourcentage trompe (3 features sur 20 = 15 %, « vert », même avec un PSI de 8) :
+        # on affiche le NOMBRE de features en drift MAJEUR (PSI >= 0.25), qui est ce qui compte.
+        (stat("Features en drift majeur", f"count(mlmon_feature_psi{{{sel}}} >= 0.25) or vector(0)",
+              steps=thresholds((None, GREEN), (1, ORANGE), (3, RED)),
+              description="Nombre de features avec PSI >= 0.25 dans la dernière fenêtre."), 4),
+        # `or vector(0)` : sans aucune erreur, la série n'existe pas -> « No data » au lieu de 0 %.
+        (stat("Erreurs /predict", f'(sum(rate(mlmon_http_requests_total{{{sel},route="/predict",status!~"2.."}}[2m])) '
+              f"or vector(0)) / clamp_min(sum(rate({req}[2m])), 1e-9)", unit="percentunit", decimals=1,
               steps=thresholds((None, GREEN), (0.01, ORANGE), (0.05, RED))), 4),
         (stat("Réveils de l'agent", f"mlmon_agent_triggers_total{{{sel}}}",
               steps=thresholds((None, GREEN), (1, ORANGE)),
