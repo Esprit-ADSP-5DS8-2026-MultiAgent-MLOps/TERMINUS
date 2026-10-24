@@ -111,7 +111,7 @@ class Signal(Strict):
 
     kind: Literal[
         "dataset_drift", "feature_drift", "prediction_drift", "data_quality",
-        "performance_drop_estimated", "performance_drop_realized",
+        "performance_drop_estimated", "performance_drop_realized", "concept_drift_suspected",
     ]
     severity: Severity
     message: str

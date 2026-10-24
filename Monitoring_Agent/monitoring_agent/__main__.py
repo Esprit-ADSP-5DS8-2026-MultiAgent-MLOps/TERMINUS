@@ -1,10 +1,15 @@
 """
 Ligne de commande de l'Agent 4.
 
+Étape 1 (hors ligne, jeux NannyML) :
     python -m monitoring_agent datasets
-    python -m monitoring_agent analyze car_loan
-    python -m monitoring_agent analyze car_loan --label-delay 3 --out runs/car_loan_report.json
-    python -m monitoring_agent analyze car_loan_dq --window 5000
+    python -m monitoring_agent analyze car_loan [--label-delay 3] [--out runs/report.json]
+
+Étape 2 (en ligne, devant l'API de l'Agent 3) :
+    python -m monitoring_agent init ../eval/projects/credit_risk --upstream http://127.0.0.1:8000 --name credit_risk
+    python -m monitoring_agent gateway credit_risk
+    python -m monitoring_agent simulate credit_risk --scenario covariate
+    python -m monitoring_agent provision credit_risk
 """
 
 from __future__ import annotations
@@ -78,10 +83,112 @@ def cmd_analyze(args) -> int:
     return 0
 
 
+INFRA = Path(__file__).resolve().parent.parent / "infra"
+
+
+def cmd_init(args) -> int:
+    from .runtime.target import build_target
+    print(f"Construction de la référence via {args.upstream}/predict ...")
+    target, info = build_target(args.project_dir, args.upstream, args.name, args.window)
+    m = target.mapping
+    print(f"  projet       : {target.project} ({m.task}, métrique {m.primary_metric}, seuil {m.min_threshold})")
+    print(f"  features     : {len(m.features)}  ·  cible : {m.target}")
+    print(f"  référence    : {info['scored']}/{info['rows']} lignes notées par le modèle déployé"
+          + (f" ({info['failed']} échecs)" if info["failed"] else ""))
+    print(f"  écrit        : {target.dir}/monitoring.json, reference.parquet")
+    if not args.no_provision:
+        return cmd_provision(argparse.Namespace(project=target.project))
+    return 0
+
+
+def cmd_provision(args) -> int:
+    from .provisioning.grafana import write_dashboard
+    from .provisioning.prometheus import check_rules, write_rules
+    from .runtime.target import MonitoringTarget
+    target = MonitoringTarget.load(args.project)
+    rules = write_rules(target, INFRA / "prometheus" / "rules")
+    ok, out = check_rules(rules)
+    status = {True: "valide (promtool)", False: "INVALIDE", None: "non vérifié"}[ok]
+    print(f"Règles d'alerte : {rules}  ->  {status}")
+    if ok is False or ok is None:
+        print("  " + out.replace("\n", "\n  "))
+    dash = write_dashboard(target, INFRA / "grafana" / "dashboards")
+    print(f"Dashboard Grafana : {dash}")
+    print("Recharger Prometheus s'il tourne déjà : curl -X POST http://localhost:9090/-/reload")
+    return 0 if ok is not False else 1
+
+
+def cmd_gateway(args) -> int:
+    import logging
+
+    import uvicorn
+
+    from .runtime.gateway import create_app
+    from .runtime.target import MonitoringTarget
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s · %(message)s", datefmt="%H:%M:%S")
+    logging.getLogger("httpx").setLevel(logging.WARNING)   # une ligne par requête noierait les fenêtres
+    target = MonitoringTarget.load(args.project)
+    if args.upstream:
+        target.upstream_url = args.upstream.rstrip("/")
+    print(f"Gateway {target.project} : http://{args.host}:{args.port}  ->  {target.upstream_url}")
+    uvicorn.run(create_app(target, check_interval_s=args.interval), host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
+def cmd_simulate(args) -> int:
+    import asyncio
+
+    import pandas as pd
+
+    from .runtime.simulator import simulate
+    from .runtime.target import MonitoringTarget
+    target = MonitoringTarget.load(args.project)
+    data = pd.read_parquet(target.reference_path).drop(columns=["y_pred", "y_pred_proba"], errors="ignore")
+    print(f"Scénario « {args.scenario} » : {args.n} requêtes ({args.warmup} normales d'abord), "
+          f"{args.rate:.0f} req/s, labels envoyés avec {args.label_delay} requêtes de retard")
+    res = asyncio.run(simulate(args.gateway, data, target.mapping.target, args.scenario, args.n, args.warmup,
+                               args.rate, args.label_delay, args.seed, ramp=args.ramp))
+    print(f"Envoyées {res.sent} · réussies {res.ok} · erreurs {res.errors} · labels {res.labels_sent} "
+          f"· {res.seconds:.1f} s")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m monitoring_agent", description="Agent 4 : monitoring")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("datasets", help="liste les jeux de données disponibles").set_defaults(func=cmd_datasets)
+
+    i = sub.add_parser("init", help="prépare le monitoring d'un projet déployé (référence + configs)")
+    i.add_argument("project_dir", help="dossier du projet (mlops.yaml + data.csv)")
+    i.add_argument("--upstream", default="http://127.0.0.1:8000", help="URL de l'API du modèle (Agent 3)")
+    i.add_argument("--name", help="nom du projet (défaut : nom du dossier)")
+    i.add_argument("--window", type=int, default=200, help="taille d'une fenêtre (prédictions)")
+    i.add_argument("--no-provision", action="store_true")
+    i.set_defaults(func=cmd_init)
+
+    pv = sub.add_parser("provision", help="génère et valide les règles Prometheus et le dashboard Grafana")
+    pv.add_argument("project")
+    pv.set_defaults(func=cmd_provision)
+
+    g = sub.add_parser("gateway", help="lance la gateway de monitoring devant l'API du modèle")
+    g.add_argument("project")
+    g.add_argument("--port", type=int, default=8100)
+    g.add_argument("--host", default="127.0.0.1")
+    g.add_argument("--upstream", help="remplace l'URL de l'API du modèle")
+    g.add_argument("--interval", type=float, default=2.0, help="période du moniteur (s)")
+    g.set_defaults(func=cmd_gateway)
+
+    s = sub.add_parser("simulate", help="envoie du trafic de production simulé à la gateway")
+    s.add_argument("project")
+    s.add_argument("--scenario", default="normal", choices=["normal", "covariate", "quality", "concept"])
+    s.add_argument("--gateway", default="http://127.0.0.1:8100")
+    s.add_argument("--n", type=int, default=1600)
+    s.add_argument("--warmup", type=int, default=600, help="requêtes normales avant le scénario")
+    s.add_argument("--ramp", type=int, default=200, help="requêtes pour atteindre la pleine intensité")
+    s.add_argument("--rate", type=float, default=20.0, help="requêtes par seconde")
+    s.add_argument("--label-delay", type=int, default=200, help="retard des labels (en requêtes)")
+    s.add_argument("--seed", type=int, default=7)
+    s.set_defaults(func=cmd_simulate)
 
     a = sub.add_parser("analyze", help="analyse une période de production fenêtre par fenêtre")
     a.add_argument("dataset")

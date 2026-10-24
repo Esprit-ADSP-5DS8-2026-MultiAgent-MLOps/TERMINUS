@@ -57,7 +57,8 @@ class Analyzer:
         m, cfg, prof = self.mapping, self.config, self.profile
         info = self._window_info(current, index)
 
-        drift = [column_drift(prof.columns[f], current[f], cfg.drift) for f in m.features if f in current.columns]
+        present = [f for f in m.features if f in current.columns]
+        drift = [column_drift(prof.columns[f], current[f], cfg.drift, n_tests=len(present)) for f in present]
         pred_col = m.prediction_proba or m.prediction
         pred_drift = column_drift(prof.prediction, current[pred_col], cfg.drift) if pred_col in current.columns else None
         ds = dataset_drift(drift, cfg.drift)
@@ -141,8 +142,11 @@ class Analyzer:
                               message=f"{ds.n_drifted}/{ds.n_features} features en drift",
                               evidence={"share_drifted": ds.share_drifted}))
         elif top:
-            out.append(Signal(kind="feature_drift", severity="info",
-                              message="drift sur " + ", ".join(d.feature for d in top),
+            # Peu de features, mais un drift MAJEUR (PSI >= 0.25) sur l'une d'elles mérite l'agent :
+            # sur 20 features, 3 qui explosent ne font pas 50 %, mais peuvent suffire à tromper le modèle.
+            major = [d for d in top if d.psi_level == "major"]
+            out.append(Signal(kind="feature_drift", severity="warning" if major else "info",
+                              message=("drift majeur sur " if major else "drift sur ") + ", ".join(d.feature for d in top),
                               evidence={d.feature: d.psi for d in top}))
         if pred_drift and pred_drift.drifted:
             out.append(Signal(kind="prediction_drift", severity="warning",
@@ -160,6 +164,14 @@ class Analyzer:
                                   message=f"{metric} mesuré = {perf.realized[metric]:.4f} (habituel {perf.reference_mean:.4f}, limite {perf.bound:.4f})",
                                   evidence={"realized": perf.realized[metric], "reference_mean": perf.reference_mean,
                                             "bound": perf.bound}))
+                # L'estimation (CBPE/DLE) suppose que la relation features -> cible est stable.
+                # Si la mesure chute et que l'estimation, elle, reste normale, c'est cette relation
+                # qui a changé : concept drift. Réentraîner sur des données récentes est alors justifié.
+                if perf.estimated_degraded is False:
+                    out.append(Signal(kind="concept_drift_suspected", severity="warning",
+                                      message=f"{metric} mesuré {perf.realized[metric]:.4f} mais estimé {perf.estimated[metric]:.4f} : "
+                                              "la relation features -> cible a probablement changé",
+                                      evidence={"realized": perf.realized[metric], "estimated": perf.estimated[metric]}))
             elif perf.estimated_degraded:
                 out.append(Signal(kind="performance_drop_estimated", severity="warning",
                                   message=f"{metric} estimé ({perf.estimation_method}) = {perf.estimated[metric]:.4f} (habituel {perf.reference_mean:.4f}, limite {perf.bound:.4f})",

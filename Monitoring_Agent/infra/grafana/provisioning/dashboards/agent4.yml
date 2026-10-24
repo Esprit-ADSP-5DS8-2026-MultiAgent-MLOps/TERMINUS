@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: agent4
+    folder: Agent 4 · Monitoring
+    type: file
+    allowUiUpdates: true
+    updateIntervalSeconds: 10          # un dashboard régénéré apparaît sans redémarrer Grafana
+    options:
+      path: /var/lib/grafana/dashboards

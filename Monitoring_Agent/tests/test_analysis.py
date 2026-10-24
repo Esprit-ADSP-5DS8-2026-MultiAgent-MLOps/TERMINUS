@@ -128,3 +128,10 @@ def test_estimated_performance_without_labels(analyzer):
 
 def test_windows():
     assert [len(w) for w in make_windows(pd.DataFrame({"a": range(10500)}), 5000)] == [5000, 5500]
+
+
+def test_unseen_category_is_quality_not_drift(analyzer):
+    """Une catégorie inconnue est comptée UNE fois : en qualité, pas en drift."""
+    w = analyzer.analyze_window(_frame(2000, new_cat=True))
+    assert any(q.feature == "cat" and q.kind == "unseen_category" for q in w.data_quality)
+    assert "cat" not in w.dataset_drift.drifted_features

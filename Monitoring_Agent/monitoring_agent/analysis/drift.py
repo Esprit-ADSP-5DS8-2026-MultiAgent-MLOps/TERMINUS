@@ -19,7 +19,10 @@ def _psi_level(psi: float, cfg: DriftConfig) -> str:
     return "none"
 
 
-def column_drift(ref: ColumnReference, current: pd.Series, cfg: DriftConfig) -> FeatureDriftResult:
+def column_drift(ref: ColumnReference, current: pd.Series, cfg: DriftConfig, n_tests: int = 1) -> FeatureDriftResult:
+    """`n_tests` : nombre de features testées en même temps. Avec 20 tests à p < 0.05, on attend
+    UN faux positif par fenêtre par pur hasard : on applique la correction de Bonferroni (0.05 / 20)."""
+    p_threshold = cfg.p_value / max(n_tests, 1)
     if ref.kind == "numeric":
         cur = stats.clean_numeric(current)
         psi = stats.psi_numeric(ref.values, cur, ref.edges)
@@ -28,18 +31,18 @@ def column_drift(ref: ColumnReference, current: pd.Series, cfg: DriftConfig) -> 
             score = stats.wasserstein_normed(ref.values, cur)
             drifted = score > threshold
         else:
-            method, score_type, threshold = "ks", "p_value", cfg.p_value
+            method, score_type, threshold = "ks", "p_value", p_threshold
             _, score = stats.ks_test(ref.values, cur)
             drifted = score < threshold
         current_summary = ({"mean": float(cur.mean()), "std": float(cur.std()), "median": float(np.median(cur))}
                            if len(cur) else {})
     else:
-        cur_str = stats.as_category_strings(current)
-        # On compare sur l'union des catégories : une catégorie nouvelle compte dans le drift.
-        new = sorted(set(cur_str.unique()) - set(ref.categories))
-        categories = ref.categories + new
-        ref_counts = np.concatenate([ref.counts, np.zeros(len(new))])
-        cur_counts = stats.category_counts(cur_str, categories)
+        # Seules les catégories CONNUES entrent dans le drift. Une catégorie jamais vue est un
+        # problème de qualité (quality.py) : la compter aussi ici ferait exploser le PSI et
+        # déclencherait une fausse alerte de drift. Chaque anomalie est comptée une fois.
+        categories = ref.categories
+        ref_counts = ref.counts
+        cur_counts = stats.category_counts(current, categories)
         p_ref = ref_counts / ref_counts.sum() if ref_counts.sum() else ref_counts
         p_cur = cur_counts / cur_counts.sum() if cur_counts.sum() else cur_counts
         psi = stats.psi_from_proportions(p_ref, p_cur) if cur_counts.sum() else 0.0
@@ -48,7 +51,7 @@ def column_drift(ref: ColumnReference, current: pd.Series, cfg: DriftConfig) -> 
             score = stats.jensen_shannon(p_ref, p_cur)
             drifted = score > threshold
         else:
-            method, score_type, threshold = "chi2", "p_value", cfg.p_value
+            method, score_type, threshold = "chi2", "p_value", p_threshold
             score = stats.chi2_pvalue(ref_counts, cur_counts)
             drifted = score < threshold
         top = np.argsort(-cur_counts)[:3]

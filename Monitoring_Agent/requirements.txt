@@ -1,9 +1,20 @@
 # Agent 4 (monitoring) : uniquement ce que l'agent utilise.
-# Versions testées (Python 3.11).
+# Versions testées (Python 3.11) — toutes déjà présentes dans ai_env311, sauf pytest.
+
+# Étape 1 : moteur d'analyse
 pandas==2.3.3
 numpy==1.26.4
 scipy==1.17.1
 scikit-learn==1.9.1
 pydantic==2.14.1
 pyarrow==25.0.1
+
+# Étape 2 : gateway, métriques, configs
+fastapi==0.141.1
+uvicorn==0.54.0
+httpx==0.28.1
+prometheus-client==0.26.0
+pyyaml==6.0.3
+
+# Tests
 pytest==9.1.1

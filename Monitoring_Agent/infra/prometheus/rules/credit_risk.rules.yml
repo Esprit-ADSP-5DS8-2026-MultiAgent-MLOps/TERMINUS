@@ -1,0 +1,143 @@
+# Généré par l'Agent 4 pour credit_risk. Ne pas éditer : relancer `provision`.
+groups:
+- name: credit_risk-service
+  interval: 10s
+  rules:
+  - alert: MLGatewayDown
+    expr: up{job="ml-gateway"} == 0
+    for: 30s
+    labels:
+      severity: critical
+      component: service
+      project: credit_risk
+    annotations:
+      summary: Gateway de monitoring injoignable
+      description: Prometheus ne collecte plus /metrics depuis 30 s.
+  - alert: MLUpstreamDown
+    expr: mlmon_upstream_up{project="credit_risk"} == 0
+    for: 30s
+    labels:
+      severity: critical
+      component: service
+      project: credit_risk
+    annotations:
+      summary: API du modèle indisponible
+      description: La gateway n'obtient plus de réponse de /health du modèle.
+  - alert: MLHighErrorRate
+    expr: sum(rate(mlmon_http_requests_total{project="credit_risk",route="/predict",status=~"5.."}[2m])) / clamp_min(sum(rate(mlmon_http_requests_total{project="credit_risk",route="/predict"}[2m])), 1e-9)
+      > 0.05
+    for: 1m
+    labels:
+      severity: critical
+      component: service
+      project: credit_risk
+    annotations:
+      summary: Erreurs serveur sur /predict
+      description: 'Taux d''erreurs 5xx : {{ $value | humanizePercentage }}.'
+  - alert: MLInvalidInputs
+    expr: sum(rate(mlmon_http_requests_total{project="credit_risk",route="/predict",status=~"4.."}[2m])) / clamp_min(sum(rate(mlmon_http_requests_total{project="credit_risk",route="/predict"}[2m])), 1e-9)
+      > 0.05
+    for: 1m
+    labels:
+      severity: warning
+      component: data
+      project: credit_risk
+    annotations:
+      summary: Requêtes rejetées par le modèle (4xx)
+      description: 'Le client envoie des données invalides : {{ $value | humanizePercentage }} des requêtes.'
+  - alert: MLHighLatency
+    expr: histogram_quantile(0.95, sum by (le) (rate(mlmon_http_request_duration_seconds_bucket{project="credit_risk",route="/predict"}[2m]))) > 0.5
+    for: 2m
+    labels:
+      severity: warning
+      component: service
+      project: credit_risk
+    annotations:
+      summary: Latence p95 élevée
+      description: p95 = {{ $value | humanizeDuration }}.
+- name: credit_risk-data
+  interval: 10s
+  rules:
+  - alert: MLDatasetDrift
+    expr: mlmon_dataset_drift_share{project="credit_risk"} >= 0.5
+    for: 0s
+    labels:
+      severity: warning
+      component: data
+      project: credit_risk
+    annotations:
+      summary: Drift sur la majorité des features
+      description: '{{ $value | humanizePercentage }} des features ont dérivé dans la dernière fenêtre.'
+  - alert: MLFeatureDriftMajor
+    expr: mlmon_feature_psi{project="credit_risk"} >= 0.25
+    for: 0s
+    labels:
+      severity: info
+      component: data
+      project: credit_risk
+    annotations:
+      summary: Drift majeur sur {{ $labels.feature }}
+      description: PSI = {{ $value | printf "%.3f" }} (seuil 0.25).
+  - alert: MLPredictionDrift
+    expr: mlmon_prediction_drifted{project="credit_risk"} == 1
+    for: 0s
+    labels:
+      severity: warning
+      component: model
+      project: credit_risk
+    annotations:
+      summary: La distribution des prédictions a changé
+      description: Le modèle ne répond plus comme sur les données d'entraînement.
+  - alert: MLDataQualityWarning
+    expr: mlmon_data_quality_severity{project="credit_risk"} == 2
+    for: 0s
+    labels:
+      severity: warning
+      component: data
+      project: credit_risk
+    annotations:
+      summary: Problème de qualité des données
+      description: Voir le détail par feature dans le dashboard.
+  - alert: MLDataQualityCritical
+    expr: mlmon_data_quality_severity{project="credit_risk"} >= 3
+    for: 0s
+    labels:
+      severity: critical
+      component: data
+      project: credit_risk
+    annotations:
+      summary: Problème critique de qualité des données
+      description: Colonne manquante, type invalide ou forte hausse des valeurs manquantes / catégories inconnues.
+- name: credit_risk-model
+  interval: 10s
+  rules:
+  - alert: MLPerformanceDropEstimated
+    expr: mlmon_performance_estimated{project="credit_risk",metric="roc_auc"} < on(project, metric) mlmon_performance_bound{project="credit_risk",metric="roc_auc"}
+    for: 0s
+    labels:
+      severity: warning
+      component: model
+      project: credit_risk
+    annotations:
+      summary: roc_auc estimé sous la variabilité normale
+      description: roc_auc estimé sans labels = {{ $value | printf "%.4f" }}.
+  - alert: MLPerformanceDropRealized
+    expr: mlmon_performance_realized{project="credit_risk",metric="roc_auc"} < on(project, metric) mlmon_performance_bound{project="credit_risk",metric="roc_auc"}
+    for: 0s
+    labels:
+      severity: critical
+      component: model
+      project: credit_risk
+    annotations:
+      summary: roc_auc mesuré sous la variabilité normale
+      description: roc_auc mesuré avec les vrais labels = {{ $value | printf "%.4f" }}.
+  - alert: MLBelowBusinessThreshold
+    expr: mlmon_performance_realized{project="credit_risk",metric="roc_auc"} < 0.7
+    for: 0s
+    labels:
+      severity: critical
+      component: model
+      project: credit_risk
+    annotations:
+      summary: roc_auc sous le seuil métier (0.7)
+      description: 'Seuil fixé dans mlops.yaml : 0.7. Mesuré : {{ $value | printf "%.4f" }}.'
