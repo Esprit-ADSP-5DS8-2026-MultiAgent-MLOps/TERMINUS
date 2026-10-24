@@ -94,9 +94,13 @@ class DockerCLI:
                               timeout=timeout_s, on_line=on_line)
         return {"exit_code": rc, "logs": logs}
 
-    def run(self, image: str, port: int, env: Optional[dict] = None, name: Optional[str] = None) -> dict:
-        """Lance le conteneur en arriere-plan, port publie sur 127.0.0.1 uniquement (port hote libre choisi par Docker)."""
-        args = ["run", "-d", "-p", f"127.0.0.1::{port}"]
+    def run(self, image: str, port: int, env: Optional[dict] = None, name: Optional[str] = None,
+            host_port: Optional[int] = None) -> dict:
+        """Lance le conteneur en arriere-plan, port publie sur 127.0.0.1 uniquement.
+
+        host_port : port hote voulu (ex. 8000, pour `--serve-docker`) ; None = port libre choisi par Docker (tests).
+        """
+        args = ["run", "-d", "-p", f"127.0.0.1:{host_port}:{port}" if host_port else f"127.0.0.1::{port}"]
         if name:
             args += ["--name", name]
         for k, v in (env or {}).items():
@@ -126,6 +130,38 @@ class DockerCLI:
 
     def cleanup(self, container_id: str) -> None:
         self._exec(["rm", "-f", container_id], timeout=60)
+
+    def stop(self, container_id: str, grace_s: int = 10) -> None:
+        """Arret propre (SIGTERM, puis SIGKILL apres grace_s secondes) : uvicorn a le temps de terminer ses requetes."""
+        self._exec(["stop", "-t", str(grace_s), container_id], timeout=grace_s + 30)
+
+    def follow_logs(self, container_id: str, on_line: Callable[[str], None], tail: int = 20) -> int:
+        """Affiche les logs en direct. Retourne quand le conteneur s'arrete ; Ctrl+C (KeyboardInterrupt) se propage."""
+        try:
+            proc = subprocess.Popen([self.binary, "logs", "-f", "--tail", str(tail), container_id],
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                    encoding="utf-8", errors="replace", env=_docker_env())
+        except FileNotFoundError as e:
+            raise DockerUnavailable("La commande `docker` est introuvable.") from e
+        try:
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                on_line(raw.rstrip("\r\n"))
+            return proc.wait()
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+            try:
+                proc.wait(timeout=5)                    # recupere le processus (sinon il reste zombie)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+    def exposed_port(self, image: str) -> Optional[int]:
+        """Premier port declare par EXPOSE dans l'image (ex. 8000), sinon None."""
+        rc, out = self._exec(["image", "inspect", "-f", "{{range $p, $_ := .Config.ExposedPorts}}{{$p}} {{end}}", image], timeout=20)
+        m = re.search(r"(\d+)/", out) if rc == 0 else None
+        return int(m.group(1)) if m else None
 
     # ------------------------------------------------------------------ image
     def image_id(self, ref: str) -> str:

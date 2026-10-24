@@ -3,13 +3,13 @@
   "project_name": "ml-iris-pipeline",
   "needs_user_input": false,
   "python": {
-    "version": "not_pinned",
+    "version": "3.12",
     "package_manager": "pip",
-    "note": "Le dépôt ne précise pas la version de Python. Le code utilise des API compatibles avec une version moderne de Python 3 ; choisir et tester une version dans l'image Docker."
+    "note": "Le depot ne precise pas la version de Python (non epinglee). 3.12 est un choix de l'analyse (image python:3.12-slim), a confirmer par le build Docker."
   },
   "dependencies": {
     "file": "requirements.txt",
-    "status": "incomplete_version_pins",
+    "status": "incomplete",
     "packages": [
       {
         "name": "scikit-learn",
@@ -39,10 +39,11 @@
     "missing_imports": [],
     "api_packages_to_add": [],
     "os_packages": [],
-    "note": "Les versions ne sont pas épinglées. pandas et python-multipart semblent non utilisés dans les deux scripts fournis, mais sont déclarés dans requirements.txt."
+    "note": "Les versions ne sont pas épinglées. pandas et python-multipart semblent non utilisés dans les deux scripts fournis, mais sont déclarés dans requirements.txt.",
+    "version_pins_note": "Aucune version n'est epinglee dans requirements.txt."
   },
   "ml": {
-    "framework": "scikit-learn",
+    "framework": "sklearn",
     "framework_version": null,
     "model_type": "Pipeline(StandardScaler -> RandomForestClassifier)",
     "model_file": "iris_model.pkl",
@@ -51,8 +52,8 @@
       "required_before_serving": false,
       "command": "python train.py",
       "requires_files": [],
-      "recommended_stage": "optional_retraining",
-      "note": "Le modèle sérialisé est déjà fourni. Le script train.py peut le régénérer à partir du dataset Iris inclus dans scikit-learn."
+      "recommended_stage": "docker_build",
+      "note": "Le modele est deja fourni (iris_model.pkl) : le re-entrainement avec train.py est optionnel, il n'est donc pas lance au build (required_before_serving=false)."
     },
     "model_format": "joblib/pickle",
     "loader": "joblib.load",
@@ -117,17 +118,18 @@
       "Versicolor",
       "Virginica"
     ],
-    "example_input": [
-      5.1,
-      3.5,
-      1.4,
-      0.2
-    ],
+    "example_input": {
+      "sepal_length": 5.1,
+      "sepal_width": 3.5,
+      "petal_length": 1.4,
+      "petal_width": 0.2
+    },
     "example_output": {
       "flower_type": "Setosa"
     },
     "example_source": "README.md et commentaire d'exemple dans main.py; sortie exemple indicative, non exécutée lors de cette analyse",
-    "schema_confidence": "high"
+    "schema_confidence": "high",
+    "example_input_note": "Liste [5.1, 3.5, 1.4, 0.2] dans le code, dans l'ordre des champs de input_schema."
   },
   "resources": {
     "gpu_required": "no",
@@ -163,12 +165,12 @@
       ".env"
     ],
     "keep_for_build_only": [
-      "train.py"
+      "train.py",
+      "requirements.txt"
     ],
     "runtime_files": [
       "main.py",
-      "iris_model.pkl",
-      "requirements.txt"
+      "iris_model.pkl"
     ]
   },
   "quality": {

@@ -23,15 +23,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends {{ os_packages 
 RUN useradd --create-home --uid 1000 appuser
 {% if train_command %}
 COPY --from=builder /install /usr/local
-COPY --from=builder /build/{{ model_path }} ./{{ model_path }}
 {% else %}
 COPY requirements.api.txt .
 RUN pip install --no-cache-dir -r requirements.api.txt
 {% endif %}
-{% for f in runtime_files if not f.startswith('output/') %}
-COPY {{ f }} ./{{ f }}
-{% endfor %}
-COPY api.py .
+# Projet COMPLET (fichiers de base + fichiers generes : api.py...). Ce qui ne doit pas entrer dans l'image
+# (donnees, notebooks, caches, secrets) est exclu par .dockerignore, pas par une liste de fichiers a maintenir.
+COPY --chown=appuser:appuser . .
+{% if train_command %}
+# Modele entraine dans l'image (etape builder) : il remplace celui du contexte de build
+COPY --from=builder --chown=appuser:appuser /build/{{ model_path }} ./{{ model_path }}
+{% endif %}
 {% for e in env_vars %}
 ENV {{ e.name }}="{{ (e.default or '') | replace('\\', '\\\\') | replace('"', '\\"') }}"
 {% endfor %}

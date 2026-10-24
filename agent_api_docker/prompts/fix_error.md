@@ -26,6 +26,8 @@ Echecs de l'etape Docker (build, conteneur, /health, tests contre le conteneur)
 - Conteneur qui s'arrete ou `/health` muet : lis les logs du conteneur ; le serveur doit ecouter sur 0.0.0.0 et sur le port du rapport.
   Un chemin de modele qui marche en local mais pas dans l'image (fichier non copie, dossier attendu a la place d'un fichier)
   se corrige dans le Dockerfile (COPY) ou dans api.py (chemin), jamais dans le code du projet.
+- Le Dockerfile copie le projet ENTIER (`COPY . .`) : un fichier ou un module du projet absent de l'image est exclu par
+  .dockerignore (corrige-le la), ou n'existe pas dans le contexte (cf. liste). Ne le recopie pas fichier par fichier.
 - Garde l'image reproductible : versions epinglees, utilisateur non-root, pas de secret ni de .env dans l'image.
 - Ne change jamais le port ni le contrat de l'API pour faire passer un test.
 

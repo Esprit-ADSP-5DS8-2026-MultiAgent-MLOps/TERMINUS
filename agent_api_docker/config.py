@@ -20,6 +20,8 @@ from dotenv import dotenv_values
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 WORKSPACES_DIR = Path(os.environ.get("AGENT_WORKSPACES_DIR", REPO_ROOT / "workspaces"))
+# Corrections validees, memorisees par projet. HORS de workspaces/ (efface a chaque execution) : a versionner dans git.
+FIXES_DIR = Path(os.environ.get("AGENT_FIXES_DIR", REPO_ROOT / "fixes"))
 EVAL_REPORTS_DIR = REPO_ROOT / "eval" / "expected_reports"
 EVAL_PROJECTS_DIR = REPO_ROOT / "eval" / "projects"
 
@@ -79,7 +81,8 @@ LLM_FALLBACKS = [f for f in (_fallback(n) for n in range(1, MAX_FALLBACKS + 1)) 
 # Le token n'est jamais passe en argument ni affiche : il est envoye sur l'entree standard de `docker login`.
 DOCKERHUB_USERNAME = _get("DOCKERHUB_USERNAME")
 DOCKERHUB_TOKEN = _get("DOCKERHUB_TOKEN")          # access token Docker Hub (Account settings > Personal access tokens)
-DOCKER_IMAGE_NAMESPACE = _get("DOCKER_IMAGE_NAMESPACE") or DOCKERHUB_USERNAME   # espace de nom du depot (utilisateur ou organisation)
+DOCKER_IMAGE_NAMESPACE_EXPLICIT = _get("DOCKER_IMAGE_NAMESPACE")             # organisation choisie explicitement (sinon : compte saisi)
+DOCKER_IMAGE_NAMESPACE = DOCKER_IMAGE_NAMESPACE_EXPLICIT or DOCKERHUB_USERNAME   # espace de nom du depot (utilisateur ou organisation)
 
 # --- Secrets : jamais transmis aux sous-processus -------------------------------
 _SECRET_PREFIXES = ("LLM_", "DOCKER", "ANTHROPIC_", "OPENAI_", "MISTRAL_", "AWS_")

@@ -175,14 +175,25 @@ def _argv(command: str, python_exe: str) -> list[str]:
 
 def prepare_run_dir(project_dir: Path, generated_dir: Path, report: AnalysisReport, run_dir: Path,
                     python_exe: Optional[str] = None, train_timeout: int = 600) -> Path:
-    """Assemble projet + fichiers generes dans run_dir, puis entraine le modele s'il est absent."""
+    """Assemble projet + fichiers generes dans run_dir, puis entraine le modele s'il est absent.
+
+    run_dir peut etre generated_dir lui-meme : le dossier devient alors le dossier COMPLET (projet + fichiers generes
+    + corrections), pret pour `docker build`. Les fichiers generes l'emportent sur les fichiers du projet de meme nom
+    (api.py, Dockerfile...), y compris les correctifs deja rejoues avant l'appel.
+    """
     py = python_exe or sys.executable
     run_dir = Path(run_dir)
+    same = Path(generated_dir).resolve() == run_dir.resolve()
+    keep = {f.name: f.read_bytes() for f in Path(generated_dir).iterdir() if f.is_file()} if same else {}
     shutil.copytree(project_dir, run_dir, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("output", "expected_reports", ".git", ".venv", "venv", "__pycache__", "*.pyc"))
-    for f in Path(generated_dir).iterdir():
-        if f.is_file():
-            shutil.copy2(f, run_dir / f.name)
+    if same:
+        for name, data in keep.items():          # le projet a pu ecraser un fichier genere de meme nom : on le restaure
+            (run_dir / name).write_bytes(data)
+    else:
+        for f in Path(generated_dir).iterdir():
+            if f.is_file():
+                shutil.copy2(f, run_dir / f.name)
 
     if not (run_dir / report.ml.model_file).exists():
         gen = report.ml.model_generation

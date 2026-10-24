@@ -34,7 +34,8 @@ compatible OpenAI : vLLM...), `LLM_MODEL`, `LLM_API_KEY_DOCKER`. Le modele doit 
     python -m agent_api_docker credit_risk --show     # + affiche api.py et Dockerfile
     python -m agent_api_docker credit_risk --serve    # puis lance l'API : http://127.0.0.1:8000/docs
     python -m agent_api_docker credit_risk --generate-only
-Resultats : workspaces/<id>/generated (fichiers), run (projet assemble), result.json, traces.jsonl.
+Resultats : workspaces/<id>/generated (dossier UNIQUE et complet : projet + fichiers generes + corrections, pret pour
+`docker build`), result.json, traces.jsonl.
 
 ## Utilisation
     python -m agent_api_docker credit_risk
@@ -57,6 +58,45 @@ le code d'inference (lecture seule), un extrait du rapport et la liste des corre
     python -m agent_api_docker credit_risk --no-fix        # desactive le fixer
     python -m agent_api_docker credit_risk --max-fixes 3
     pytest tests/test_fixer.py                             # faux LLM, aucun appel reseau
+
+## Corrections durables (fix_store.py)
+Les patchs du LLM s'appliquent sur `workspaces/<id>/generated/`, que chaque execution efface avant de regenerer depuis
+les templates. Sans memoire, la meme erreur revenait a chaque run. Maintenant :
+- une execution qui **reussit** ecrit ses patchs appliques dans `fixes/<project_id>.json` (dossier `AGENT_FIXES_DIR`,
+  hors de `workspaces/` : **a versionner dans git**) ;
+- l'execution suivante les **rejoue** juste apres la generation, dans l'ordre, sans LLM ;
+- un patch devenu inapplicable (`old` introuvable : template ou rapport modifie) est ignore, signale, puis retire a la
+  prochaine reussite ; la boucle de correction reprend alors la main ;
+- un echec n'ecrit rien ; les patchs de `Dockerfile` / `requirements.api.txt` / `.dockerignore` ne sont memorises
+  qu'apres un build + des tests reussis dans le conteneur (`--docker`) ; ceux d'`api.py` apres les tests locaux ;
+- le code du projet n'est jamais modifie. Un bug du projet reste signale, pas patche.
+
+    python -m agent_api_docker credit_risk --docker      # corrige, valide, memorise
+    python -m agent_api_docker credit_risk               # rejoue les correctifs memorises
+    python -m agent_api_docker credit_risk --no-memory   # generation nue (debogage des templates)
+Un correctif qui revient pour plusieurs projets doit etre promu dans le template `.j2` (revue humaine).
+
+## Contenu de l'image
+Le Dockerfile copie le projet **entier** (`COPY . .` : fichiers de base + fichiers generes). Le contexte de build est
+`workspaces/<id>/generated/` : ce dossier contient le projet complet, les fichiers generes (`api.py`, `Dockerfile`,
+`requirements.api.txt`, `.dockerignore`...), les correctifs (rejoues ou appliques par le LLM) et le modele. Il sert aussi
+de dossier d'execution pour la validation et les tests : un seul emplacement, que l'on peut construire a la main :
+
+    docker build -t mon-image workspaces/<id>/generated
+
+Les artefacts des tests locaux (`test_api_generated.py`, `junit.xml`, `server.log`) restent dans ce dossier pour le
+debogage mais sont exclus de l'image par `.dockerignore`. `--generate-only` n'ecrit, lui, que les fichiers generes. Les exclusions se font dans `.dockerignore` (`project.ignorable_paths` du rapport + caches,
+`.env*`, notebooks, `.git`), plus par une liste `runtime_files` a tenir a jour. Si le modele est entraine au build, la
+version entrainee dans l'image remplace celle du contexte.
+
+## Lancer le conteneur (Ctrl+C = arret + suppression)
+    python -m agent_api_docker credit_risk --serve-docker   # pipeline + build + tests, puis lance le conteneur
+    python -m agent_api_docker credit_risk --run-only       # relance la derniere image VALIDEE, sans rien regenerer
+    python -m agent_api_docker credit_risk --run-only --port 8001
+L'API est sur http://127.0.0.1:<port>/docs (127.0.0.1 uniquement) ; les logs du conteneur s'affichent en direct.
+Ctrl+C (ou SIGTERM / fermeture du terminal) lance `docker stop` puis `docker rm -f` : aucun conteneur ne reste en
+arriere-plan. Un 2e Ctrl+C pendant l'arret force la suppression. Port deja pris : message avec `--port <autre>`.
+`--serve-docker` implique `--docker` ; `--serve` (uvicorn local), `--serve-docker` et `--run-only` sont exclusifs.
 
 ## Phase 2-3 : validation et tests de l'API
     from agent_api_docker.validate_api import validate_api
@@ -88,10 +128,16 @@ disque plein, timeout de build) ne sont PAS envoyes au LLM : arret avec le conse
 Un patch d'`api.py` pendant cette phase declenche d'abord une revalidation locale.
 Traces : `traces.jsonl` (`step: "docker"`, `"fix"` avec `stage`, `"push"`) et `result.json` (`docker`, `push`).
 
-Configuration (.env) :
-    DOCKERHUB_USERNAME=...        # compte Docker Hub
-    DOCKERHUB_TOKEN=...           # Personal access token, droits Read & Write
-    DOCKER_IMAGE_NAMESPACE=...    # optionnel : organisation (defaut = DOCKERHUB_USERNAME)
+Identifiants Docker Hub : avant le push, l'agent les **demande dans le terminal** (nom d'utilisateur ; token saisi
+sans echo, cree sur hub.docker.com > Account settings > Personal access tokens, droits Read & Write). Ils restent en
+memoire le temps du push : ni fichier, ni log, ni trace. Token refuse : 3 essais (token seulement), puis arret propre.
+L'espace de nom du depot est `--namespace`, sinon `DOCKER_IMAGE_NAMESPACE`, sinon le compte saisi.
+Sans terminal interactif (CI, redirection), ils sont lus dans `.env` comme avant, et verifies AVANT le build.
+
+Configuration (.env), toutes optionnelles en mode interactif :
+    DOCKERHUB_USERNAME=...        # propose comme valeur par defaut a la saisie ; requis (avec le token) hors terminal
+    DOCKERHUB_TOKEN=...           # uniquement pour le mode non interactif (jamais lu quand le terminal demande)
+    DOCKER_IMAGE_NAMESPACE=...    # optionnel : organisation (defaut = compte saisi)
     AGENT_BUILD_TIMEOUT_S=600     # optionnel
 Attention : un depot Docker Hub cree par un push est PUBLIC par defaut et l'image contient le modele.
 Pour un modele confidentiel, creer d'abord le depot en prive sur hub.docker.com.

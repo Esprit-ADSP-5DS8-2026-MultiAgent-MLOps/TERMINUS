@@ -1,0 +1,184 @@
+{
+  "project_id": "ml-iris",
+  "ok": false,
+  "files": [
+    "api.py",
+    "requirements.api.txt",
+    "Dockerfile",
+    ".dockerignore"
+  ],
+  "validation": {
+    "ok": true,
+    "checks": [
+      {
+        "name": "file_exists",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "syntax",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "lint",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "import_app",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "routes",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "contract_input",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      },
+      {
+        "name": "contract_output",
+        "passed": true,
+        "detail": "",
+        "skipped": false,
+        "category": null
+      }
+    ]
+  },
+  "tests": {
+    "started": true,
+    "passed": 10,
+    "failed": 1,
+    "skipped": 1,
+    "error_category": null,
+    "failures": [
+      {
+        "name": "test_predict_example",
+        "status": "failed",
+        "message": "KeyError: 'prediction'"
+      }
+    ]
+  },
+  "fixes": [
+    {
+      "iteration": 1,
+      "category": "API_RUNTIME_500",
+      "failure": "[API_RUNTIME_500] import_app: Traceback (most recent call last):\n    raise RuntimeError(multipart_not_installed_error) from None\nRuntimeError: Form data requires \"python-multipart\" to be installed. \n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 3084, in decorator\n    self.add_api_route(\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 3019, in add_api_route\n    route = route_class(\n            ^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 1226, in __init__\n    _populate_api_route_state(\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 1094, in _populate_api_route_state\n    ) = _build_dependant_with_parameterless_dependencies(\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 894, in _build_dependant_with_parameterless_dependencies\n    dependant = get_dependant(path=path, call=call, scope=\"function\")\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 296, in get_dependant\n    param_details = analyze_param(\n                    ^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 523, in analyze_param\n    ensure_multipart_is_installed()\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 129, in ensure_multipart_is_installed\nYou can install \"python-multipart\" with: \n\npip install python-multipart",
+      "diagnosis": "L'import de l'application échoue car le module `main.py` (code du projet) définit des routes FastAPI qui nécessitent `python-multipart` (probablement via des dépendances implicites ou une version de FastAPI stricte), mais le paquet n'est pas installé dans l'environnement de test local, bien qu'il soit listé dans `requirements.api.txt`. De plus, l'API générée (`api.py`) ne respecte pas le contrat de sortie défini dans le rapport (`flower_type` au lieu de `prediction`) et n'utilise pas la fonction `predict` de `main.py` correctement (qui attend une liste et retourne un dictionnaire avec `flower_type`).",
+      "target": "api",
+      "patches": [
+        {
+          "path": "api.py",
+          "old": "from main import predict",
+          "new": "from main import predict as project_predict"
+        },
+        {
+          "path": "api.py",
+          "old": "class PredictResponse(BaseModel):\n    prediction: int",
+          "new": "class PredictResponse(BaseModel):\n    flower_type: str"
+        },
+        {
+          "path": "api.py",
+          "old": "@app.post(\"/predict\", response_model=PredictResponse)\ndef predict_route(req: PredictRequest):\n    \"\"\"Route synchrone : l'inference est bloquante (CPU), FastAPI l'execute dans un thread.\"\"\"\n    model = state.get(\"model\")\n    if model is None:\n        raise HTTPException(status_code=503, detail=\"Modele non charge\")\n    data = req.model_dump()\n    pred = predict(model, data)[0]\n    out = {\"prediction\": int(pred)}\n    return out",
+          "new": "@app.post(\"/predict\", response_model=PredictResponse)\ndef predict_route(req: PredictRequest):\n    \"\"\"Route synchrone : l'inference est bloquante (CPU), FastAPI l'execute dans un thread.\"\"\"\n    # On utilise la fonction predict du projet qui attend une liste de floats\n    data_list = [req.sepal_length, req.sepal_width, req.petal_length, req.petal_width]\n    # La fonction predict dans main.py charge le modele elle-meme ou l'utilise depuis le scope global\n    # Ici, on appelle la fonction du projet qui retourne un dict avec 'flower_type'\n    result = project_predict(data_list)\n    return result"
+        }
+      ],
+      "applied": 3,
+      "errors": [],
+      "model": "qwen/qwen3.8-27b",
+      "stage": ""
+    },
+    {
+      "iteration": 2,
+      "category": "API_IMPORT",
+      "failure": "[API_IMPORT] lint: api.py:4:30: F401 [*] `fastapi.HTTPException` imported but unused\nFound 1 error.\n[*] 1 fixable with `--fix`.",
+      "diagnosis": "L'import de `main.py` échoue car ce module définit des routes FastAPI qui déclenchent la vérification de la présence de `python-multipart` (probablement via des dépendances implicites ou une version de FastAPI stricte), mais le paquet n'est pas installé dans l'environnement de test local, bien qu'il soit listé dans `requirements.api.txt`. De plus, l'API générée (`api.py`) ne respecte pas le contrat de sortie défini dans le rapport (`flower_type` au lieu de `prediction`) et n'utilise pas la fonction `predict` de `main.py` correctement (qui attend une liste et retourne un dictionnaire avec `flower_type`).",
+      "target": "api",
+      "patches": [
+        {
+          "path": "api.py",
+          "old": "from fastapi import FastAPI, HTTPException",
+          "new": "from fastapi import FastAPI"
+        }
+      ],
+      "applied": 1,
+      "errors": [],
+      "model": "qwen/qwen3.8-27b",
+      "stage": ""
+    },
+    {
+      "iteration": 3,
+      "category": "API_RUNTIME_500",
+      "failure": "[API_RUNTIME_500] import_app: Traceback (most recent call last):\n    raise RuntimeError(multipart_not_installed_error) from None\nRuntimeError: Form data requires \"python-multipart\" to be installed. \n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 3084, in decorator\n    self.add_api_route(\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 3019, in add_api_route\n    route = route_class(\n            ^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 1226, in __init__\n    _populate_api_route_state(\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 1094, in _populate_api_route_state\n    ) = _build_dependant_with_parameterless_dependencies(\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 894, in _build_dependant_with_parameterless_dependencies\n    dependant = get_dependant(path=path, call=call, scope=\"function\")\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 296, in get_dependant\n    param_details = analyze_param(\n                    ^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 523, in analyze_param\n    ensure_multipart_is_installed()\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 129, in ensure_multipart_is_installed\nYou can install \"python-multipart\" with: \n\npip install python-multipart",
+      "diagnosis": "L'import du module `main` échoue car la définition de ses routes FastAPI déclenche une vérification stricte de la présence du paquet `python-multipart` (souvent requis pour les paramètres de type `File` ou `Form`), qui n'est pas installé dans l'environnement de test local, bien qu'il soit listé dans `requirements.api.txt`.",
+      "target": "api",
+      "patches": [
+        {
+          "path": "api.py",
+          "old": "from main import predict as project_predict",
+          "new": "import main\nproject_predict = main.predict"
+        }
+      ],
+      "applied": 1,
+      "errors": [],
+      "model": "qwen/qwen3.8-27b",
+      "stage": ""
+    },
+    {
+      "iteration": 4,
+      "category": "API_RUNTIME_500",
+      "failure": "[API_RUNTIME_500] import_app: Traceback (most recent call last):\n    raise RuntimeError(multipart_not_installed_error) from None\nRuntimeError: Form data requires \"python-multipart\" to be installed. \n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 3084, in decorator\n    self.add_api_route(\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 3019, in add_api_route\n    route = route_class(\n            ^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 1226, in __init__\n    _populate_api_route_state(\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 1094, in _populate_api_route_state\n    ) = _build_dependant_with_parameterless_dependencies(\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/routing.py\", line 894, in _build_dependant_with_parameterless_dependencies\n    dependant = get_dependant(path=path, call=call, scope=\"function\")\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 296, in get_dependant\n    param_details = analyze_param(\n                    ^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 523, in analyze_param\n    ensure_multipart_is_installed()\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py\", line 129, in ensure_multipart_is_installed\nYou can install \"python-multipart\" with: \n\npip install python-multipart",
+      "diagnosis": "Importing main.py triggers FastAPI route registration that requires python-multipart, causing a RuntimeError. Avoid importing main.py entirely and use the loaded model directly.",
+      "target": "api",
+      "patches": [
+        {
+          "path": "api.py",
+          "old": "import main\nproject_predict = main.predict",
+          "new": "# main.py is not imported to avoid multipart dependency\n# The model is loaded in the lifespan context and used directly in predict_route\n"
+        },
+        {
+          "path": "api.py",
+          "old": "def predict_route(req: PredictRequest):\n    \"\"\"Route synchrone : l'inference est bloquante (CPU), FastAPI l'execute dans un thread.\"\"\"\n    # On utilise la fonction predict du projet qui attend une liste de floats\n    data_list = [req.sepal_length, req.sepal_width, req.petal_length, req.petal_width]\n    # La fonction predict dans main.py charge le modele elle-meme ou l'utilise depuis le scope global\n    # Ici, on appelle la fonction du projet qui retourne un dict avec 'flower_type'\n    result = project_predict(data_list)\n    return result",
+          "new": "def predict_route(req: PredictRequest):\n    \"\"\"Route synchrone : l'inference est bloquante (CPU), FastAPI l'exécute dans un thread.\"\"\"\n    # Use the model loaded in the lifespan context\n    data_list = [req.sepal_length, req.sepal_width, req.petal_length, req.petal_width]\n    model = state.get(\"model\")\n    if model is None:\n        raise RuntimeError(\"Model not loaded\")\n    prediction = model.predict([data_list])[0]\n    flower_names = ['Setosa', 'Versicolor', 'Virginica']\n    return {\"flower_type\": flower_names[int(prediction)]}\n"
+        }
+      ],
+      "applied": 2,
+      "errors": [],
+      "model": "openai/gpt-oss-20b",
+      "stage": ""
+    },
+    {
+      "iteration": 5,
+      "category": "UNKNOWN",
+      "failure": "1 test(s) en echec:\n- test_predict_example: KeyError: 'prediction'\n--- logs serveur ---\nINFO:     Started server process [10257]\nINFO:     Waiting for application startup.\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:51005 (Press CTRL+C to quit)\nINFO:     127.0.0.1:32924 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:32940 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:32940 - \"POST /predict HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:32940 - \"POST /predict HTTP/1.1\" 422 Unprocessable Entity\nINFO:     127.0.0.1:32940 - \"GET /openapi.json HTTP/1.1\" 200 OK\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [10257]",
+      "diagnosis": "",
+      "target": "",
+      "patches": [],
+      "applied": 0,
+      "errors": [
+        "Tous les LLM sont indisponibles : Appel LLM echoue (https://api.groq.com/openai/v1) - HTTP 429 : {\"error\":{\"message\":\"Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01kr6n65p4f2nbxbqvqthgtb8g` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 6507, Requested 7582. Please try again in 45.6675s. Need more tokens? Upgrade to Dev Tier today at https://con || Appel LLM echoue (https://api.groq.com/openai/v1) - HTTP 429 : {\"error\":{\"message\":\"Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01km3qpas0fcps5xyp3xahn539` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 5804, Requested 5192. Please try again in 34.251428571s. Need more tokens? Upgrade to Dev Tier today at h || Appel LLM echoue (https://generativelanguage.googleapis.com/v1beta/openai) - HTTP 429 : [{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota e || Appel LLM echoue (https://api.groq.com/openai/v1) - HTTP 429 : {\"error\":{\"message\":\"Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01kr6n65p4f2nbxbqvqthgtb8g` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 4440, Requested 5192. Please try again in 22.56s. Need more tokens? Upgrade to Dev Tier today at https://"
+      ],
+      "model": "",
+      "stage": ""
+    }
+  ],
+  "docker": null,
+  "push": null,
+  "duration_s": 77.32
+}

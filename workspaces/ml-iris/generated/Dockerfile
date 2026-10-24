@@ -6,12 +6,9 @@ WORKDIR /app
 RUN useradd --create-home --uid 1000 appuser
 COPY requirements.api.txt .
 RUN pip install --no-cache-dir -r requirements.api.txt
-COPY src/dp_model/__init__.py ./src/dp_model/__init__.py
-COPY src/dp_model/service.py ./src/dp_model/service.py
-COPY model/regressor.joblib ./model/regressor.joblib
-COPY model/features.json ./model/features.json
+COPY main.py ./main.py
+COPY iris_model.pkl ./iris_model.pkl
 COPY api.py .
-ENV DP_MODEL_DIR="model"
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \

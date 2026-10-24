@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="12" time="0.151" timestamp="2026-10-22T21:55:39.877182+01:00" hostname="LAPTOP-J3QUVPE3"><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_health" time="0.036" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_predict_example" time="0.011"><failure message="KeyError: 'prediction'">client = &lt;httpx.Client object at 0x7caf904b3ad0&gt;
+
+    def test_predict_example(client):
+        r = client.post("/predict", json=EXAMPLE_INPUT)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        for name in OUTPUT_FIELDS:
+            assert name in body, f"champ de sortie absent: {name}"
+        if EXAMPLE_OUTPUT:
+&gt;           assert body["prediction"] == EXAMPLE_OUTPUT["prediction"]
+                   ^^^^^^^^^^^^^^^^^^
+E           KeyError: 'prediction'
+
+test_api_generated.py:49: KeyError</failure></testcase><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_missing_field_returns_422[sepal_length]" time="0.002" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_missing_field_returns_422[sepal_width]" time="0.002" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_missing_field_returns_422[petal_length]" time="0.001" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_missing_field_returns_422[petal_width]" time="0.001" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_wrong_type_returns_422[sepal_length]" time="0.001" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_wrong_type_returns_422[sepal_width]" time="0.001" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_wrong_type_returns_422[petal_length]" time="0.001" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_wrong_type_returns_422[petal_width]" time="0.002" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_openapi_exposes_input_fields" time="0.006" /><testcase classname="workspaces.ml-iris.run.test_api_generated" name="test_api_matches_direct_model_call" time="0.000"><skipped type="pytest.skip" message="RUN_DIR ou fichier de donnees absent">/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/workspaces/ml-iris/run/test_api_generated.py:79: RUN_DIR ou fichier de donnees absent</skipped></testcase></testsuite></testsuites>

@@ -21,6 +21,10 @@ class PushError(Exception):
     """Login ou push refuse par Docker Hub (identifiants, droits, reseau) : probleme d'environnement, pas de fichier genere."""
 
 
+class LoginError(PushError):
+    """Identifiants refuses par Docker Hub : l'utilisateur peut en ressaisir (le push n'a pas commence)."""
+
+
 _IMAGE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$")
 _TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 
@@ -62,7 +66,7 @@ def docker_push(image: str, tag: str | list[str], approved_digest: str | None, a
                         "(token a creer sur hub.docker.com > Account settings > Personal access tokens, droits Read & Write).")
     login = d.login(user, secret)
     if login["exit_code"] != 0:
-        raise PushError("Connexion a Docker Hub refusee : " + (_hint(login["logs"]) or login["logs"][-300:]))
+        raise LoginError("Connexion a Docker Hub refusee : " + (_hint(login["logs"]) or login["logs"][-300:]))
     digest = None
     try:
         for t in tags:

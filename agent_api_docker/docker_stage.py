@@ -10,7 +10,6 @@ on s'arrete avec une explication claire au lieu de gaspiller le budget de correc
 from __future__ import annotations
 
 import re
-import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -25,7 +24,8 @@ from .llm import LLMClient, LLMError, make_client
 from .schemas import AnalysisReport
 from .tools.checks import healthcheck, lint_dockerfile, missing_copy_sources
 from .tools.docker import DockerCLI, DockerError
-from .tools.publish import ApprovalRequired, PushError, docker_push
+from .tools.files import sync_files
+from .tools.publish import ApprovalRequired, LoginError, PushError, docker_push
 from .traces import log_step
 
 # Echecs qu'aucun patch de fichier genere ne peut corriger.
@@ -40,7 +40,7 @@ ENV_ADVICE = {
     "REGISTRY_RATE_LIMIT": "limite de telechargement Docker Hub : `docker login` puis relancer, ou attendre",
     "DISK_FULL": "liberer de l'espace (`docker system prune`) puis relancer",
     "DOCKERFILE_UNREADABLE": "Dockerfile absent ou vide dans le dossier de build : probleme de l'agent, pas du contenu du Dockerfile "
-                             "(verifier workspaces/<projet>/run/Dockerfile)",
+                             "(verifier workspaces/<projet>/generated/Dockerfile)",
     "BUILD_TIMEOUT": "build trop long : augmenter AGENT_BUILD_TIMEOUT_S (entrainement du modele inclus dans le build)",
 }
 # Erreurs reseau passageres pendant le build : on reessaie sans consommer de correction LLM.
@@ -275,11 +275,13 @@ def run_docker_stage(report: AnalysisReport, generated: Path, run_dir: Path, ws:
                      tried: Optional[set[str]] = None, max_fixes: Optional[int] = None, fix: bool = True,
                      reeval: Optional[Callable[[], Optional[tuple[str, str]]]] = None, docker: Optional[DockerCLI] = None,
                      python_exe: Optional[str] = None, keep_running: bool = False,
-                     sleep: Callable[[float], None] = time.sleep) -> DockerResult:
+                     sleep: Callable[[float], None] = time.sleep,
+                     applied_out: Optional[list] = None) -> DockerResult:
     """Construit l'image, la lance, la teste ; si ca echoue, le LLM corrige les fichiers generes et on recommence.
 
     reeval : appelee apres une correction de api.py ; retourne None si la validation+tests locaux passent,
              sinon (echec, categorie).
+    applied_out : recoit les patchs effectivement appliques (pour les memoriser si le build + les tests passent).
     """
     d = docker or DockerCLI()
     fixes = [] if fixes is None else fixes
@@ -336,7 +338,7 @@ def run_docker_stage(report: AnalysisReport, generated: Path, run_dir: Path, ws:
         attempt.diagnosis, attempt.target, attempt.model = proposal.diagnosis, proposal.target, proposal.model
         attempt.patches = [{"path": p.path, "old": p.old, "new": p.new} for p in proposal.patches]
         on_detail("diagnostic : " + " ".join(proposal.diagnosis.split())[:300])
-        attempt.applied, attempt.errors = apply_patches(generated, proposal.patches, tried)
+        attempt.applied, attempt.errors = apply_patches(generated, proposal.patches, tried, applied_out)
         for e in attempt.errors:
             on_detail("patch refuse : " + e[:200])
         fixes.append(attempt)
@@ -345,9 +347,7 @@ def run_docker_stage(report: AnalysisReport, generated: Path, run_dir: Path, ws:
             on_detail("aucun patch applique : arret des corrections")
             break
         on_detail(f"{attempt.applied} patch(s) applique(s) sur : " + ", ".join(sorted({p.path for p in proposal.patches})))
-        for f in Path(generated).iterdir():                 # republie les fichiers generes dans le contexte de build
-            if f.is_file():
-                shutil.copy2(f, Path(run_dir) / f.name)
+        sync_files(Path(generated), Path(run_dir))          # no-op quand generated/ est lui-meme le contexte de build
         state["dirty"] = any(p.path == "api.py" for p in proposal.patches)
 
     res.duration_s = round(time.time() - t_start, 1)
@@ -368,12 +368,34 @@ def missing_push_settings(namespace: Optional[str] = None) -> list[str]:
     return missing
 
 
+# Fournisseur d'identifiants (saisie dans le terminal, voir terminal.py) : appele avec None la 1re fois, puis avec le
+# message d'erreur si Docker Hub refuse la connexion ; retourne (utilisateur, token) ou None pour annuler.
+CredentialsProvider = Callable[[Optional[str]], Optional[tuple[str, str]]]
+MAX_LOGIN_ATTEMPTS = 3
+
+
 def publish_image(res: DockerResult, report: AnalysisReport, approve: Optional[Callable[[ApprovalRequest], bool]],
                   on_detail: Callable[[str], None], ws: Path, docker: Optional[DockerCLI] = None,
-                  namespace: Optional[str] = None) -> PushResult:
-    """Pousse l'image testee sur Docker Hub, APRES approbation. Sans callback d'approbation : jamais de push."""
+                  namespace: Optional[str] = None, credentials: Optional[CredentialsProvider] = None) -> PushResult:
+    """Pousse l'image testee sur Docker Hub, APRES approbation. Sans callback d'approbation : jamais de push.
+
+    credentials : si fourni, l'utilisateur saisit son nom et son token (dans le terminal) AVANT le push ; ils ne vivent
+                  qu'en memoire le temps du push (ni fichier, ni log, ni trace). Sinon : DOCKERHUB_USERNAME / DOCKERHUB_TOKEN de .env.
+    """
     out = PushResult()
-    ns = (namespace or config.DOCKER_IMAGE_NAMESPACE or "").strip().lower()
+    user = token = None
+    if credentials is not None:
+        creds = credentials(None)
+        if not creds:
+            out.declined = True
+            on_detail("push annule : identifiants Docker Hub non fournis, l'image reste locale (" + (res.image or "") + ")")
+            log_step(ws, step="push", approved=False, reason="no_credentials")
+            return out
+        user, token = creds
+        # espace de nom : --namespace, sinon DOCKER_IMAGE_NAMESPACE explicite, sinon le compte saisi (jamais celui de .env)
+        ns = (namespace or config.DOCKER_IMAGE_NAMESPACE_EXPLICIT or user).strip().lower()
+    else:
+        ns = (namespace or config.DOCKER_IMAGE_NAMESPACE or "").strip().lower()
     if not ns:
         out.error = ("Espace de nom Docker Hub inconnu : renseigner DOCKERHUB_USERNAME (ou DOCKER_IMAGE_NAMESPACE) "
                      "dans .env, ou passer --namespace.")
@@ -388,14 +410,28 @@ def publish_image(res: DockerResult, report: AnalysisReport, approve: Optional[C
         on_detail("push non approuve : l'image reste locale (" + (res.image or "") + ")")
         log_step(ws, step="push", approved=False, repository=out.repository)
         return out
-    try:
-        r = docker_push(out.repository, out.tags, req.image_id, res.image_id, source_ref=res.image, docker=docker,
-                        on_line=lambda s: None)
-    except (ApprovalRequired, PushError, DockerError, ValueError) as e:
-        out.error = str(e)
-        on_detail("[ECHEC ] " + out.error)
-        log_step(ws, step="push", approved=True, ok=False, error=out.error)
-        return out
+    attempts = MAX_LOGIN_ATTEMPTS if credentials is not None else 1
+    r: dict = {}
+    for attempt in range(attempts):
+        try:
+            r = docker_push(out.repository, out.tags, req.image_id, res.image_id, source_ref=res.image, docker=docker,
+                            username=user, token=token, on_line=lambda s: None)
+            break
+        except LoginError as e:                       # identifiants refuses : on laisse ressaisir (token seulement)
+            out.error = str(e)
+            on_detail("[ECHEC ] " + out.error)
+            creds = credentials(out.error) if credentials is not None and attempt < attempts - 1 else None
+            if not creds:
+                log_step(ws, step="push", approved=True, ok=False, error=out.error)
+                return out
+            user, token = creds
+            out.error = None
+        except (ApprovalRequired, PushError, DockerError, ValueError) as e:
+            out.error = str(e)
+            on_detail("[ECHEC ] " + out.error)
+            log_step(ws, step="push", approved=True, ok=False, error=out.error)
+            return out
+    user = token = None                               # plus aucune reference au token apres le push
     out.pushed, out.digest = True, r["digest"]
     on_detail(f"[OK    ] pousse : {out.repository}  tags {', '.join(out.tags)}  digest {out.digest}")
     log_step(ws, step="push", approved=True, ok=True, repository=out.repository, tags=out.tags, digest=out.digest)

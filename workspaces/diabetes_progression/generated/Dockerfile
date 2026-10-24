@@ -6,11 +6,9 @@ WORKDIR /app
 RUN useradd --create-home --uid 1000 appuser
 COPY requirements.api.txt .
 RUN pip install --no-cache-dir -r requirements.api.txt
-COPY src/dp_model/__init__.py ./src/dp_model/__init__.py
-COPY src/dp_model/service.py ./src/dp_model/service.py
-COPY model/regressor.joblib ./model/regressor.joblib
-COPY model/features.json ./model/features.json
-COPY api.py .
+# Projet COMPLET (fichiers de base + fichiers generes : api.py...). Ce qui ne doit pas entrer dans l'image
+# (donnees, notebooks, caches, secrets) est exclu par .dockerignore, pas par une liste de fichiers a maintenir.
+COPY --chown=appuser:appuser . .
 ENV DP_MODEL_DIR="model"
 USER appuser
 EXPOSE 8000

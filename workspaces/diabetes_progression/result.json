@@ -69,74 +69,14 @@
     "error_category": null,
     "failures": []
   },
-  "fixes": [
-    {
-      "iteration": 1,
-      "category": "API_MODEL_LOAD",
-      "failure": "[API_MODEL_LOAD] Le serveur n'a pas demarre:\nERROR:    Traceback (most recent call last):\nNotADirectoryError: [Errno 20] Not a directory: 'model/regressor.joblib/regressor.joblib'\nERROR:    Application startup failed. Exiting.\nINFO:     Started server process [8566]\nINFO:     Waiting for application startup.\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/starlette/routing.py\", line 654, in lifespan\n    async with self.lifespan_context(app) as maybe_state:\n  File \"/usr/lib/python3.12/contextlib.py\", line 210, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/workspaces/diabetes_progression/run/api.py\", line 15, in lifespan\n    state[\"model\"] = load_artifact(MODEL_PATH)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/workspaces/diabetes_progression/run/src/dp_model/service.py\", line 15, in load_artifact\n    model = joblib.load(d / \"regressor.joblib\")\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/syrine/projet_ADSP/Multi-Agent-MLOps-Pipeline/.venv/lib/python3.12/site-packages/joblib/numpy_pickle.py\", line 735, in load\n    with open(filename, \"rb\") as f:\n         ^^^^^^^^^^^^^^^^^^^^\n",
-      "diagnosis": "Le chemin du modèle est mal configuré : `MODEL_PATH` pointe vers le fichier `model/regressor.joblib` au lieu du dossier `model`, ce qui fait que `load_artifact` essaie de charger `model/regressor.joblib/regressor.joblib`.",
-      "target": "api",
-      "patches": [
-        {
-          "path": "api.py",
-          "old": "MODEL_PATH = os.environ.get(\"MODEL_PATH\", \"model/regressor.joblib\")",
-          "new": "MODEL_PATH = os.environ.get(\"MODEL_PATH\", \"model\")"
-        }
-      ],
-      "applied": 1,
-      "errors": [],
-      "model": "qwen/qwen3.8-27b",
-      "stage": ""
-    },
-    {
-      "iteration": 2,
-      "category": "UNKNOWN",
-      "failure": "1 test(s) en echec:\n- test_predict_example: assert 205 == 205.5\n--- logs serveur ---\nINFO:     Started server process [8599]\nINFO:     Waiting for application startup.\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:57713 (Press CTRL+C to quit)\nINFO:     127.0.0.1:42426 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:42434 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:42434 - \"POST /predict HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:42434 - \"POST /predict HTTP/1.1\" 422 Unprocessable Entity\nINFO:     127.0.0.1:42434 - \"GET /openapi.json HTTP/1.1\" 200 OK\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [8599]",
-      "diagnosis": "Le rapport d'analyse indique que le type de sortie attendu pour le champ 'prediction' est 'float' (exemple : 205.5), mais le code actuel force une conversion en entier (int), ce qui provoque l'échec du test d'assertion (205 != 205.5).",
-      "target": "api",
-      "patches": [
-        {
-          "path": "api.py",
-          "old": "class PredictResponse(BaseModel):\n    prediction: int",
-          "new": "class PredictResponse(BaseModel):\n    prediction: float"
-        },
-        {
-          "path": "api.py",
-          "old": "    pred = score(model, data)[0]\n    out = {\"prediction\": int(pred)}\n    return out",
-          "new": "    pred = score(model, data)[0]\n    out = {\"prediction\": float(pred)}\n    return out"
-        }
-      ],
-      "applied": 2,
-      "errors": [],
-      "model": "qwen/qwen3.8-27b",
-      "stage": ""
-    },
-    {
-      "iteration": 3,
-      "category": "UNKNOWN",
-      "failure": "1 test(s) en echec:\n- test_predict_example: assert 205.48511702964356 == 205.5\n--- logs serveur ---\nINFO:     Started server process [8647]\nINFO:     Waiting for application startup.\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:36883 (Press CTRL+C to quit)\nINFO:     127.0.0.1:51842 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:51858 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:51858 - \"POST /predict HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:51858 - \"POST /predict HTTP/1.1\" 422 Unprocessable Entity\nINFO:     127.0.0.1:51858 - \"GET /openapi.json HTTP/1.1\" 200 OK\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [8647]",
-      "diagnosis": "Le test attend une valeur exacte (205.5) mais l'API renvoie la valeur brute du modèle (205.48511702964356). Le rapport d'analyse fournit un exemple de sortie arrondi (205.5), ce qui implique que l'API doit arrondir la prédiction pour correspondre au contrat d'entrée/sortie défini.",
-      "target": "api",
-      "patches": [
-        {
-          "path": "api.py",
-          "old": "    pred = score(model, data)[0]\n    out = {\"prediction\": float(pred)}\n    return out",
-          "new": "    pred = score(model, data)[0]\n    out = {\"prediction\": round(float(pred), 1)}\n    return out"
-        }
-      ],
-      "applied": 1,
-      "errors": [],
-      "model": "qwen/qwen3.8-27b",
-      "stage": ""
-    }
-  ],
+  "fixes": [],
   "docker": {
     "ok": true,
     "stage": "done",
     "category": null,
     "failure": "",
     "image": "diabetes-progression:agent-build",
-    "image_id": "sha256:84bc11ec64ddda8c232f8ee4d2b0db099ef2d1439779ce6bb6b1f0a15c6d05eb",
+    "image_id": "sha256:fe7efa0fea41af599f3284896c8c8d4ddc7ee1f7ff4074d053581d83978e250b",
     "size_mb": 156.0,
     "attempts": 1,
     "tests": {
@@ -144,18 +84,23 @@
       "failed": 0,
       "skipped": 1
     },
-    "duration_s": 5.1
+    "duration_s": 10.5
   },
   "push": {
     "pushed": true,
     "declined": false,
     "repository": "syrineboh/diabetes-progression",
     "tags": [
-      "20261022-84bc11ec",
+      "20261024-fe7efa0f",
       "latest"
     ],
-    "digest": "sha256:84bc11ec64ddda8c232f8ee4d2b0db099ef2d1439779ce6bb6b1f0a15c6d05eb",
+    "digest": "sha256:fe7efa0fea41af599f3284896c8c8d4ddc7ee1f7ff4074d053581d83978e250b",
     "error": null
   },
-  "duration_s": 402.73
+  "memory": {
+    "replayed": 4,
+    "skipped": [],
+    "saved": null
+  },
+  "duration_s": 272.51
 }

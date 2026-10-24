@@ -163,8 +163,12 @@ def propose_fix(llm: LLMClient, context: str, max_format_retries: int = 2) -> Fi
 
 # --------------------------------------------------------------------------- application (controlee par le code)
 
-def apply_patches(generated_dir: Path, patches: list[Patch], already_tried: set[str]) -> tuple[int, list[str]]:
-    """Applique les patchs valides. Retourne (nombre applique, erreurs expliquees au LLM)."""
+def apply_patches(generated_dir: Path, patches: list[Patch], already_tried: set[str],
+                  applied_out: Optional[list[Patch]] = None) -> tuple[int, list[str]]:
+    """Applique les patchs valides. Retourne (nombre applique, erreurs expliquees au LLM).
+
+    applied_out : si fourni, y ajoute chaque patch effectivement applique (pour les memoriser, voir fix_store.py).
+    """
     applied, errors = 0, []
     if len(patches) > MAX_PATCHES:
         errors.append(f"trop de patchs ({len(patches)}), seuls les {MAX_PATCHES} premiers sont consideres")
@@ -187,6 +191,8 @@ def apply_patches(generated_dir: Path, patches: list[Patch], already_tried: set[
                 errors.append(str(e))
             else:
                 applied += 1
+                if applied_out is not None:
+                    applied_out.append(p)
         already_tried.add(p.key())
     return applied, errors
 

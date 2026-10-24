@@ -1,65 +1,55 @@
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 874B done
+#1 transferring dockerfile: 900B done
 #1 DONE 0.0s
 
 #2 resolve image config for docker-image://docker.io/docker/dockerfile:1
-#2 DONE 0.6s
+#2 DONE 0.9s
 
 #3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
-#3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.0s done
+#3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.1s done
 #3 CACHED
 
 #4 [internal] load metadata for docker.io/library/python:3.12-slim
-#4 DONE 0.4s
+#4 DONE 0.6s
 
 #5 [internal] load .dockerignore
-#5 transferring context: 159B done
+#5 transferring context: 258B done
 #5 DONE 0.0s
 
 #6 [internal] load build context
-#6 transferring context: 1.99kB done
-#6 DONE 0.0s
+#6 transferring context: 5.23kB 0.0s done
+#6 DONE 0.1s
 
-#7 [ 1/10] FROM docker.io/library/python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
-#7 resolve docker.io/library/python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2 0.0s done
-#7 DONE 0.0s
+#7 [1/6] FROM docker.io/library/python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+#7 resolve docker.io/library/python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+#7 resolve docker.io/library/python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 0.3s done
+#7 DONE 0.3s
 
-#8 [ 4/10] COPY requirements.api.txt .
+#8 [5/6] RUN pip install --no-cache-dir -r requirements.api.txt
 #8 CACHED
 
-#9 [ 6/10] COPY src/dp_model/__init__.py ./src/dp_model/__init__.py
+#9 [2/6] WORKDIR /app
 #9 CACHED
 
-#10 [ 7/10] COPY src/dp_model/service.py ./src/dp_model/service.py
+#10 [3/6] RUN useradd --create-home --uid 1000 appuser
 #10 CACHED
 
-#11 [ 2/10] WORKDIR /app
+#11 [4/6] COPY requirements.api.txt .
 #11 CACHED
 
-#12 [ 8/10] COPY model/regressor.joblib ./model/regressor.joblib
+#12 [6/6] COPY --chown=appuser:appuser . .
 #12 CACHED
 
-#13 [ 5/10] RUN pip install --no-cache-dir -r requirements.api.txt
-#13 CACHED
-
-#14 [ 9/10] COPY model/features.json ./model/features.json
-#14 CACHED
-
-#15 [ 3/10] RUN useradd --create-home --uid 1000 appuser
-#15 CACHED
-
-#16 [10/10] COPY api.py .
-#16 CACHED
-
-#17 exporting to image
-#17 exporting layers done
-#17 exporting manifest sha256:95e00c995670a664ddea0ebf338e05ab638ebfe0063266d530eed9021d8da96a done
-#17 exporting config sha256:2652d98ec318f5323648ce4493243607726410c0b54e1310a518e8afcbb67934 done
-#17 exporting attestation manifest sha256:ddc166d02c85730cccc3df97b3e9833323bea1453fadc3ce9a6c6539da4e7985 0.0s done
-#17 exporting manifest list sha256:84bc11ec64ddda8c232f8ee4d2b0db099ef2d1439779ce6bb6b1f0a15c6d05eb
-#17 exporting manifest list sha256:84bc11ec64ddda8c232f8ee4d2b0db099ef2d1439779ce6bb6b1f0a15c6d05eb 0.0s done
-#17 naming to docker.io/library/diabetes-progression:agent-build done
-#17 unpacking to docker.io/library/diabetes-progression:agent-build done
-#17 DONE 0.1s
+#13 exporting to image
+#13 exporting layers done
+#13 exporting manifest sha256:348ad4910efb7ec9ee7275b4c98435f966ade18a49ebda16a13bf4385dc76a39 done
+#13 exporting config sha256:0950f6fc0d21d6d9233dd6edd2853b6c76691b5450d2ad10041797de87a69442 0.0s done
+#13 exporting attestation manifest sha256:c10225634019d1f67ba588a688123bdc422e1b730a88edd539052052f179eb1f
+#13 exporting attestation manifest sha256:c10225634019d1f67ba588a688123bdc422e1b730a88edd539052052f179eb1f 0.1s done
+#13 exporting manifest list sha256:fe7efa0fea41af599f3284896c8c8d4ddc7ee1f7ff4074d053581d83978e250b
+#13 exporting manifest list sha256:fe7efa0fea41af599f3284896c8c8d4ddc7ee1f7ff4074d053581d83978e250b 0.1s done
+#13 naming to docker.io/library/diabetes-progression:agent-build 0.0s done
+#13 unpacking to docker.io/library/diabetes-progression:agent-build done
+#13 DONE 0.3s

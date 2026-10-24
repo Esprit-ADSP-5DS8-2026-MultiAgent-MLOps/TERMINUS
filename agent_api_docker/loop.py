@@ -4,6 +4,9 @@ Si la validation ou les tests echouent, le LLM propose des patchs (fixer.py), le
 fichiers generes puis on revalide, jusqu'a MAX_ITERATIONS corrections.
 Avec docker=True : build de l'image, conteneur, /health, tests contre le conteneur (memes corrections LLM), puis
 avec push=True publication sur Docker Hub apres approbation (docker_stage.py).
+
+Memoire des corrections (fix_store.py) : les patchs d'une execution REUSSIE sont ecrits dans fixes/<id>.json et
+rejoues apres chaque regeneration (sans LLM), pour que les corrections ne soient plus perdues.
 """
 from __future__ import annotations
 
@@ -15,16 +18,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import config
+from . import config, fix_store
 from .api_tests import TestRunResult, prepare_run_dir, run_api_tests
 from .discovery_agent import DiscoveryResult, find_report
-from .docker_stage import ApprovalRequest, DockerResult, PushResult, missing_push_settings, publish_image, run_docker_stage
-from .fixer import FixAttempt, FixError, apply_patches, build_context, classify_failure, propose_fix, short_failure
+from .docker_stage import (ApprovalRequest, CredentialsProvider, DockerResult, PushResult, missing_push_settings,
+                           publish_image, run_docker_stage)
+from .fixer import FixAttempt, FixError, Patch, apply_patches, build_context, classify_failure, propose_fix, short_failure
 from .generator import generate_all
 from .llm import LLMClient, LLMError, make_client
 from .report_loader import ReportError, load_report, resolve_report_path
 from .tools.docker import DockerCLI
-from .tools.files import write_file
+from .tools.files import sync_files, write_file
 from .traces import log_step
 from .validate_api import ValidationResult, validate_api
 
@@ -53,6 +57,7 @@ class PipelineResult:
     fixes: list[FixAttempt] = field(default_factory=list)
     docker: Optional[DockerResult] = None      # renseigne si l'etape Docker a ete demandee ET tentee
     push: Optional[PushResult] = None          # renseigne si le push a ete demande
+    memory: dict = field(default_factory=dict)  # correctifs memorises : rejoues / ignores / fichier ecrit
 
     @property
     def api_ok(self) -> bool:
@@ -75,6 +80,7 @@ class PipelineResult:
             "fixes": [f.to_dict() for f in self.fixes],
             "docker": None if self.docker is None else self.docker.to_dict(),
             "push": None if self.push is None else self.push.to_dict(),
+            "memory": self.memory,
             "duration_s": self.duration_s,
         }
 
@@ -122,6 +128,10 @@ def run(project_id: str, report_path: str | None = None, workspace: Path | None 
     for rel, content in files.items():
         write_file(ws, rel, content)
     log_step(ws, step="generate", files=list(files))
+    stored = fix_store.load(project_id)
+    if stored:
+        replayed, skipped = fix_store.replay(ws, stored)
+        log_step(ws, step="replay", applied=len(replayed), skipped=skipped)
     return ws
 
 
@@ -167,7 +177,8 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
                  fix: bool = True, max_fixes: Optional[int] = None,
                  docker: bool = False, push: bool = False, max_docker_fixes: Optional[int] = None,
                  approve_push: Optional[Callable[[ApprovalRequest], bool]] = None,
-                 docker_cli: Optional[DockerCLI] = None, namespace: Optional[str] = None) -> PipelineResult:
+                 docker_cli: Optional[DockerCLI] = None, namespace: Optional[str] = None,
+                 remember: bool = True, credentials: Optional[CredentialsProvider] = None) -> PipelineResult:
     """Genere l'API, la valide, puis la teste.
 
     on_step   : appele au DEBUT de chaque etape ("[2/5] Generation ...")
@@ -182,9 +193,13 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
     approve_push : fonction (ApprovalRequest) -> bool, appelee par le CODE avant tout push (jamais par le LLM) ;
                    absente = pas de push
     max_docker_fixes : budget de corrections pendant l'etape Docker (defaut : config.MAX_DOCKER_ITERATIONS)
+    credentials : fonction (raison|None) -> (utilisateur, token) | None : saisie des identifiants Docker Hub AVANT le push
+                (terminal). Absente = identifiants lus dans .env (CI, entree non interactive)
+    remember  : True = rejoue les correctifs memorises (fixes/<id>.json) apres la generation, et memorise ceux de
+                cette execution si elle reussit ; False = generation "nue" depuis les templates
     """
     docker = docker or push
-    if push and (missing := missing_push_settings(namespace)):     # echec immediat, avant tout build
+    if push and credentials is None and (missing := missing_push_settings(namespace)):     # echec immediat, avant tout build
         raise RuntimeError("Push Docker Hub impossible : a renseigner dans " + str(config.REPO_ROOT / ".env")
                            + " -> " + ", ".join(missing) + "  (modele : .env.example)")
     t0 = time.time()
@@ -236,9 +251,20 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
     log_step(ws, step="generate", files=list(files))
     if events:
         log_step(ws, step="discover", events=events)   # trajectoire de l'agent = futur dataset de fine-tuning
+    stored: list[Patch] = fix_store.load(project_id) if remember else []
+    replayed: list[Patch] = []
+    skipped_replay: list[str] = []
+    if stored:
+        replayed, skipped_replay = fix_store.replay(generated, stored)
+        on_detail(f"{len(replayed)}/{len(stored)} correctif(s) memorise(s) rejoue(s) depuis "
+                  + os.path.relpath(fix_store.store_path(project_id)))
+        for msg in skipped_replay:
+            on_detail("correctif memorise ignore : " + msg[:200])
+        log_step(ws, step="replay", applied=len(replayed), skipped=skipped_replay)
+    new_patches: list[Patch] = []          # patchs appliques par le LLM pendant CETTE execution
 
-    # 3 ------------------------------------------------------ dossier d'execution
-    step("Preparation du dossier d'execution (code du projet + fichiers generes)")
+    # 3 ------------------------------------------------------ dossier de build UNIQUE : generated/
+    step("Assemblage de generated/ : projet complet + fichiers generes + corrections (un seul dossier, pret pour le build)")
     src = Path(project_dir or (config.EVAL_PROJECTS_DIR / project_id))
     if not src.is_dir():
         raise FileNotFoundError(f"Dossier du projet introuvable : {src}  (utiliser --project-dir ou --agent)")
@@ -248,7 +274,7 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
         cmd = report.ml.model_generation.command if report.ml.model_generation else "?"
         on_detail(f"modele absent : entrainement avec `{cmd}` (quelques secondes)")
     t = time.time()
-    run_dir = prepare_run_dir(src, generated, report, ws / "run", python_exe=python_exe)
+    run_dir = prepare_run_dir(src, generated, report, generated, python_exe=python_exe)   # run_dir == generated
     on_detail(f"dossier pret en {round(time.time() - t, 1)} s : {run_dir}")
 
     # 4-5 ------------------------------------------- validation + tests (+ corrections LLM)
@@ -297,7 +323,7 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
         att.diagnosis, att.target, att.model = proposal.diagnosis, proposal.target, proposal.model
         att.patches = [{"path": p.path, "old": p.old, "new": p.new} for p in proposal.patches]
         on_detail("diagnostic : " + " ".join(proposal.diagnosis.split())[:300])
-        att.applied, att.errors = apply_patches(generated, proposal.patches, tried)
+        att.applied, att.errors = apply_patches(generated, proposal.patches, tried, new_patches)
         for e in att.errors:
             on_detail("patch refuse : " + e[:200])
         fixes.append(att)
@@ -306,9 +332,7 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
             on_detail("aucun patch applique : arret des corrections")
             break
         on_detail(f"{att.applied} patch(s) applique(s) sur : " + ", ".join(sorted({p.path for p in proposal.patches})))
-        for f in generated.iterdir():                 # republie les fichiers generes dans le dossier d'execution
-            if f.is_file():
-                shutil.copy2(f, run_dir / f.name)
+        sync_files(generated, run_dir)                # no-op : generated/ EST le dossier d'execution et de build
         if any(p.path in ("requirements.api.txt", "Dockerfile") for p in proposal.patches):
             on_detail("note : dependances/Dockerfile modifies, ils ne seront verifies qu'au build Docker (pas en local)")
 
@@ -329,14 +353,31 @@ def run_pipeline(project_id: str, report_path: str | None = None, project_dir: P
 
         docker_res = run_docker_stage(report, generated, run_dir, ws, step=step, on_step=on_step, on_detail=on_detail,
                                       llm=fix_llm, fixes=fixes, tried=tried, max_fixes=max_docker_fixes, fix=fix,
-                                      reeval=_reeval, docker=docker_cli, python_exe=python_exe)
+                                      reeval=_reeval, docker=docker_cli, python_exe=python_exe,
+                                      applied_out=new_patches)
         if push and docker_res.ok:
             step("Publication sur Docker Hub (apres approbation)")
-            push_res = publish_image(docker_res, report, approve_push, on_detail, ws, docker=docker_cli, namespace=namespace)
+            push_res = publish_image(docker_res, report, approve_push, on_detail, ws, docker=docker_cli, namespace=namespace,
+                                     credentials=credentials)
         elif push:
             on_detail("push ignore : l'image n'a pas passe toutes les verifications")
 
+    memory: dict = {"replayed": len(replayed), "skipped": skipped_replay, "saved": None}
+    api_ok = validation.ok and tests is not None and tests.ok
+    if remember and api_ok:                # un echec n'ecrit jamais rien : la memoire ne garde que des corrections qui marchent
+        docker_ok = docker_res is not None and docker_res.ok
+        keep = fix_store.merge(replayed, fix_store.verified_for_storage(new_patches, api_ok, docker_ok))
+        if [p.key() for p in keep] != [p.key() for p in stored]:
+            saved = fix_store.save(project_id, keep, project_name=report.project_name)
+            memory["saved"] = str(saved)
+            on_detail(f"{len(keep)} correctif(s) memorise(s) dans {os.path.relpath(saved)} (rejoues a la prochaine generation)")
+            log_step(ws, step="remember", patches=len(keep), file=str(saved))
+        unverified = [p.path for p in new_patches if p.key() not in {k.key() for k in keep}]
+        if unverified:
+            on_detail("non memorise (pas encore verifie par un build Docker) : " + ", ".join(sorted(set(unverified)))
+                      + " -> relancer avec --docker")
+
     result = PipelineResult(project_id, ws, run_dir, list(files), validation, tests, round(time.time() - t0, 2), fixes,
-                            docker_res, push_res)
+                            docker_res, push_res, memory)
     (ws / "result.json").write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
     return result
