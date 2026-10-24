@@ -10,3 +10,8 @@ rapport*.json
 eval/projects/variants/
 runs/
 infra/.env
+
+# Agent 4 : données de monitoring (~26 Go, jamais dans git)
+Monitoring_Agent/data/
+Monitoring_Agent/runs/
+.DS_Store
