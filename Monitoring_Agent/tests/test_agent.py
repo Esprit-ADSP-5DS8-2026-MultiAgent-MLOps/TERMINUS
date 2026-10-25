@@ -200,3 +200,33 @@ def test_judge_rejection_needs_a_human(analyzer, tmp_path):
 def test_without_llm_the_rules_decide(analyzer, tmp_path):
     run = MonitoringAgent(None, None, out_dir=tmp_path).decide(make_case(analyzer, frame(1000, shift=0.6)))
     assert run.decider == "rules" and run.policy.final_action == "increase_monitoring" and run.status == "executed"
+
+
+# ---------------------------------------------------------------------------
+# Autonomie : l'humain seulement quand c'est logiquement nécessaire
+# ---------------------------------------------------------------------------
+
+
+def test_verifier_catches_cause_contradicting_signals(analyzer):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    d = Diagnosis(**retrain_from(case)).model_copy(update={"root_cause": "benign_drift"})
+    v = verify(d, facts_of(case), MAPPING.features, signals=case.signal_kinds())
+    assert not v.ok and any("bénin" in p for p in v.problems)
+
+
+def test_judge_unavailable_but_rules_agree_acts_alone(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    run = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), None, out_dir=tmp_path).decide(case)
+    assert run.policy.final_action == "request_retraining"
+    assert run.policy.mode == "auto" and run.status == "executed"          # LLM + règles concordent
+    r7 = next(r for r in run.policy.rules if r.rule.startswith("R7"))
+    assert r7.passed and "règles conclut aussi" in r7.detail
+
+
+def test_unverifiable_llm_falls_back_to_rules_not_to_a_human(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    wrong = retrain_from(case)
+    wrong["evidence"][0]["value"] = 42.0
+    run = MonitoringAgent(Scripted("d", diagnoses=[wrong]), Scripted("j", verdicts=[approve()]),
+                          out_dir=tmp_path).decide(case)
+    assert "règles" in run.decider and run.verification.ok

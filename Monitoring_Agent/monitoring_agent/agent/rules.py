@@ -11,6 +11,26 @@ from __future__ import annotations
 from .context import Case, case_facts
 from .schemas import Diagnosis, Evidence
 
+QUALITY_TXT = {"missing_values": "taux de valeurs manquantes", "unseen_category": "part de catégories inconnues",
+               "out_of_range": "part de valeurs hors de l'intervalle d'entraînement", "type_mismatch": "part de types invalides",
+               "missing_column": "colonne absente"}
+
+
+def claim_for(key: str) -> str:
+    """Ce que montre un fait, en clair (les règles n'écrivent pas comme un LLM, mais doivent rester lisibles)."""
+    parts = key.split(".")
+    if key.startswith("perf.realized."):
+        return "performance mesurée avec les vrais labels"
+    if key.startswith("perf.estimated."):
+        return "performance estimée sans labels"
+    if key == "perf.bound":
+        return "limite de la variabilité normale (référence)"
+    if key.startswith("drift.") and key.endswith(".psi"):
+        return f"PSI de {parts[1]} (0,25 = drift majeur)"
+    if key.startswith("quality."):
+        return f"{QUALITY_TXT.get(parts[-1], parts[-1])} sur {parts[1]}"
+    return key
+
 
 def diagnose_by_rules(case: Case) -> Diagnosis:
     w, facts, m = case.current, case_facts(case), case.mapping.primary_metric
@@ -18,7 +38,7 @@ def diagnose_by_rules(case: Case) -> Diagnosis:
     drifted = w.dataset_drift.drifted_features
 
     def ev(*keys: str) -> list[Evidence]:
-        return [Evidence(fact=k, value=facts[k], claim=k) for k in keys if k in facts]
+        return [Evidence(fact=k, value=facts[k], claim=claim_for(k)) for k in keys if k in facts]
 
     top_psi = sorted((k for k in facts if k.startswith("drift.") and k.endswith(".psi")),
                      key=lambda k: -facts[k])[:3]

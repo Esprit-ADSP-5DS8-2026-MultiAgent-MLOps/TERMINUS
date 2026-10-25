@@ -30,6 +30,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["monitoring_agent*"]
 
+[tool.setuptools.package-data]
+monitoring_agent = ["console/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

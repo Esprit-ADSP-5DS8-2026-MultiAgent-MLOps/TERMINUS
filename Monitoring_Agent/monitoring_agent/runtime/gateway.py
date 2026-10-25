@@ -23,10 +23,12 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST
 from pydantic import BaseModel
 
@@ -53,6 +55,14 @@ class HumanAnswer(BaseModel):
     comment: str = ""
 
 
+class SimulationRequest(BaseModel):
+    scenario: str = "covariate"
+    n: int = 1200
+    warmup: int = 400
+    rate: float = 20.0
+    label_delay: int = 200
+
+
 def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
                transport: httpx.AsyncBaseTransport | None = None, run_monitor: bool = True,
                supervisor: Supervisor | None = None, agent: bool = True) -> FastAPI:
@@ -67,9 +77,11 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
         while True:
             try:
                 r = await client.get("/health", timeout=2.0)
-                metrics.upstream_up.labels(target.project).set(int(r.status_code == 200))
+                up = r.status_code == 200
             except httpx.HTTPError:
-                metrics.upstream_up.labels(target.project).set(0)
+                up = False
+            metrics.upstream_up.labels(target.project).set(int(up))
+            app.state.upstream_up = up
             try:
                 await asyncio.to_thread(monitor.step)
             except Exception:  # le moniteur ne doit jamais faire tomber la gateway
@@ -152,21 +164,82 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     async def prometheus_metrics():
         return Response(metrics.render(), media_type=CONTENT_TYPE_LATEST)
 
+    app.state.simulation = {"running": False}
+    app.state.upstream_up = None
+
     @app.get("/monitoring/status")
     async def status():
         last = monitor.last_report
+        agent_info = None
+        if supervisor:
+            a = supervisor.agent
+            agent_info = {"decider": a.decider.name if a.decider else "règles (aucune clé LLM)",
+                          "judge": a.judge.name if a.judge else None,
+                          "busy": bool(supervisor.running and not supervisor.running.done())}
+        m = target.mapping
         return {"project": target.project, "window_size": target.window_size, **store.traffic_stats(),
-                "windows": store.last_window_idx() + 1,
+                "windows": store.last_window_idx() + 1, "upstream_url": target.upstream_url,
+                "upstream_up": app.state.upstream_up, "task": m.task, "metric": m.primary_metric,
+                "min_threshold": m.min_threshold, "features": m.features, "model_uri": target.model_uri,
+                "agent": agent_info, "simulation": app.state.simulation,
                 "last_window": last.model_dump(mode="json", include={"window", "severity", "trigger_agent", "signals"})
                 if last else None}
+
+    @app.post("/monitoring/simulate")
+    async def start_simulation(req: SimulationRequest, request: Request):
+        """Lance du trafic simulé contre CETTE gateway (démo depuis la console)."""
+        import pandas as pd
+
+        from .simulator import SCENARIOS, simulate
+
+        if req.scenario not in SCENARIOS:
+            raise HTTPException(status_code=422, detail=f"scénario inconnu ({', '.join(SCENARIOS)})")
+        if app.state.simulation.get("running"):
+            raise HTTPException(status_code=409, detail="une simulation est déjà en cours")
+        data = pd.read_parquet(target.reference_path).drop(columns=["y_pred", "y_pred_proba"], errors="ignore")
+        sim = app.state.simulation = {"running": True, "scenario": req.scenario, "total": req.n, "sent": 0,
+                                      "errors": 0, "labels": 0}
+
+        def progress(res):
+            sim.update(sent=res.sent, errors=res.errors, labels=res.labels_sent)
+
+        async def run():
+            try:
+                res = await simulate(str(request.base_url).rstrip("/"), data, target.mapping.target, req.scenario,
+                                     req.n, req.warmup, req.rate, req.label_delay, final_flush=True,
+                                     on_progress=progress)
+                progress(res)
+            except Exception as exc:  # noqa: BLE001
+                sim["error"] = str(exc)
+            finally:
+                sim["running"] = False
+
+        app.state.sim_task = asyncio.create_task(run())
+        return sim
+
+    @app.get("/monitoring/decisions/{decision_id}/report")
+    async def decision_report(decision_id: str):
+        d = store.decision(decision_id)
+        path = (d or {}).get("outputs", {}).get("incident")
+        if not path or not Path(path).exists():
+            raise HTTPException(status_code=404, detail="pas de rapport d'incident pour cette décision")
+        return Response(Path(path).read_text(encoding="utf-8"), media_type="text/markdown; charset=utf-8")
+
+    console_dir = Path(__file__).resolve().parent.parent / "console"
+    if console_dir.exists():
+        app.mount("/console", StaticFiles(directory=console_dir, html=True), name="console")
+
+        @app.get("/", include_in_schema=False)
+        async def home():
+            return RedirectResponse("/console/")
 
     @app.get("/monitoring/windows")
     async def windows(limit: int = 100):
         return store.window_reports(limit)
 
     @app.get("/monitoring/alerts")
-    async def recent_alerts(limit: int = 50):
-        return store.recent_alerts(limit)
+    async def recent_alerts(limit: int = 50, firing: bool = False):
+        return store.firing_alerts() if firing else store.recent_alerts(limit)
 
     # -- décisions de l'agent ------------------------------------------------------------
 

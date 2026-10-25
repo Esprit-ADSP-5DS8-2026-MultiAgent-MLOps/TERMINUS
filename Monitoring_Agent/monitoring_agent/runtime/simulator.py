@@ -69,8 +69,11 @@ def perturb(row: dict, scenario: str, rng: random.Random, numeric: list[str], ca
 
 async def simulate(gateway_url: str, data: pd.DataFrame, target: str, scenario: str = "normal",
                    n: int = 1600, warmup: int = 600, rate: float = 100.0, label_delay: int = 200,
-                   seed: int = 7, concurrency: int = 8, ramp: int = 200) -> SimulationResult:
-    """`ramp` : nombre de requêtes pour passer de 0 à 100 % d'intensité (un drift réel est progressif)."""
+                   seed: int = 7, concurrency: int = 8, ramp: int = 200, final_flush: bool = False,
+                   on_progress=None) -> SimulationResult:
+    """`ramp` : nombre de requêtes pour passer de 0 à 100 % d'intensité (un drift réel est progressif).
+    `final_flush` : à la fin, envoie aussi les derniers labels (la vérité finit toujours par arriver).
+    `on_progress(res)` : appelé après chaque lot (barre de progression de la console)."""
     if scenario not in SCENARIOS:
         raise ValueError(f"scénario inconnu : {scenario} ({', '.join(SCENARIOS)})")
     rng = random.Random(seed)
@@ -116,9 +119,11 @@ async def simulate(gateway_url: str, data: pd.DataFrame, target: str, scenario: 
                 items = [pending.popleft() for _ in range(min(100, len(pending) - label_delay))]
                 await client.post("/feedback", json={"items": [{"request_id": r, "label": y} for r, y in items]})
                 res.labels_sent += len(items)
+            if on_progress:
+                on_progress(res)
             await asyncio.sleep(max(0.0, 0.1 - (time.perf_counter() - tick)))
 
-        if label_delay == 0 and pending:
+        if (label_delay == 0 or final_flush) and pending:
             items = list(pending)
             await client.post("/feedback", json={"items": [{"request_id": r, "label": y} for r, y in items]})
             res.labels_sent += len(items)

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent 4 · Console de monitoring</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="ident">
+      <h1 id="project">—</h1>
+      <p id="spec" class="spec"></p>
+    </div>
+    <dl class="vitals">
+      <div><dt>Modèle servi</dt><dd id="v-upstream"><span class="dot"></span><span>—</span></dd></div>
+      <div><dt>Prédictions</dt><dd id="v-preds">—</dd></div>
+      <div><dt>Labels reçus</dt><dd id="v-labels">—</dd></div>
+      <div><dt>Fenêtres</dt><dd id="v-windows">—</dd></div>
+    </dl>
+    <div class="agent-box" id="agent-box">
+      <p class="agent-state" id="agent-state">Agent</p>
+      <p class="agent-models" id="agent-models"></p>
+    </div>
+    <div class="controls">
+      <button id="btn-decide" class="btn btn-agent" type="button">Lancer l'agent</button>
+      <div class="sim">
+        <label for="sim-scenario" class="sr">Scénario de simulation</label>
+        <select id="sim-scenario">
+          <option value="covariate">Drift des entrées</option>
+          <option value="concept">Concept drift</option>
+          <option value="quality">Données cassées</option>
+          <option value="normal">Trafic normal</option>
+        </select>
+        <button id="btn-sim" class="btn" type="button">Simuler</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="sim-progress" class="sim-progress" hidden><div class="fill"></div><span></span></div>
+
+  <section class="film" aria-labelledby="film-title">
+    <div class="film-head">
+      <h2 id="film-title">Fenêtres analysées</h2>
+      <ul class="legend" aria-label="Légende des sévérités">
+        <li><i class="sev-ok"></i>calme</li><li><i class="sev-info"></i>à noter</li>
+        <li><i class="sev-warning"></i>à surveiller</li><li><i class="sev-critical"></i>critique</li>
+        <li><i class="mark-agent"></i>décision de l'agent</li>
+      </ul>
+    </div>
+    <ol id="film" class="film-strip"></ol>
+  </section>
+
+  <main class="layout">
+    <section class="sheet heat-sheet" aria-labelledby="heat-title">
+      <header class="sheet-head">
+        <h2 id="heat-title">Drift par feature</h2>
+        <p class="hint">Population Stability Index de chaque feature, fenêtre par fenêtre.</p>
+      </header>
+      <div id="heatmap" class="chart"></div>
+      <ul class="scale" aria-label="Échelle du PSI">
+        <li><i style="background:#eef2f6"></i>stable, PSI sous 0,1</li>
+        <li><i style="background:#f0d9a8"></i>modéré, 0,1 à 0,25</li>
+        <li><i style="background:#c9472f"></i>majeur, au-delà de 0,25</li>
+        <li><i class="drifted"></i>drift confirmé</li>
+      </ul>
+    </section>
+
+    <section class="sheet perf-sheet" aria-labelledby="perf-title">
+      <header class="sheet-head">
+        <h2 id="perf-title">Performance du modèle</h2>
+        <p class="hint" id="perf-hint">Estimée sans labels, puis mesurée quand la vérité terrain arrive.</p>
+      </header>
+      <div id="perf" class="chart"></div>
+      <ul class="perf-legend">
+        <li><i class="l-real"></i>mesurée (labels)</li><li><i class="l-est"></i>estimée (sans labels)</li>
+        <li><i class="l-ref"></i>niveau habituel</li><li><i class="l-bound"></i>limite de variabilité</li>
+      </ul>
+    </section>
+
+    <section class="sheet window-sheet" aria-live="polite">
+      <header class="sheet-head"><h2 id="win-title">Fenêtre</h2><p class="hint" id="win-when"></p></header>
+      <div id="window-detail"></div>
+    </section>
+
+    <aside class="journal" aria-labelledby="journal-title">
+      <header class="journal-head">
+        <h2 id="journal-title">Décisions de l'agent</h2>
+        <p class="hint" id="journal-stats"></p>
+      </header>
+      <ol id="decisions" class="decisions"></ol>
+      <section class="alerts" aria-labelledby="alerts-title">
+        <h3 id="alerts-title">Alertes Prometheus actives</h3>
+        <ul id="alerts"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <div id="recorder" class="recorder" hidden>
+    <div class="recorder-backdrop" data-close></div>
+    <article class="recorder-panel" role="dialog" aria-modal="true" aria-labelledby="rec-title">
+      <button class="close" type="button" data-close aria-label="Fermer">×</button>
+      <div id="recorder-body"></div>
+    </article>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

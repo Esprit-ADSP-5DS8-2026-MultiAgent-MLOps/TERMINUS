@@ -213,14 +213,24 @@ class MonitoringAgent:
     def verify_node(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
         case = self._case(state)
-        v = verify(Diagnosis(**state["diagnosis"]), state["facts"], case.mapping.features)
+        signals = case.signal_kinds()
+        v = verify(Diagnosis(**state["diagnosis"]), state["facts"], case.mapping.features, signals=signals)
         update: dict[str, Any] = {"verification": v.model_dump()}
-        if not v.ok and state.get("revisions", 0) < self.config.max_revisions and self.decider is not None:
-            update.update(revisions=state.get("revisions", 0) + 1,
-                          critique="Le vérificateur a trouvé des preuves fausses : " + "; ".join(v.problems))
         ok = sum(c.ok for c in v.checks)
-        return {**update, **_step("verify", t0, f"{ok}/{len(v.checks)} preuves exactes"
-                                  + (f" · problèmes : {'; '.join(v.problems)}" if v.problems else ""), problems=v.problems)}
+        summary = f"{ok}/{len(v.checks)} preuves exactes" + (f" · problèmes : {'; '.join(v.problems)}" if v.problems else "")
+        if not v.ok and self.decider is not None:
+            if state.get("revisions", 0) < self.config.max_revisions:
+                update.update(revisions=state.get("revisions", 0) + 1,
+                              critique="Le vérificateur a trouvé des incohérences : " + "; ".join(v.problems))
+            else:
+                # Révision épuisée et toujours invérifiable : on n'escalade pas, on écarte le LLM et on
+                # applique le décideur à règles, dont chaque preuve est exacte par construction.
+                d = diagnose_by_rules(case)
+                v2 = verify(d, state["facts"], case.mapping.features, signals=signals)
+                update.update(diagnosis=d.model_dump(), verification=v2.model_dump(), agreement=1.0,
+                              decider=f"{state.get('decider', '')} -> règles (preuves du LLM invérifiables)")
+                summary += " · repli sur le décideur à règles"
+        return {**update, **_step("verify", t0, summary, problems=v.problems)}
 
     def judge_node(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
@@ -243,8 +253,12 @@ class MonitoringAgent:
         case = self._case(state)
         verdicts = state.get("verdicts") or []
         verdict = JudgeVerdict(**verdicts[-1]) if verdicts else None
+        # Second avis déterministe — seulement s'il est INDÉPENDANT : si le diagnostic vient déjà des
+        # règles, les compter deux fois ne vaudrait pas confirmation.
+        from_rules = "règles" in state.get("decider", "") or state.get("decider", "").startswith("rules")
+        second = None if from_rules else diagnose_by_rules(case).action
         p = evaluate(Diagnosis(**state["diagnosis"]), case, Verification(**state["verification"]), verdict,
-                     state.get("agreement", 0.0), self.config.policy)
+                     state.get("agreement", 0.0), self.config.policy, second_opinion=second)
         failed = [r.rule for r in p.rules if not r.passed]
         return {"policy": p.model_dump(), **_step(
             "policy", t0, f"{p.proposed_action} -> {p.final_action} · mode {p.mode}"

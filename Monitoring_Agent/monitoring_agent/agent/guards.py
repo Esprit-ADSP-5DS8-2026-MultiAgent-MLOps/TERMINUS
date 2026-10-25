@@ -19,7 +19,21 @@ from .schemas import EvidenceCheck as Check
 # ---------------------------------------------------------------------------
 
 
-def verify(diag: Diagnosis, facts: dict[str, float], features: list[str], rel_tol: float = 0.02) -> Verification:
+# Cause annoncée <-> signaux calculés : une contradiction vérifiable SANS LLM.
+CAUSE_REQUIRES = {
+    "concept_drift": ({"concept_drift_suspected"}, ("concept drift sans le signal concept_drift_suspected "
+                      "(la perf estimée a baissé aussi : c'est plutôt un covariate shift)")),
+    "covariate_shift": (SIGNAL_KINDS_PERF, "covariate shift sans aucune baisse de performance (c'est un benign_drift)"),
+    "data_quality": ({"data_quality"}, "cause « qualité » sans signal de qualité des données"),
+}
+CAUSE_FORBIDS = {
+    "benign_drift": (SIGNAL_KINDS_PERF, "« drift bénin » alors que la performance baisse"),
+    "no_issue": (SIGNAL_KINDS_PERF | {"data_quality", "dataset_drift"}, "« aucun problème » alors que des signaux sont levés"),
+}
+
+
+def verify(diag: Diagnosis, facts: dict[str, float], features: list[str], rel_tol: float = 0.02,
+           signals: set[str] | None = None) -> Verification:
     checks, problems = [], []
     for ev in diag.evidence:
         actual = facts.get(ev.fact)
@@ -42,6 +56,14 @@ def verify(diag: Diagnosis, facts: dict[str, float], features: list[str], rel_to
         problems.append(f"cause « {diag.root_cause} » sans preuve de type {prefix}*")
     if diag.action != "no_action" and not diag.evidence:
         problems.append("action proposée sans aucune preuve")
+
+    if signals is not None:
+        need = CAUSE_REQUIRES.get(diag.root_cause)
+        if need and not signals & need[0]:
+            problems.append(need[1])
+        forbid = CAUSE_FORBIDS.get(diag.root_cause)
+        if forbid and signals & forbid[0]:
+            problems.append(forbid[1])
     return Verification(ok=not problems, checks=checks, problems=problems)
 
 
@@ -60,7 +82,14 @@ def _parse_time(v) -> datetime | None:
 
 
 def evaluate(diag: Diagnosis, case: Case, verification: Verification, verdict: JudgeVerdict | None,
-             agreement: float, cfg: PolicyConfig | None = None) -> PolicyDecision:
+             agreement: float, cfg: PolicyConfig | None = None, second_opinion: str | None = None) -> PolicyDecision:
+    """`second_opinion` : action du décideur à RÈGLES (déterministe) sur le même cas.
+
+    Principe d'autonomie : l'humain n'intervient que si c'est LOGIQUEMENT nécessaire.
+    Quand un contrôle manque (juge indisponible, quota épuisé) ou hésite (juge « revise », confiance
+    faible), deux méthodes INDÉPENDANTES qui concluent la même chose (LLM + règles) suffisent pour agir.
+    Restent humains : le haut risque (rollback), un rejet explicite du juge, des preuves invérifiables,
+    un désaccord LLM / règles sur une action à risque, et le disjoncteur."""
     cfg = cfg or PolicyConfig()
     rules: list[RuleCheck] = []
     reasons: list[str] = []
@@ -106,17 +135,23 @@ def evaluate(diag: Diagnosis, case: Case, verification: Verification, verdict: J
         rule("R5 haut risque = humain", False, "rollback / remplacement : jamais automatique")
     if not rule("R6 preuves vérifiées", verification.ok, "; ".join(verification.problems) or "toutes les preuves sont exactes"):
         human.append("des preuves citées sont fausses ou absentes")
-    judge_ok = verdict is not None and verdict.verdict == "approve"
-    if verdict is None:
-        rule("R7 avis du juge", risk == "low", "juge indisponible : accepté seulement pour une action à faible risque")
-        if risk != "low":
-            human.append("juge indisponible pour une action à risque")
-    elif not rule("R7 avis du juge", judge_ok, f"verdict « {verdict.verdict} » : {verdict.critique[:160]}"):
-        human.append(f"le juge n'approuve pas ({verdict.verdict})")
+    rules_agree = second_opinion is not None and second_opinion == action
+    agree_txt = f"le décideur à règles conclut aussi « {second_opinion} »" if rules_agree else \
+        f"le décideur à règles conclut « {second_opinion} »"
+    if verdict is not None and verdict.verdict == "approve":
+        rule("R7 avis du juge", True, f"approuvé : {verdict.critique[:160]}")
+    elif verdict is not None and verdict.verdict == "reject":
+        rule("R7 avis du juge", False, f"rejeté : {verdict.critique[:160]}")
+        human.append("le juge rejette le diagnostic")
+    else:
+        why = "juge indisponible" if verdict is None else f"le juge demande encore une révision ({verdict.critique[:100]})"
+        if not rule("R7 avis du juge (ou second avis)", risk == "low" or rules_agree, f"{why} ; {agree_txt}"):
+            human.append(f"{why}, et le second avis déterministe ne concorde pas")
     confident = diag.confidence >= cfg.min_confidence and agreement >= cfg.min_agreement
-    if not rule("R8 confiance et accord", confident or risk == "low",
-                f"confiance {diag.confidence:.2f} (min {cfg.min_confidence}), accord {agreement:.0%} (min {cfg.min_agreement:.0%})"):
-        human.append("diagnostic incertain")
+    if not rule("R8 confiance et accord", confident or risk == "low" or rules_agree,
+                f"confiance {diag.confidence:.2f} (min {cfg.min_confidence}), accord {agreement:.0%} "
+                f"(min {cfg.min_agreement:.0%})" + ("" if confident else f" ; {agree_txt}")):
+        human.append("diagnostic incertain et non confirmé par les règles")
     recent_auto = [d for d in case.decisions if d.get("mode") == "auto"
                    and (t := _parse_time(d.get("created_at"))) and case.now - t < timedelta(hours=24)]
     if not rule(f"R9 budget d'actions automatiques ({cfg.max_auto_actions_24h}/24 h)",
