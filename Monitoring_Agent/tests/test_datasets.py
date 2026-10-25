@@ -37,3 +37,10 @@ def test_label_delay_keeps_the_estimate():
     report = Analyzer(ref, spec.mapping).analyze(prod)
     last = report.windows[-1].performance
     assert last.labels_available is False and last.estimated is not None
+
+
+@needs_car_loan
+def test_evaluation_rules_baseline(tmp_path):
+    from monitoring_agent.evaluation import evaluate
+    s = evaluate("rules", per_dataset=1, out_dir=tmp_path, progress=lambda m: None)
+    assert s["cases"] == 3 and s["agent_unsafe"] == 0 and s["calm_false_wakeups"] == 0

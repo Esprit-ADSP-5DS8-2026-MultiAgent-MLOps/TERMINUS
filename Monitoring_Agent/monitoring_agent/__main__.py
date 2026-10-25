@@ -228,6 +228,31 @@ def cmd_decide(args) -> int:
     return 0 if run.status != "failed" else 1
 
 
+def cmd_evaluate(args) -> int:
+    from datetime import datetime
+
+    from .agent.llm import decider_and_judge
+    from .evaluation import evaluate, report_markdown
+    from .runtime.target import runs_dir
+
+    out = runs_dir() / "eval" / datetime.now().strftime("%Y%m%d-%H%M%S")
+    methods = ["rules", "llm"] if args.method == "both" else [args.method]
+    decider, judge = decider_and_judge() if "llm" in methods else (None, None)
+    if "llm" in methods and decider is None:
+        print("Aucun LLM configuré (Monitoring_Agent/.env) : seule la baseline à règles est évaluée.")
+        methods = ["rules"]
+    summaries = []
+    for m in methods:
+        print(f"\n== {m} ==")
+        summaries.append(evaluate(m, decider, judge, per_dataset=args.per_dataset, out_dir=out))
+    md = report_markdown(summaries)
+    (out / "report.md").write_text(md, encoding="utf-8")
+    print("\n" + md)
+    print(f"Résultats : {out}" + (f" · exemples de fine-tuning : {summaries[-1]['sft_examples']} (sft.jsonl)"
+                                  if summaries[-1].get("sft_examples") else ""))
+    return 0
+
+
 def cmd_llm_check(_args) -> int:
     import time
 
@@ -319,6 +344,12 @@ def main(argv: list[str] | None = None) -> int:
     d.set_defaults(func=cmd_decide)
 
     sub.add_parser("llm-check", help="vérifie les clés et les modèles LLM").set_defaults(func=cmd_llm_check)
+
+    e = sub.add_parser("evaluate", help="évaluation chiffrée : règles vs LLM seul vs agent complet")
+    e.add_argument("--method", choices=["rules", "llm", "both"], default="both")
+    e.add_argument("--per-dataset", type=int, default=None,
+                   help="nombre de fenêtres dégradées par jeu (défaut : 5 ; 2 suffit pour un essai LLM rapide)")
+    e.set_defaults(func=cmd_evaluate)
 
     s = sub.add_parser("simulate", help="envoie du trafic de production simulé à la gateway")
     s.add_argument("project")

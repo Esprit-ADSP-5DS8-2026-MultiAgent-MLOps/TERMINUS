@@ -15,8 +15,8 @@ observer  ──►  comprendre  ──►  décider  ──►  agir
 | 1 | Moteur d'analyse déterministe : drift, qualité, performance mesurée et estimée | ✅ |
 | 2 | Gateway devant l'API de l'Agent 3 + Prometheus / Alertmanager / Grafana | ✅ |
 | 3 | Agent LangGraph autonome : enquête à outils, diagnostic ×3, vérification, juge, policy, actions | ✅ |
-| 4 | API de monitoring + console | à faire |
-| 5 | Scénarios de drift injecté, évaluation, fine-tuning | à faire |
+| 4 | Console de l'agent (servie par la gateway) | ✅ |
+| 5 | Évaluation chiffrée (règles / LLM seul / agent) + dataset de fine-tuning | ✅ |
 
 ## Installation
 
@@ -174,6 +174,38 @@ l'enquête et le juge.
 
 **Orchestrateur :** `from monitoring_agent.pipeline import run` remplace `agent4_stub` (même contrat).
 
+## Étape 4 — La console
+
+`http://localhost:8100/console/` (servie par la gateway, sans installation ni build).
+
+- **Film des fenêtres** : une case par fenêtre, couleur = sévérité, point bleu = l'agent a décidé.
+- **Drift par feature** : heatmap PSI features × fenêtres ; encadré = drift confirmé par le test.
+- **Performance** : mesurée (labels) vs estimée (CBPE/DLE), niveau habituel et limite ± 3σ.
+- **Décisions de l'agent** : ce qu'il a fait, seul ou validé ; boutons Approuver / Rejeter si besoin.
+- **Enregistreur de décision** (clic sur une décision) : le raisonnement rejoué étape par étape — outils appelés,
+  votes, preuves vérifiées, notes du juge, règles, action, rapport d'incident.
+- **Simuler** : envoie du trafic (drift des entrées, concept drift, données cassées, normal) à la gateway.
+
+## Étape 5 — Évaluation
+
+```bash
+python -m monitoring_agent evaluate --method rules            # baseline sans LLM (instantané)
+python -m monitoring_agent evaluate --method both --per-dataset 2   # + LLM seul + agent complet (~10 min)
+```
+
+Vérité terrain NannyML : `car_loan` 5-9 = vraie baisse (réentraîner) · `car_price` 5-9 = drift sans dégradation
+(surveiller, ne PAS réentraîner) · `car_loan_dq` 5-9 = données cassées (prévenir l'équipe data) · fenêtres 0-4 =
+calmes (l'agent ne doit pas être réveillé). Mesures : exactitude, actions dangereuses, problèmes manqués,
+autonomie, latence. Rapport : `runs/eval/<date>/report.md`.
+
+`sft.jsonl` : exemples pour le fine-tuning (QLoRA), conservés seulement si la décision est correcte, ses preuves
+vérifiées et le juge d'accord — distillation vérifiée d'un grand modèle vers un petit.
+
+**Autonomie.** L'humain n'est sollicité que lorsque c'est logiquement nécessaire : action à haut risque (rollback),
+rejet explicite du juge, désaccord entre le LLM et le second avis déterministe sur une action à risque, ou
+disjoncteur. Si le juge est indisponible ou hésite, LLM + règles concordants suffisent ; si les preuves du LLM
+restent invérifiables, l'agent applique le décideur à règles au lieu d'escalader.
+
 ## Structure
 
 ```
@@ -190,6 +222,8 @@ Monitoring_Agent/
 │   │   ├── prompts.py      # prompts versionnés
 │   │   ├── rules.py        # décideur sans LLM (repli + baseline)
 │   │   └── actions.py      # incident, retraining_request.json, rollback (après humain)
+│   ├── console/            # index.html, style.css, app.js (servis sur /console)
+│   ├── evaluation.py       # règles vs LLM seul vs agent complet + sft.jsonl
 │   ├── pipeline.py         # run(AgentInput) -> AgentResult pour l'orchestrateur
 │   ├── runtime/
 │   │   ├── gateway.py      # proxy FastAPI devant l'API du modèle
