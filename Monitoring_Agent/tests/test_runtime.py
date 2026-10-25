@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -141,3 +142,85 @@ def test_dashboard_layout(target):
         g = p["gridPos"]
         assert g["x"] + g["w"] <= 24
     assert json.dumps(d)                                        # sérialisable tel quel
+
+
+# ---------------------------------------------------------------------------
+# Étape 3 : l'agent branché sur la gateway et sur l'orchestrateur
+# ---------------------------------------------------------------------------
+
+
+def _drift_traffic(client) -> list[str]:
+    calm, shifted = rows(100), rows(100, shift=2.0)
+    ids = send(client, calm) + send(client, shifted)
+    labels = calm["target"].tolist() + (1 - shifted["target"]).tolist()     # concept drift sur la 2e fenêtre
+    client.post("/feedback", json={"items": [{"request_id": i, "label": y} for i, y in zip(ids, labels)]})
+    return ids
+
+
+def test_gateway_agent_decides_and_human_approves(client):
+    app = client.app
+    _drift_traffic(client)
+    app.state.monitor.step()                                   # fenêtre 1 : signaux -> l'agent est lancé
+    sup = app.state.supervisor
+    sup.running.result(timeout=30)
+    decisions = client.get("/monitoring/decisions").json()
+    assert len(decisions) == 1 and decisions[0]["window_index"] == 1
+    full = client.get(f"/monitoring/decisions/{decisions[0]['id']}").json()
+    assert full["decider"] == "rules" and full["trace"][0]["node"] == "prepare"
+
+    forced = client.post("/monitoring/decide").json()          # relance manuelle sur la dernière fenêtre
+    if forced["status"] == "awaiting_human":
+        done = client.post(f"/monitoring/decisions/{forced['id']}/approve", json={"by": "prof", "comment": "ok"}).json()
+        assert done["status"] == "executed" and done["human"]["by"] == "prof"
+    assert client.post("/monitoring/decisions/inconnue/approve").status_code == 409
+
+
+def test_anti_burst_does_not_rerun_the_same_situation(client):
+    app = client.app
+    _drift_traffic(client)
+    app.state.monitor.step()
+    app.state.supervisor.running.result(timeout=30)
+    report = app.state.monitor.last_report
+    ok, why = app.state.supervisor.should_run(report)
+    assert not ok, why
+
+
+def test_pipeline_entrypoint_for_the_orchestrator(client, target, tmp_path):
+    from common.schemas import AgentInput, ProjectSpec
+
+    from monitoring_agent.pipeline import run
+
+    _drift_traffic(client)
+    client.app.state.monitor.step()
+    client.app.state.supervisor.running.result(timeout=30)
+    spec = ProjectSpec(project_name=target.project, project_hash="h", task="classification", target="target",
+                       feature_columns=["x", "cat"], primary_metric="roc_auc", min_threshold=0.7, data_path="data.csv",
+                       entrypoints={}, pinned_dependencies={}, source="declared")
+    (tmp_path / "spec.json").write_text(spec.model_dump_json())
+    wd = tmp_path / "agent4"
+    wd.mkdir()
+    res = run(AgentInput(run_id="r1", project_dir=str(tmp_path), report_path="x", workdir=str(wd),
+                         inputs={"project_spec": str(tmp_path / "spec.json")}))
+    assert res.agent == "agent4" and res.can_proceed
+    assert "decision" in res.outputs and res.status.value == "WARNING"
+    if "retraining_request" in res.outputs:
+        from common.schemas import RetrainingRequest
+        RetrainingRequest.model_validate_json(Path(res.outputs["retraining_request"]).read_text())
+
+
+def test_late_labels_wake_the_agent_again(client):
+    """Drift seul d'abord (pas de labels) ; les labels arrivent et révèlent une chute : l'agent est relancé."""
+    app = client.app
+    calm, shifted = rows(100), rows(100, shift=2.0)
+    ids = send(client, calm) + send(client, shifted)
+    app.state.monitor.step()
+    app.state.supervisor.running.result(timeout=30)
+    first = client.get("/monitoring/decisions").json()
+    assert len(first) == 1
+    labels = calm["target"].tolist() + (1 - shifted["target"]).tolist()     # la vérité contredit le modèle
+    client.post("/feedback", json={"items": [{"request_id": i, "label": y} for i, y in zip(ids, labels)]})
+    app.state.monitor.step()
+    app.state.supervisor.running.result(timeout=30)
+    after = client.get("/monitoring/decisions").json()
+    assert len(after) == 2
+    assert "performance_drop_realized" in after[-1]["signals"]

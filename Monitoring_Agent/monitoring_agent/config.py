@@ -52,3 +52,22 @@ class AnalyzerConfig:
     drift: DriftConfig = field(default_factory=DriftConfig)
     quality: QualityConfig = field(default_factory=QualityConfig)
     performance: PerformanceConfig = field(default_factory=PerformanceConfig)
+
+
+@dataclass(frozen=True)
+class PolicyConfig:
+    """Ce que l'agent a le droit de faire SEUL (agent/guards.py)."""
+
+    min_confidence: float = 0.6        # confiance déclarée du diagnostic
+    min_agreement: float = 0.66        # au moins 2 diagnostics sur 3 d'accord (2/3 = 0.666…)
+    retrain_cooldown_h: float = 24.0   # pas deux demandes de réentraînement en 24 h
+    max_auto_actions_24h: int = 10     # disjoncteur : au-delà, un humain reprend la main
+
+
+@dataclass(frozen=True)
+class AgentConfig:
+    samples: int = 3                   # self-consistency : 3 diagnostics indépendants
+    sample_temperature: float = 0.7    # diversité entre les 3 (le vote mesure l'incertitude)
+    max_tool_calls: int = 6            # budget de l'enquête
+    max_revisions: int = 1             # le juge peut demander UNE révision
+    policy: PolicyConfig = field(default_factory=PolicyConfig)

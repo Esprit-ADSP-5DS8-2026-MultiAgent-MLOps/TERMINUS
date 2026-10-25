@@ -33,6 +33,7 @@ from pydantic import BaseModel
 from .metrics import GatewayMetrics
 from .monitor import Monitor
 from .store import Store
+from .supervisor import Supervisor
 from .target import MonitoringTarget
 
 log = logging.getLogger("monitoring_agent.gateway")
@@ -47,12 +48,20 @@ class FeedbackBatch(BaseModel):
     items: list[Feedback]
 
 
+class HumanAnswer(BaseModel):
+    by: str = "humain"
+    comment: str = ""
+
+
 def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
-               transport: httpx.AsyncBaseTransport | None = None, run_monitor: bool = True) -> FastAPI:
-    """`transport` permet aux tests de brancher une fausse API de modèle, sans réseau."""
+               transport: httpx.AsyncBaseTransport | None = None, run_monitor: bool = True,
+               supervisor: Supervisor | None = None, agent: bool = True) -> FastAPI:
+    """`transport` permet aux tests de brancher une fausse API de modèle ; `supervisor` un agent de test."""
     store = Store(target.store_path)
     metrics = GatewayMetrics(target.project)
-    monitor = Monitor(target, store, metrics)
+    if agent and supervisor is None:
+        supervisor = Supervisor(target, store)
+    monitor = Monitor(target, store, metrics, on_trigger=supervisor.on_trigger if supervisor else None)
 
     async def monitor_loop(client: httpx.AsyncClient) -> None:
         while True:
@@ -77,10 +86,13 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         await app.state.client.aclose()
+        if supervisor:
+            supervisor.close()
         store.close()
 
     app = FastAPI(title=f"Monitoring gateway — {target.project}", version="0.2", lifespan=lifespan)
     app.state.store, app.state.metrics, app.state.monitor, app.state.target = store, metrics, monitor, target
+    app.state.supervisor = supervisor
 
     @app.post("/predict")
     async def predict(request: Request):
@@ -155,5 +167,44 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     @app.get("/monitoring/alerts")
     async def recent_alerts(limit: int = 50):
         return store.recent_alerts(limit)
+
+    # -- décisions de l'agent ------------------------------------------------------------
+
+    def _need_agent() -> Supervisor:
+        if supervisor is None:
+            raise HTTPException(status_code=503, detail="agent désactivé (gateway lancée avec --no-agent)")
+        return supervisor
+
+    @app.get("/monitoring/decisions")
+    async def decisions(limit: int = 50):
+        return store.decisions(limit)
+
+    @app.get("/monitoring/decisions/{decision_id}")
+    async def decision(decision_id: str):
+        d = store.decision(decision_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="décision inconnue")
+        return d
+
+    @app.post("/monitoring/decide")
+    async def decide_now():
+        """Force l'agent sur la dernière fenêtre (démo, ou après une correction)."""
+        sup = _need_agent()
+        try:
+            run = await asyncio.to_thread(sup.decide_now)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        return run.model_dump(mode="json")
+
+    @app.post("/monitoring/decisions/{decision_id}/{answer}")
+    async def answer_decision(decision_id: str, answer: str, body: HumanAnswer | None = None):
+        if answer not in ("approve", "reject"):
+            raise HTTPException(status_code=404, detail="réponse attendue : approve ou reject")
+        sup, body = _need_agent(), body or HumanAnswer()
+        try:
+            run = await asyncio.to_thread(sup.resume, decision_id, answer, body.by, body.comment)
+        except (KeyError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        return run.model_dump(mode="json")
 
     return app

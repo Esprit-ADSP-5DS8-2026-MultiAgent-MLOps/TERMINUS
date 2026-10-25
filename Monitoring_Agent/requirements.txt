@@ -16,5 +16,9 @@ httpx==0.28.1
 prometheus-client==0.26.0
 pyyaml==6.0.3
 
+# Étape 3 : l'agent
+langgraph==1.2.14          # même version que l'orchestrateur
+python-dotenv==1.2.4       # lecture de .env (clés LLM)
+
 # Tests
 pytest==9.1.1

@@ -42,6 +42,7 @@ class MonitoringTarget(BaseModel):
     response_prediction_field: str = "prediction"
     response_proba_field: str | None = "proba"
     reference_rows: int = 0
+    model_uri: str = "unknown"              # ex. models:/credit-risk/3 (Agent 2), repris dans les demandes
 
     @property
     def dir(self) -> Path:

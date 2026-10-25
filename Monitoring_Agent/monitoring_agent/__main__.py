@@ -10,6 +10,10 @@ Ligne de commande de l'Agent 4.
     python -m monitoring_agent gateway credit_risk
     python -m monitoring_agent simulate credit_risk --scenario covariate
     python -m monitoring_agent provision credit_risk
+
+Étape 3 (l'agent qui décide) :
+    python -m monitoring_agent llm-check
+    python -m monitoring_agent decide car_loan --at 5 [--rules] [--label-delay 3]
 """
 
 from __future__ import annotations
@@ -131,8 +135,133 @@ def cmd_gateway(args) -> int:
     if args.upstream:
         target.upstream_url = args.upstream.rstrip("/")
     print(f"Gateway {target.project} : http://{args.host}:{args.port}  ->  {target.upstream_url}")
-    uvicorn.run(create_app(target, check_interval_s=args.interval), host=args.host, port=args.port, log_level="warning")
+    if not args.no_agent:
+        from .agent.llm import decider_and_judge
+        decider, judge = decider_and_judge()
+        print(f"Agent : décideur {decider.name if decider else 'règles (aucune clé LLM)'} · "
+              f"juge {judge.name if judge else 'aucun'}")
+    uvicorn.run(create_app(target, check_interval_s=args.interval, agent=not args.no_agent),
+                host=args.host, port=args.port, log_level="warning")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Étape 3 : l'agent
+# ---------------------------------------------------------------------------
+
+ICONS = {"prepare": "📋", "investigate": "🔎", "diagnose": "🧠", "verify": "🧾", "judge": "⚖️ ",
+         "policy": "🛡️ ", "await_human": "🙋", "act": "⚙️ "}
+
+
+def print_run(run) -> None:
+    print(f"\n── Décision {run.id} · fenêtre {run.window_index} · décideur {run.decider} · juge {run.judge or '—'}")
+    for t in run.trace:
+        print(f"  {ICONS.get(t.node, '•')} {t.node:<12} {t.ms:>8.0f} ms  {t.summary}")
+        if t.node == "investigate" and t.detail.get("notes"):
+            for line in t.detail["notes"].splitlines():
+                print(f"  {'':>26}│ {line}")
+    d, p = run.diagnosis, run.policy
+    if d:
+        print(f"\n  Diagnostic : {d.root_cause} · confiance {d.confidence:.2f} · accord {run.agreement:.0%}")
+        print(f"  {d.summary}")
+        print(f"  Pourquoi : {d.rationale}")
+    if run.verification:
+        for c in run.verification.checks:
+            print(f"    {'✅' if c.ok else '❌'} {c.fact} = {c.claimed:g}" + ("" if c.ok else f" (réel : {c.actual})"))
+    if run.verdicts:
+        v = run.verdicts[-1]
+        print(f"  Juge : {v.verdict} {v.scores} — {v.critique}")
+    if p:
+        print(f"\n  Policy : {p.proposed_action} -> {p.final_action} · mode {p.mode}")
+        for r in p.rules:
+            print(f"    {'✅' if r.passed else '⛔'} {r.rule} — {r.detail}")
+        for reason in p.reasons:
+            print(f"    → {reason}")
+    print(f"\n  Statut : {run.status}" + (f" · erreur : {run.error}" if run.error else ""))
+    for k, v in run.outputs.items():
+        print(f"    {k}: {v}")
+
+
+def cmd_decide(args) -> int:
+    """L'agent sur une fenêtre d'un jeu NannyML (hors ligne, sans gateway)."""
+    import pandas as pd
+
+    from .agent.context import Case
+    from .agent.graph import MonitoringAgent
+    from .agent.llm import decider_and_judge
+    from .analysis import Analyzer, make_windows
+    from .datasets import load
+    from .runtime.target import runs_dir
+
+    ref, prod, spec = load(args.dataset, label_delay_windows=args.label_delay, window_size=args.window)
+    analyzer = Analyzer(ref, spec.mapping, AnalyzerConfig(window_size=args.window))
+    frames = make_windows(prod, args.window)
+    upto = args.at if args.at is not None else len(frames) - 1
+    reports = [analyzer.analyze_window(f, i) for i, f in enumerate(frames[:upto + 1])]
+
+    def export(path: str) -> str | None:
+        m = spec.mapping
+        parts = [frames[r.window.index] for r in reports if r.dataset_drift.n_drifted and r.performance
+                 and r.performance.labels_available]
+        if not parts:
+            return None
+        pd.concat(parts)[m.features + [m.target]].to_parquet(path, index=False)
+        return path
+
+    decider, judge = (None, None) if args.rules else decider_and_judge()
+    out = runs_dir() / "offline" / args.dataset
+    agent = MonitoringAgent(decider, judge, out_dir=out)
+    case = Case(project=args.dataset, mapping=spec.mapping, history=reports,
+                model_uri=f"models:/{args.dataset}/1", export_new_data=export)
+    w = case.current
+    print(f"{spec.description}\nFenêtre {w.window.index} : sévérité {w.severity} · signaux "
+          f"{', '.join(s.kind for s in w.signals) or 'aucun'}")
+    run = agent.decide(case)
+    print_run(run)
+    if run.status == "awaiting_human":
+        answer = args.answer
+        if answer is None and sys.stdin.isatty():
+            answer = "approve" if input("\n  Approuver cette action ? [o/N] ").strip().lower() in ("o", "oui", "y") else "reject"
+        if answer:
+            run = agent.resume(run.id, answer, by="cli")
+            print_run(run)
+    return 0 if run.status != "failed" else 1
+
+
+def cmd_llm_check(_args) -> int:
+    import time
+
+    from .agent.llm import LLMError, decider_and_judge, list_models, structured
+    from .agent.schemas import LLMModel
+
+    class Ping(LLMModel):
+        ok: bool
+        sum: int
+
+    decider, judge = decider_and_judge()
+    ok = True
+    for role, model in (("décideur", decider), ("juge", judge)):
+        if model is None:
+            print(f"{role:<9}: non configuré (clé absente de Monitoring_Agent/.env)")
+            ok = False
+            continue
+        t0 = time.perf_counter()
+        try:
+            r = structured(model, [{"role": "user", "content": 'Réponds en JSON : {"ok": true, "sum": 17+25}'}], Ping)
+            good = r.ok and r.sum == 42
+            print(f"{role:<9}: {model.name} · JSON {'OK' if good else 'INCORRECT'} · {time.perf_counter() - t0:.1f} s")
+            ok &= good
+        except LLMError as exc:
+            print(f"{role:<9}: {model.name} · ÉCHEC : {exc}")
+            ok = False
+    for provider, keep in (("groq", ("llama", "qwen", "gpt-oss", "kimi", "deepseek")), ("gemini", ("gemini-2", "gemini-3"))):
+        try:
+            names = [n for n in list_models(provider) if any(k in n for k in keep)]
+            print(f"\nModèles {provider} disponibles ({len(names)}) : " + ", ".join(names[:15]))
+        except Exception as exc:  # noqa: BLE001
+            print(f"\nModèles {provider} : {exc}")
+    print("\nChanger de modèle : MONITORING_DECIDER=groq:<modèle>, MONITORING_JUDGE=gemini:<modèle> dans .env")
+    return 0 if ok else 1
 
 
 def cmd_simulate(args) -> int:
@@ -176,7 +305,19 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--host", default="127.0.0.1")
     g.add_argument("--upstream", help="remplace l'URL de l'API du modèle")
     g.add_argument("--interval", type=float, default=2.0, help="période du moniteur (s)")
+    g.add_argument("--no-agent", action="store_true", help="monitoring seul, sans l'agent qui décide")
     g.set_defaults(func=cmd_gateway)
+
+    d = sub.add_parser("decide", help="l'agent décide sur une fenêtre d'un jeu NannyML (hors ligne)")
+    d.add_argument("dataset")
+    d.add_argument("--at", type=int, help="index de la fenêtre (défaut : la dernière)")
+    d.add_argument("--window", type=int, default=5000)
+    d.add_argument("--label-delay", type=int, default=0)
+    d.add_argument("--rules", action="store_true", help="décideur à règles, sans LLM (baseline)")
+    d.add_argument("--answer", choices=["approve", "reject"], help="réponse si un humain est requis")
+    d.set_defaults(func=cmd_decide)
+
+    sub.add_parser("llm-check", help="vérifie les clés et les modèles LLM").set_defaults(func=cmd_llm_check)
 
     s = sub.add_parser("simulate", help="envoie du trafic de production simulé à la gateway")
     s.add_argument("project")

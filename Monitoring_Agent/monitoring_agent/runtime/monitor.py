@@ -70,6 +70,7 @@ class Monitor:
         # Labels arrivés en retard : la performance mesurée remplace l'estimation.
         for idx, start, end in sorted(self.store.windows_without_labels()):
             if self.store.labelled_share(start, end) >= 0.9:
+                before = self.store.window_signal_kinds(idx)
                 report = self._analyze(idx)
                 perf = report.performance
                 log.info("fenêtre %d : labels reçus, %s mesuré = %s", idx, perf.metric if perf else "-",
@@ -77,4 +78,11 @@ class Monitor:
                 if perf and perf.labels_available and idx > self.last_labelled_idx:
                     self.last_labelled_idx = idx
                     self.metrics.set_realized(perf)
+                # Les labels peuvent RÉVÉLER un problème invisible sans eux (baisse mesurée, concept drift) :
+                # c'est une situation nouvelle, l'agent doit être réveillé pour cette fenêtre.
+                revealed = {s.kind for s in report.signals} - before
+                if report.trigger_agent and revealed:
+                    log.info("fenêtre %d : les labels révèlent %s -> agent", idx, ", ".join(sorted(revealed)))
+                    self.metrics.triggers.labels(self.target.project).inc()
+                    self.on_trigger(report)
         return new

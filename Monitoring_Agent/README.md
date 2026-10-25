@@ -14,7 +14,7 @@ observer  ──►  comprendre  ──►  décider  ──►  agir
 |---|---|---|
 | 1 | Moteur d'analyse déterministe : drift, qualité, performance mesurée et estimée | ✅ |
 | 2 | Gateway devant l'API de l'Agent 3 + Prometheus / Alertmanager / Grafana | ✅ |
-| 3 | Agent LangGraph autonome : diagnostic à outils, vérification, juge, policy | à faire |
+| 3 | Agent LangGraph autonome : enquête à outils, diagnostic ×3, vérification, juge, policy, actions | ✅ |
 | 4 | API de monitoring + console | à faire |
 | 5 | Scénarios de drift injecté, évaluation, fine-tuning | à faire |
 
@@ -124,6 +124,56 @@ Limite connue : la référence est construite sur `data.csv`, qui contient les d
 la performance de référence est donc optimiste. La bonne référence est le jeu de test, que l'Agent 2
 pourra enregistrer dans MLflow.
 
+## Étape 3 — L'agent qui décide
+
+Le moteur DÉTECTE ; l'agent DÉCIDE. Il est réveillé par une fenêtre `trigger_agent` (gateway) ou appelé par
+l'orchestrateur (`monitoring_agent.pipeline.run`). Graphe LangGraph (`agent/graph.py`) :
+
+```
+prepare ─► investigate ─► diagnose ×3 ─► verify ─► judge ─► policy ─┬─ auto ──► act
+              (outils)     (vote)     (preuves)  (Gemini)  (règles) └─ human ─► interrupt ─► act | fin
+                              ▲           │          │
+                              └─ 1 révision si preuve fausse ou si le juge dit « revise »
+```
+
+| Étape | Qui | Rôle |
+|---|---|---|
+| investigate | LLM décideur (Groq) | appelle des **outils en lecture seule** : historique d'une feature, de la performance, qualité, prédictions, alertes, décisions passées |
+| diagnose | LLM décideur ×3 | 3 diagnostics indépendants → **vote** ; l'accord mesure l'incertitude (self-consistency) |
+| verify | code | chaque chiffre cité doit exister dans les FACTS calculés, à 2 % près ; sinon une révision |
+| judge | LLM juge (Gemini) | **autre famille de modèle** ; grille grounding / causality / proportionality / safety |
+| policy | code | substitue une action plus sûre et décide **auto** ou **humain** (règles R1–R9, `agent/guards.py`) |
+| act | code | écrit un fichier pour chaque action : incident Markdown, `retraining_request.json` (contrat commun) + données labellisées à réentraîner |
+
+**Autonomie graduée par le risque :** surveiller, ouvrir un incident, signaler un problème de données → seul.
+Demander un réentraînement → seul si la policy, les preuves et le juge sont d'accord (puis gate de l'orchestrateur
+et quality gate de l'Agent 2). Revenir à l'ancien modèle → toujours un humain.
+
+**Règles de la policy :** R1 pas de réentraînement sans baisse de performance (drift ≠ dégradation) ·
+R2 pas sur des données cassées (on signale la source) · R3 il faut des labels récents · R4 24 h entre deux demandes ·
+R5 haut risque = humain · R6 preuves exactes · R7 juge d'accord · R8 confiance ≥ 0.6 et accord ≥ 2/3 ·
+R9 disjoncteur : 10 actions automatiques / 24 h.
+
+**Sans clé LLM**, un décideur à règles (`agent/rules.py`) prend le relais : c'est aussi la *baseline sans LLM*
+de l'évaluation.
+
+```bash
+cp .env.example .env                                   # GROQ_API_KEY, GEMINI_API_KEY
+python -m monitoring_agent llm-check                   # clés, modèles, JSON
+python -m monitoring_agent decide car_loan --at 5      # l'agent raisonne sur une fenêtre NannyML
+python -m monitoring_agent decide car_price --window 6000 --at 6   # drift sans dégradation
+python -m monitoring_agent decide car_loan --at 5 --rules          # baseline sans LLM
+python -m monitoring_agent gateway credit_risk --host 0.0.0.0      # en production : l'agent décide seul
+curl localhost:8100/monitoring/decisions                           # décisions, trace complète par id
+curl -X POST localhost:8100/monitoring/decisions/<id>/approve -H 'content-type: application/json' -d '{"by":"Mohamed"}'
+```
+
+Anti-rafale : l'agent n'est relancé que si les signaux CHANGENT ou toutes les 5 fenêtres, jamais pendant qu'une
+décision attend un humain. Prompts versionnés (`agent/prompts.py`, `PROMPT_VERSION`), température 0 pour
+l'enquête et le juge.
+
+**Orchestrateur :** `from monitoring_agent.pipeline import run` remplace `agent4_stub` (même contrat).
+
 ## Structure
 
 ```
@@ -132,11 +182,21 @@ Monitoring_Agent/
 │   ├── schemas.py          # rapports produits (Pydantic, extra="forbid")
 │   ├── config.py           # tous les seuils, versionnés
 │   ├── datasets.py         # jeux NannyML (référence / production / labels)
+│   ├── agent/
+│   │   ├── graph.py        # graphe LangGraph : enquête -> diagnostic -> vérif -> juge -> policy -> action
+│   │   ├── context.py      # dossier d'enquête : FACTS citables + outils en lecture seule
+│   │   ├── guards.py       # vérification des preuves + policy-as-code
+│   │   ├── llm.py          # Groq / Gemini / Ollama (protocole OpenAI), repli, JSON validé
+│   │   ├── prompts.py      # prompts versionnés
+│   │   ├── rules.py        # décideur sans LLM (repli + baseline)
+│   │   └── actions.py      # incident, retraining_request.json, rollback (après humain)
+│   ├── pipeline.py         # run(AgentInput) -> AgentResult pour l'orchestrateur
 │   ├── runtime/
 │   │   ├── gateway.py      # proxy FastAPI devant l'API du modèle
 │   │   ├── store.py        # SQLite : prédictions, labels, fenêtres, alertes
 │   │   ├── metrics.py      # métriques Prometheus (mlmon_*)
 │   │   ├── monitor.py      # flux de prédictions -> fenêtres analysées
+│   │   ├── supervisor.py   # fenêtre -> agent (anti-rafale, thread dédié, reprise humaine)
 │   │   ├── target.py       # monitoring.json + référence notée par l'API
 │   │   └── simulator.py    # trafic de production simulé
 │   ├── provisioning/
