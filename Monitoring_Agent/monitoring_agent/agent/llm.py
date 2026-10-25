@@ -30,10 +30,12 @@ PROVIDERS = {
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
 }
+# Les catalogues changent vite (llama-3.3 et gemini-2.5-flash ont été retirés en 2026) :
+# `python -m monitoring_agent llm-check` liste ce qui est disponible ; on surcharge dans .env.
 DEFAULTS = {
-    "MONITORING_DECIDER": "groq:llama-3.3-70b-versatile",
-    "MONITORING_DECIDER_FALLBACK": "gemini:gemini-2.5-flash",
-    "MONITORING_JUDGE": "gemini:gemini-2.5-flash",
+    "MONITORING_DECIDER": "groq:openai/gpt-oss-120b",        # raisonnement + appels d'outils
+    "MONITORING_DECIDER_FALLBACK": "groq:qwen/qwen3.8-27b",  # autre famille, quota séparé
+    "MONITORING_JUDGE": "gemini:gemini-3.8-flash",           # autre fournisseur ET autre famille que le décideur
 }
 
 T = TypeVar("T", bound=BaseModel)
@@ -77,12 +79,16 @@ def _settings() -> dict[str, str]:
 
 class OpenAICompatModel:
     def __init__(self, provider: str, model: str, api_key: str | None, base_url: str | None = None,
-                 timeout_s: float = 60, max_tokens: int = 2048, retries: int = 2, max_wait_s: float = 20):
+                 timeout_s: float = 90, max_tokens: int = 4096, retries: int = 2, max_wait_s: float = 20,
+                 reasoning_effort: str | None = None):
         self.provider, self.model = provider, model
         self.name = f"{provider}:{model}"
         self.base_url = (base_url or PROVIDERS[provider][0]).rstrip("/")
         self.api_key, self.timeout_s, self.max_tokens = api_key, timeout_s, max_tokens
         self.retries, self.max_wait_s = retries, max_wait_s
+        # Modèles « de raisonnement » (gpt-oss) : ils réfléchissent avant de répondre, et ces jetons
+        # comptent dans max_tokens. « medium » : bon compromis qualité / latence / quota.
+        self.reasoning_effort = reasoning_effort or ("medium" if "gpt-oss" in model else None)
 
     def chat(self, messages, tools=None, json_mode=False, temperature=0.0) -> LLMResponse:
         body: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": temperature,
@@ -91,6 +97,8 @@ class OpenAICompatModel:
             body["tools"], body["tool_choice"] = tools, "auto"
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+        if self.reasoning_effort:
+            body["reasoning_effort"] = self.reasoning_effort
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         last = ""
         for attempt in range(self.retries + 1):
@@ -172,7 +180,8 @@ def build_model(spec: str, settings: dict[str, str]) -> OpenAICompatModel | None
     key = settings.get(key_env) if key_env else None
     if key_env and not key:
         return None
-    return OpenAICompatModel(provider, model, key, settings.get(f"MONITORING_{provider.upper()}_BASE_URL"))
+    return OpenAICompatModel(provider, model, key, settings.get(f"MONITORING_{provider.upper()}_BASE_URL"),
+                             reasoning_effort=settings.get("MONITORING_REASONING_EFFORT"))
 
 
 def decider_and_judge() -> tuple[ChatModel | None, ChatModel | None]:

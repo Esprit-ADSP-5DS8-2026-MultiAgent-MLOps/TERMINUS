@@ -254,10 +254,11 @@ def cmd_llm_check(_args) -> int:
         except LLMError as exc:
             print(f"{role:<9}: {model.name} · ÉCHEC : {exc}")
             ok = False
-    for provider, keep in (("groq", ("llama", "qwen", "gpt-oss", "kimi", "deepseek")), ("gemini", ("gemini-2", "gemini-3"))):
+    skip = ("guard", "image", "tts", "audio", "computer-use", "embedding", "whisper", "veo", "imagen", "live")
+    for provider in ("groq", "gemini"):
         try:
-            names = [n for n in list_models(provider) if any(k in n for k in keep)]
-            print(f"\nModèles {provider} disponibles ({len(names)}) : " + ", ".join(names[:15]))
+            names = [n for n in list_models(provider) if not any(k in n for k in skip)]
+            print(f"\nModèles {provider} utilisables ({len(names)}) : " + ", ".join(names))
         except Exception as exc:  # noqa: BLE001
             print(f"\nModèles {provider} : {exc}")
     print("\nChanger de modèle : MONITORING_DECIDER=groq:<modèle>, MONITORING_JUDGE=gemini:<modèle> dans .env")
