@@ -349,11 +349,13 @@ def cmd_memory(args) -> int:
     if args.step == "eval":
         rows = [json.loads(x) for x in scen.read_text(encoding="utf-8").splitlines() if x.strip()]
         test = [r for r in rows if r["split"] == "test"][: args.limit or None]
-        res = evaluate_retrieval(mem, test, k=3)
+        valid = [r for r in rows if r["split"] == "valid"]
+        res = evaluate_retrieval(mem, test, k=3, validation=valid)
         (Path(args.dir) / "eval_retrieval.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
+        print(f"Poids du texte calibré sur la validation (mc_prepaid) : {res['text_weight']:g}")
         print(f"{res['queries']} requêtes (bases de test, jamais en mémoire), k = 3")
         for mode, m in res["modes"].items():
-            print(f"  {mode:<7} hit@3 {m['hit@k']:.0%} · précision@3 {m['precision@k']:.0%} · MRR {m['mrr']:.2f} "
+            print(f"  {mode:<28} hit@3 {m['hit@k']:.0%} · précision@3 {m['precision@k']:.0%} · MRR {m['mrr']:.2f} "
                   f"· sans résultat {m['no_result']:.0%}")
         return 0
     if args.step == "show":

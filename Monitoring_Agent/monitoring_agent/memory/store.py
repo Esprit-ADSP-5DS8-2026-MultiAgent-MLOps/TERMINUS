@@ -75,11 +75,12 @@ def make_embedder(cache_dir: Path):
         return HashEmbedder()
 
 
-def rrf(rankings: list[list[str]], k: int = 60) -> dict[str, float]:
+def rrf(rankings: list[list[str]], k: int = 60, weights: list[float] | None = None) -> dict[str, float]:
+    """Reciprocal Rank Fusion, pondérée : le poids de chaque classement est CALIBRÉ sur la validation."""
     scores: dict[str, float] = {}
-    for ranking in rankings:
+    for ranking, w in zip(rankings, weights or [1.0] * len(rankings), strict=True):
         for rank, pid in enumerate(ranking):
-            scores[pid] = scores.get(pid, 0.0) + 1.0 / (k + rank + 1)
+            scores[pid] = scores.get(pid, 0.0) + w / (k + rank + 1)
     return scores
 
 
@@ -100,7 +101,13 @@ class IncidentMemory:
             self.add(cards)
         if not self.client.collection_exists(COLLECTION):
             self._create()
-        meta_path.write_text(json.dumps({"embedder": self.embedder.name, "dim": self.embedder.dim}))
+        # Poids du texte dans la fusion : 1.0 par défaut, recalibré par `memory eval` sur la validation.
+        self.text_weight = float(meta.get("text_weight", 1.0)) if meta.get("embedder") == self.embedder.name else 1.0
+        self._save_meta()
+
+    def _save_meta(self) -> None:
+        (self.path / "meta.json").write_text(json.dumps({"embedder": self.embedder.name, "dim": self.embedder.dim,
+                                                         "text_weight": self.text_weight}))
 
     def _create(self) -> None:
         from qdrant_client import models
@@ -166,7 +173,8 @@ class IncidentMemory:
         return self.search_vectors(q_text, q_sig, "service" if service else "ml", k, candidates, min_text, min_sig, mode)
 
     def search_vectors(self, q_text, q_sig, family: str, k: int = 3, candidates: int = 20, min_text: float = 0.55,
-                       min_sig: float = 0.75, mode: str = "hybrid", exclude: set[str] | None = None) -> list[dict]:
+                       min_sig: float = 0.75, mode: str = "hybrid", exclude: set[str] | None = None,
+                       text_weight: float | None = None) -> list[dict]:
         from qdrant_client import models
         flt = models.Filter(must=[models.FieldCondition(key="family", match=models.MatchValue(value=family))])
         by_text = self.client.query_points(COLLECTION, query=list(map(float, q_text)), using="text", query_filter=flt,
@@ -177,8 +185,10 @@ class IncidentMemory:
         text_sim = {p.payload["id"]: p.score for p in by_text}
         sig_sim = {p.payload["id"]: 1.0 / (1.0 + p.score) for p in by_sig}        # distance -> similarité (0..1]
         payloads = {p.payload["id"]: p.payload for p in [*by_text, *by_sig]}
-        rankings = {"hybrid": [list(text_sim), list(sig_sim)], "text": [list(text_sim)], "sig": [list(sig_sim)]}[mode]
-        fused = rrf(rankings)
+        rankings, weights = {"hybrid": ([list(text_sim), list(sig_sim)], [self.text_weight if text_weight is None
+                                                                            else text_weight, 1.0]),
+                             "text": ([list(text_sim)], [1.0]), "sig": ([list(sig_sim)], [1.0])}[mode]
+        fused = rrf(rankings, weights=weights)
         hits = []
         for pid, score in sorted(fused.items(), key=lambda kv: -kv[1]):
             if pid in exclude:
@@ -222,22 +232,46 @@ def default_memory() -> IncidentMemory | None:
     return _OPEN[path]
 
 
-def evaluate_retrieval(memory: IncidentMemory, scenarios: list[dict], k: int = 3) -> dict:
-    """Sur des scénarios jamais mémorisés (bases de test) : la mémoire ramène-t-elle des cas de MÊME cause ?
-    hit@k = au moins un des k premiers a la bonne cause ; précision@k ; MRR. Comparaison des 3 modes."""
-    out = {}
-    for mode in ("text", "sig", "hybrid"):
-        hits_at, prec, rr, empty = [], [], [], 0
-        for sc in scenarios:
-            summary = re.search(r"<dossier>\n(.*?)\n</dossier>", sc["messages"][1]["content"], re.DOTALL).group(1)
-            q_text = memory.embedder.embed([query_text(sc["task"], sc["signals"], summary)])[0]
-            res = memory.search_vectors(q_text, signature(sc["facts"], sc["signals"]), "ml", k=k, mode=mode)
-            good = [h["root_cause"] == sc["oracle"]["root_cause"] for h in res]
-            empty += not res
-            hits_at.append(any(good))
-            prec.append(sum(good) / k)
-            rr.append(next((1 / (i + 1) for i, g in enumerate(good) if g), 0.0))
-        n = len(scenarios) or 1
-        out[mode] = {"hit@k": round(sum(hits_at) / n, 3), "precision@k": round(sum(prec) / n, 3),
-                     "mrr": round(sum(rr) / n, 3), "no_result": round(empty / n, 3)}
-    return {"k": k, "queries": len(scenarios), "modes": out}
+def _queries(memory: IncidentMemory, scenarios: list[dict]) -> list[tuple]:
+    texts = [query_text(sc["task"], sc["signals"],
+                        re.search(r"<dossier>\n(.*?)\n</dossier>", sc["messages"][1]["content"], re.DOTALL).group(1))
+             for sc in scenarios]
+    vecs = memory.embedder.embed(texts) if texts else []
+    return [(v, signature(sc["facts"], sc["signals"]), sc["oracle"]["root_cause"]) for v, sc in zip(vecs, scenarios, strict=True)]
+
+
+def _score(memory: IncidentMemory, queries: list[tuple], k: int, mode: str, text_weight: float | None = None) -> dict:
+    hits_at, prec, rr, empty = [], [], [], 0
+    for q_text, q_sig, cause in queries:
+        res = memory.search_vectors(q_text, q_sig, "ml", k=k, mode=mode, text_weight=text_weight)
+        good = [h["root_cause"] == cause for h in res]
+        empty += not res
+        hits_at.append(any(good))
+        prec.append(sum(good) / k)
+        rr.append(next((1 / (i + 1) for i, g in enumerate(good) if g), 0.0))
+    n = len(queries) or 1
+    return {"hit@k": round(sum(hits_at) / n, 3), "precision@k": round(sum(prec) / n, 3),
+            "mrr": round(sum(rr) / n, 3), "no_result": round(empty / n, 3)}
+
+
+def evaluate_retrieval(memory: IncidentMemory, scenarios: list[dict], k: int = 3,
+                       validation: list[dict] | None = None) -> dict:
+    """Sur des scénarios jamais mémorisés : la mémoire ramène-t-elle des cas de MÊME cause ?
+    hit@k, précision@k, MRR ; modes texte / chiffres / hybride 1:1 / hybride calibré.
+
+    Calibration honnête : le poids du texte dans la fusion est choisi sur la VALIDATION (mc_prepaid),
+    puis mesuré sur le TEST (car_loan, car_price) — jamais choisi en regardant le test."""
+    chosen, grid = memory.text_weight, {}
+    if validation:
+        vq = _queries(memory, validation)
+        for w in (0.0, 0.1, 0.25, 0.5, 1.0):
+            grid[w] = _score(memory, vq, k, "hybrid", w)
+        chosen = max(grid, key=lambda w: (grid[w]["mrr"], grid[w]["precision@k"], -w))
+        memory.text_weight = chosen
+        memory._save_meta()
+    tq = _queries(memory, scenarios)
+    modes = {m: _score(memory, tq, k, m) for m in ("text", "sig")}
+    modes["hybrid 1:1"] = _score(memory, tq, k, "hybrid", 1.0)
+    modes[f"hybride calibré (texte ×{chosen:g})"] = _score(memory, tq, k, "hybrid", chosen)
+    return {"k": k, "queries": len(scenarios), "text_weight": chosen,
+            "validation_grid": {str(w): v for w, v in grid.items()}, "modes": modes}
