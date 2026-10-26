@@ -91,7 +91,7 @@ class ChatModel(Protocol):
 def _settings() -> dict[str, str]:
     env_file = Path(os.environ.get("MONITORING_ENV_FILE", PACKAGE_ROOT / ".env"))
     values = {k: v for k, v in dotenv_values(env_file).items() if v} if env_file.exists() else {}
-    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_"))}}
+    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_"))}}
 
 
 class OpenAICompatModel:
@@ -109,6 +109,20 @@ class OpenAICompatModel:
         self.schema_ok = True   # passe à False si le fournisseur refuse response_format=json_schema
 
     def chat(self, messages, tools=None, json_mode=False, temperature=0.0) -> LLMResponse:
+        from .. import observability as obs
+        params = {"temperature": temperature, "max_tokens": self.max_tokens, "tools": len(tools or []),
+                  "response_format": "json_schema" if isinstance(json_mode, dict) else ("json" if json_mode else "text")}
+        if self.reasoning_effort:
+            params["reasoning_effort"] = self.reasoning_effort
+        with obs.observation(f"llm {self.name}", as_type="generation", model=self.model, input=messages,
+                             model_parameters=params) as gen:
+            resp = self._chat(messages, tools, json_mode, temperature)
+            obs.update(gen, output=resp.raw_message or resp.text, metadata={"ms": resp.ms},
+                       usage_details={"input": int(resp.usage.get("prompt_tokens", 0) or 0),
+                                      "output": int(resp.usage.get("completion_tokens", 0) or 0)})
+            return resp
+
+    def _chat(self, messages, tools=None, json_mode=False, temperature=0.0) -> LLMResponse:
         body: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": temperature,
                                 "max_tokens": self.max_tokens}
         if tools:
@@ -144,7 +158,7 @@ class OpenAICompatModel:
                                        ms=round((time.perf_counter() - t0) * 1000, 1))
                 if r.status_code == 400 and isinstance(json_mode, dict) and self.schema_ok and _schema_refused(r.text):
                     self.schema_ok = False                    # fournisseur sans json_schema : repli json_object
-                    return self.chat(messages, tools, True, temperature)
+                    return self._chat(messages, tools, True, temperature)
                 if r.status_code not in (408, 429, 500, 502, 503, 504):
                     raise LLMError(f"{self.name} — {last}")          # clé invalide, modèle inconnu... : définitif
                 wait = _retry_after(r) or 2.0 * (attempt + 1)

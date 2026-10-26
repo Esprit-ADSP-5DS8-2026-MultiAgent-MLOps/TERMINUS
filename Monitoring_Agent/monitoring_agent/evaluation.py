@@ -87,8 +87,11 @@ def evaluate(method: str, decider=None, judge=None, per_dataset: int | None = No
     cases, calm = build_cases(per_dataset)
     out_dir = out_dir or Path("runs") / "eval" / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
+    from .memory.store import default_memory
+    # Mémoire en LECTURE seule pendant l'évaluation : les cas évalués ne doivent pas s'y ajouter.
     agent = MonitoringAgent(decider if method != "rules" else None, judge if method != "rules" else None,
-                            out_dir=out_dir / "actions")
+                            out_dir=out_dir / "actions", memory=default_memory() if method != "rules" else None,
+                            learn=False)
     rows, sft = [], []
     for k, (truth, case) in enumerate(cases, 1):
         t0 = time.perf_counter()

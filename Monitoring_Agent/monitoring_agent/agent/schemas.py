@@ -118,6 +118,7 @@ class AgentRun(BaseModel):
     human: dict | None = None
     trace: list[TraceStep] = []
     error: str | None = None
+    trace_url: str | None = None           # trace Langfuse de la décision (si Langfuse est configuré)
 
     @property
     def usage(self) -> dict:

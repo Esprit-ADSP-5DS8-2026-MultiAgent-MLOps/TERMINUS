@@ -35,7 +35,8 @@ class Supervisor:
         self.every_windows, self.history = every_windows, history
         if agent is None:
             decider, judge = decider_and_judge()
-            agent = MonitoringAgent(decider, judge, out_dir=target.dir / "actions")
+            from ..memory.store import default_memory
+            agent = MonitoringAgent(decider, judge, out_dir=target.dir / "actions", memory=default_memory())
         agent.on_update = self._save
         self.agent = agent
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent4")

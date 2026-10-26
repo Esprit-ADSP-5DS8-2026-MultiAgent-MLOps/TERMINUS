@@ -24,6 +24,7 @@ Sans LLM configuré, `diagnose` utilise le décideur à règles (rules.py) : l'a
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import operator
 import time
@@ -38,7 +39,9 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from .. import observability as obs
 from ..config import AgentConfig
+from ..memory.store import format_similar
 from . import prompts
 from .actions import execute
 from .context import Case, call_tool, case_facts, case_summary, compact, facts_block, tool_facts, tool_specs
@@ -78,6 +81,19 @@ def _step(node: str, t0: float, summary: str, **detail) -> dict:
                                 summary=summary, detail=detail).model_dump()]}
 
 
+def _traced(name: str, fn):
+    """Chaque nœud = une observation Langfuse typée (retriever, guardrail, evaluator…), si Langfuse est actif."""
+    def node(state):
+        with obs.observation(name, as_type=obs.NODE_TYPES.get(name, "span")) as o:
+            out = fn(state)
+            steps = out.get("trace") or []
+            obs.update(o, output=steps[-1]["summary"] if steps else None,
+                       metadata={"ms": steps[-1]["ms"]} if steps else None)
+            return out
+    node.__name__ = fn.__name__
+    return node
+
+
 def build_messages(system: str, case: Case, facts: dict, notes: str | None = None, similar: str | None = None,
                    critique: str | None = None, extra: str | None = None) -> list[dict]:
     """Messages d'un appel : MÊME format en production, en évaluation et dans le dataset de fine-tuning."""
@@ -97,8 +113,12 @@ def vote(samples: list[Diagnosis]) -> tuple[Diagnosis, float]:
 class MonitoringAgent:
     def __init__(self, decider: ChatModel | None, judge: ChatModel | None, out_dir: Path,
                  config: AgentConfig | None = None, on_update: Callable[[AgentRun], None] | None = None,
-                 investigator: ChatModel | None = None):
+                 investigator: ChatModel | None = None, memory=None, learn: bool = True):
         self.decider, self.judge = decider, judge
+        # Mémoire d'incidents (RAG hybride) : lue avant le diagnostic ; enrichie des décisions confirmées.
+        self.memory, self.learn = memory, learn
+        self._remembered: set[str] = set()
+        self.trace_ids: dict[str, str | None] = {}     # décision -> trace Langfuse (scores, feedback humain)
         # Diagnostiqueur local (SLM fine-tuné) : l'enquête est confiée à un grand modèle, et le SLM reçoit
         # exactement le format sur lequel il a été entraîné (faits seuls).
         self.investigator = investigator or getattr(decider, "investigator", None) or decider
@@ -115,11 +135,19 @@ class MonitoringAgent:
         run_id = f"D{case.current.window.index:04d}-{uuid.uuid4().hex[:6]}"
         self.cases[run_id] = case
         cfg = {"configurable": {"thread_id": run_id}}
-        try:
-            self.graph.invoke({"run_id": run_id, "revisions": 0, "observations": []}, cfg)
-        except Exception as exc:  # noqa: BLE001 — l'agent ne doit jamais faire tomber la gateway
-            return self._publish(run_id, error=f"{type(exc).__name__}: {exc}")
-        return self._publish(run_id)
+        meta = {"project": case.project, "window": case.current.window.index, "prompt_version": prompts.PROMPT_VERSION,
+                "decider": getattr(self.decider, "name", "rules"), "signals": ",".join(sorted(case.signal_kinds()))}
+        with obs.decision_trace(run_id, case.project, meta) as trace_id:
+            self.trace_ids[run_id] = trace_id
+            try:
+                self.graph.invoke({"run_id": run_id, "revisions": 0, "observations": []}, cfg)
+            except Exception as exc:  # noqa: BLE001 — l'agent ne doit jamais faire tomber la gateway
+                run = self._publish(run_id, error=f"{type(exc).__name__}: {exc}")
+            else:
+                run = self._publish(run_id)
+        obs.score_run(trace_id, run)
+        obs.flush()
+        return run
 
     def resume(self, run_id: str, decision: str, by: str = "humain", comment: str = "") -> AgentRun:
         if run_id not in self.cases:
@@ -128,6 +156,8 @@ class MonitoringAgent:
         if not self.graph.get_state(cfg).interrupts:
             raise RuntimeError(f"la décision {run_id} n'attend pas d'humain")
         self.graph.invoke(Command(resume={"decision": decision, "by": by, "comment": comment}), cfg)
+        obs.score_human(self.trace_ids.get(run_id), decision, comment)
+        obs.flush()
         return self._publish(run_id)
 
     def result(self, run_id: str, error: str | None = None) -> AgentRun:
@@ -148,10 +178,18 @@ class MonitoringAgent:
             policy=PolicyDecision(**st["policy"]) if st.get("policy") else None,
             status="failed" if error else status, outputs=st.get("outputs", {}), human=st.get("human"),
             trace=[TraceStep(**t) for t in st.get("trace", [])], error=error or st.get("error"),
+            trace_url=obs.trace_url(self.trace_ids.get(run_id)),
         )
 
     def _publish(self, run_id: str, error: str | None = None) -> AgentRun:
         run = self.result(run_id, error)
+        if self.memory is not None and self.learn and run_id not in self._remembered \
+                and run.status in ("executed", "rejected_by_human"):
+            try:
+                if self.memory.remember(run, self.cases[run_id]):
+                    self._remembered.add(run_id)
+            except Exception:
+                log.warning("écriture en mémoire impossible", exc_info=True)
         self.on_update(run)
         return run
 
@@ -167,8 +205,21 @@ class MonitoringAgent:
         t0 = time.perf_counter()
         case = self._case(state)
         facts = case_facts(case)
-        return {"facts": facts, **_step("prepare", t0, f"{len(facts)} faits calculés, "
-                                        f"{len(case.current.signals)} signaux", signals=[s.kind for s in case.current.signals])}
+        update: dict[str, Any] = {"facts": facts}
+        retrieved = ""
+        if self.memory is not None:
+            try:
+                hits = self.memory.search(case)
+            except Exception:
+                log.warning("mémoire d'incidents indisponible", exc_info=True)
+                hits = []
+            update.update(similar=format_similar(hits), similar_ids=[h["id"] for h in hits])
+            retrieved = f", {len(hits)} cas similaires ({', '.join(h['id'] for h in hits) or 'aucun au-dessus du seuil'})"
+            update["_retrieval"] = [{k: h[k] for k in ("id", "title", "root_cause", "action", "text_sim", "sig_sim", "rrf")}
+                                    for h in hits]
+        retrieval = update.pop("_retrieval", None)
+        return {**update, **_step("prepare", t0, f"{len(facts)} faits calculés, {len(case.current.signals)} signaux"
+                                  + retrieved, signals=[s.kind for s in case.current.signals], retrieval=retrieval)}
 
     def _toolbox(self, case: Case):
         """Outils de l'enquête : via un serveur MCP (découverte + appels standard), sinon appel direct."""
@@ -234,8 +285,10 @@ class MonitoringAgent:
             except LLMError as exc:
                 return None, str(exc)[:200]
 
+        # Un contexte copié par tirage : les générations Langfuse restent rattachées à la trace de la décision.
+        contexts = [contextvars.copy_context() for _ in range(self.config.samples)]
         with ThreadPoolExecutor(max_workers=self.config.samples) as pool:
-            results = list(pool.map(one, range(self.config.samples)))
+            results = list(pool.map(lambda i: contexts[i].run(one, i), range(self.config.samples)))
         samples = [d for d, _ in results if d is not None]
         errors = [e for _, e in results if e]
         if not samples:   # tous les appels ont échoué : repli sur les règles, l'agent continue
@@ -257,7 +310,9 @@ class MonitoringAgent:
         t0 = time.perf_counter()
         case = self._case(state)
         signals = case.signal_kinds()
-        v = verify(Diagnosis(**state["diagnosis"]), state["facts"], case.mapping.features, signals=signals)
+        known = set(state.get("similar_ids") or [])
+        v = verify(Diagnosis(**state["diagnosis"]), state["facts"], case.mapping.features, signals=signals,
+                   known_cases=known)
         update: dict[str, Any] = {"verification": v.model_dump()}
         ok = sum(c.ok for c in v.checks)
         summary = f"{ok}/{len(v.checks)} preuves exactes" + (f" · problèmes : {'; '.join(v.problems)}" if v.problems else "")
@@ -269,7 +324,7 @@ class MonitoringAgent:
                 # Révision épuisée et toujours invérifiable : on n'escalade pas, on écarte le LLM et on
                 # applique le décideur à règles, dont chaque preuve est exacte par construction.
                 d = diagnose_by_rules(case)
-                v2 = verify(d, state["facts"], case.mapping.features, signals=signals)
+                v2 = verify(d, state["facts"], case.mapping.features, signals=signals, known_cases=known)
                 update.update(diagnosis=d.model_dump(), verification=v2.model_dump(), agreement=1.0,
                               decider=f"{state.get('decider', '')} -> règles (preuves du LLM invérifiables)")
                 summary += " · repli sur le décideur à règles"
@@ -340,7 +395,7 @@ class MonitoringAgent:
         for name, fn in (("prepare", self.prepare), ("investigate", self.investigate), ("diagnose", self.diagnose),
                          ("verify", self.verify_node), ("judge", self.judge_node), ("policy", self.policy_node),
                          ("await_human", self.await_human), ("act", self.act)):
-            g.add_node(name, fn)
+            g.add_node(name, _traced(name, fn))
         g.add_edge(START, "prepare")
         g.add_edge("prepare", "investigate")
         g.add_edge("investigate", "diagnose")

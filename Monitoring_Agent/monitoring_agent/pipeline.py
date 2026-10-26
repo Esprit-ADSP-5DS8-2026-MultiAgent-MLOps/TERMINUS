@@ -78,7 +78,8 @@ def run(inp):
         store = Store(target.store_path)
         try:
             decider, judge = decider_and_judge()
-            agent = MonitoringAgent(decider, judge, out_dir=Path(inp.workdir))
+            from .memory.store import default_memory
+            agent = MonitoringAgent(decider, judge, out_dir=Path(inp.workdir), memory=default_memory())
             sup = Supervisor(target, store, agent=agent)
             case = sup.build_case()
             if case.current.trigger_agent:

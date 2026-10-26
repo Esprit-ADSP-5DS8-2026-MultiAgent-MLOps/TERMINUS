@@ -242,6 +242,33 @@ python -m monitoring_agent finetune eval --models mlx:default_model,groq:openai/
 - **En production** : `MONITORING_DECIDER=mlx:default_model` dans `.env` → le SLM diagnostique (faits seuls),
   l'enquête reste à `MONITORING_INVESTIGATOR` (Groq), repli automatique sur Groq si le serveur local est arrêté.
 
+## Étape 8 — Mémoire d'incidents (RAG hybride)
+
+```bash
+python -m monitoring_agent memory build    # fiches : scénarios ML vérifiés (bases d'entraînement) + RCAEval/OpenRCA/NAB
+python -m monitoring_agent memory eval     # hit@3 / précision@3 / MRR sur les bases de TEST : texte vs chiffres vs hybride
+```
+
+- Qdrant local (un dossier, pas de serveur), 2 vecteurs par fiche : embedding multilingue du texte (fastembed)
+  et **signature** de 9 nombres calculée depuis les faits (drift, baisse mesurée/estimée, qualité, labels…) ;
+- filtre par famille (ML / service), 2 classements fusionnés par **Reciprocal Rank Fusion**, **seuil** de pertinence ;
+- les cas retrouvés arrivent dans `<cas_similaires>` (few-shot dynamique) ; citer un `INC-xxxx` non fourni est
+  refusé par le vérificateur ;
+- **boucle d'apprentissage** : une décision confirmée (juge + policy, ou humain) devient une fiche ; un rejet
+  humain aussi, comme contre-exemple.
+
+## Étape 9 — LLMOps (Langfuse)
+
+Avec les clés dans `.env` : une trace par décision (un span typé par nœud, une génération par appel LLM avec
+jetons et latence, les appels d'outils MCP), des scores (preuves vérifiées, notes du juge, accord, autonomie,
+feedback humain), et le lien vers la trace dans la console.
+
+```bash
+python -m monitoring_agent langfuse check
+python -m monitoring_agent langfuse push-prompts    # prompts versionnés (PROMPT_VERSION)
+python -m monitoring_agent langfuse push-dataset    # cas de test du fine-tuning -> dataset Langfuse
+```
+
 ## Structure
 
 ```

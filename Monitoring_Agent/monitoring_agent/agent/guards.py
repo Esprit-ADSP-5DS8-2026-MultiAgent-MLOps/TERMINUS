@@ -7,6 +7,7 @@ testées, versionnées, et la prof peut les lire en 5 minutes.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from ..config import PolicyConfig
@@ -32,8 +33,11 @@ CAUSE_FORBIDS = {
 }
 
 
+CITATION = re.compile(r"INC-\d{4}")
+
+
 def verify(diag: Diagnosis, facts: dict[str, float], features: list[str], rel_tol: float = 0.02,
-           signals: set[str] | None = None) -> Verification:
+           signals: set[str] | None = None, known_cases: set[str] | None = None) -> Verification:
     checks, problems = [], []
     for ev in diag.evidence:
         actual = facts.get(ev.fact)
@@ -56,6 +60,11 @@ def verify(diag: Diagnosis, facts: dict[str, float], features: list[str], rel_to
         problems.append(f"cause « {diag.root_cause} » sans preuve de type {prefix}*")
     if diag.action != "no_action" and not diag.evidence:
         problems.append("action proposée sans aucune preuve")
+    # RAG : un cas passé cité doit faire partie de ceux réellement fournis (citation vérifiable)
+    cited_cases = set(CITATION.findall(f"{diag.summary} {diag.rationale}"))
+    invented = sorted(cited_cases - (known_cases or set()))
+    if invented:
+        problems.append(f"cas cités mais non fournis par la mémoire : {invented}")
 
     if signals is not None:
         need = CAUSE_REQUIRES.get(diag.root_cause)

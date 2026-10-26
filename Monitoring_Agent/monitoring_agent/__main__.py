@@ -211,7 +211,8 @@ def cmd_decide(args) -> int:
 
     decider, judge = (None, None) if args.rules else decider_and_judge()
     out = runs_dir() / "offline" / args.dataset
-    agent = MonitoringAgent(decider, judge, out_dir=out)
+    from .memory.store import default_memory
+    agent = MonitoringAgent(decider, judge, out_dir=out, memory=None if args.rules else default_memory())
     case = Case(project=args.dataset, mapping=spec.mapping, history=reports,
                 model_uri=f"models:/{args.dataset}/1", export_new_data=export)
     w = case.current
@@ -316,6 +317,57 @@ def cmd_mcp(args) -> int:
     from .runtime.target import MonitoringTarget
     target = MonitoringTarget.load(args.project)
     server_for_target(target, Store(target.store_path)).run("stdio")
+    return 0
+
+
+def cmd_memory(args) -> int:
+    from .memory.cards import from_incident_data, from_scenarios
+    from .memory.store import IncidentMemory, evaluate_retrieval, memory_dir
+    mem = IncidentMemory(memory_dir())
+    scen = Path(args.dir) / "scenarios.jsonl"
+    if args.step == "build":
+        if mem.count() and not args.append:
+            print(f"Mémoire déjà construite ({mem.count()} fiches). --append pour ajouter.")
+            return 0
+        from .datasets import data_dir
+        cards = from_scenarios(scen) + from_incident_data(data_dir())
+        ids = mem.add(cards)
+        by = {}
+        for c in cards:
+            by[c.source] = by.get(c.source, 0) + 1
+        print(f"{len(ids)} fiches ajoutées ({by}) · embedder {mem.embedder.name} -> {memory_dir()}")
+        return 0
+    if args.step == "eval":
+        rows = [json.loads(x) for x in scen.read_text(encoding="utf-8").splitlines() if x.strip()]
+        test = [r for r in rows if r["split"] == "test"][: args.limit or None]
+        res = evaluate_retrieval(mem, test, k=3)
+        (Path(args.dir) / "eval_retrieval.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
+        print(f"{res['queries']} requêtes (bases de test, jamais en mémoire), k = 3")
+        for mode, m in res["modes"].items():
+            print(f"  {mode:<7} hit@3 {m['hit@k']:.0%} · précision@3 {m['precision@k']:.0%} · MRR {m['mrr']:.2f} "
+                  f"· sans résultat {m['no_result']:.0%}")
+        return 0
+    if args.step == "show":
+        for c in mem.all()[: args.limit or 20]:
+            print(f"{c.id} [{c.family}/{c.source}] {c.title} -> {c.root_cause} / {c.action} ({c.outcome})")
+        return 0
+    return 1
+
+
+def cmd_langfuse(args) -> int:
+    from . import observability as obs
+    lf = obs.client()
+    if lf is None:
+        print("Langfuse non configuré : LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL dans .env")
+        return 1
+    if args.step == "check":
+        print("Connexion Langfuse :", "OK" if lf.auth_check() else "ÉCHEC")
+    elif args.step == "push-prompts":
+        print("Prompts versionnés :", ", ".join(obs.push_prompts()))
+    elif args.step == "push-dataset":
+        path = Path(args.dir) / "data" / "test_cases.jsonl"
+        cases = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+        print(f"Dataset agent4-diagnosis-test : {obs.push_dataset(cases)} cas")
     return 0
 
 
@@ -432,6 +484,18 @@ def main(argv: list[str] | None = None) -> int:
     mc = sub.add_parser("mcp", help="serveur MCP (stdio) d'un projet monitoré, pour Claude Desktop / MCP Inspector")
     mc.add_argument("project")
     mc.set_defaults(func=cmd_mcp)
+
+    lfp = sub.add_parser("langfuse", help="LLMOps : vérifier la connexion, versionner les prompts, pousser le dataset")
+    lfp.add_argument("step", choices=["check", "push-prompts", "push-dataset"])
+    lfp.add_argument("--dir", default="runs/finetune")
+    lfp.set_defaults(func=cmd_langfuse)
+
+    me = sub.add_parser("memory", help="mémoire d'incidents (RAG hybride) : construire, évaluer, afficher")
+    me.add_argument("step", choices=["build", "eval", "show"])
+    me.add_argument("--dir", default="runs/finetune", help="dossier contenant scenarios.jsonl")
+    me.add_argument("--append", action="store_true")
+    me.add_argument("--limit", type=int)
+    me.set_defaults(func=cmd_memory)
 
     ft = sub.add_parser("finetune", help="dataset de fine-tuning du diagnostiqueur local (Qwen3-4B, MLX)")
     ft.add_argument("step", choices=["bases", "scenarios", "teach", "build", "eval"])

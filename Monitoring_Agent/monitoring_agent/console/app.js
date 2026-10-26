@@ -475,7 +475,7 @@ function recorderHTML(run) {
         return u.calls ? `<div><dt>Appels LLM</dt><dd>${u.calls}</dd></div><div><dt>Jetons</dt><dd>${int(u.tok)}</dd></div>` : "";
       })()}
     </dl>
-    <p class="hint">Décideur ${esc(deciderName(run.decider))}${run.judge ? `, juge ${esc(run.judge)}` : ", sans juge"}</p>
+    <p class="hint">Décideur ${esc(deciderName(run.decider))}${run.judge ? `, juge ${esc(run.judge)}` : ", sans juge"}${run.trace_url ? ` · <a href="${esc(run.trace_url)}" target="_blank" rel="noopener">trace Langfuse</a>` : ""}</p>
     ${d ? `<p class="rec-why"><b>${esc(d.summary)}</b> ${esc(d.rationale)}</p>` : ""}`;
 
   const maxMs = Math.max(1, ...run.trace.map((t) => t.ms));
@@ -484,9 +484,12 @@ function recorderHTML(run) {
     const [name, who] = STAGE[t.node] ?? [t.node, ""];
     const cls = ["stage", DETERMINISTIC.has(t.node) ? "det" : "", t.node === "await_human" ? "human" : "", t.node === "verify" && t.detail?.problems?.length ? "fail" : ""].join(" ");
     let body = "";
+    if (t.node === "prepare" && t.detail?.retrieval?.length) {
+      body = `<ul class="rules">${t.detail.retrieval.map((h) => `<li><span class="ok-mark">↺</span><span>${esc(h.id)} · ${esc(h.title)}<br><span class="r-detail">cause ${esc(h.root_cause)}, action ${esc(h.action)} · similarité texte ${fmt(h.text_sim, 2)}, chiffres ${fmt(h.sig_sim, 2)}</span></span></li>`).join("")}</ul>`;
+    }
     if (t.node === "investigate") {
       const tools = t.detail?.tools ?? [];
-      body = (tools.length ? `<div class="chips">${tools.map((c) => `<span class="chip">${esc(c.tool)}(${esc(Object.values(c.args).join(", "))})</span>`).join("")}</div>` : "")
+      body = (t.detail?.transport === "mcp" ? `<p class="r-detail">via MCP · ${t.detail.tools_available} outils découverts</p>` : "") + (tools.length ? `<div class="chips">${tools.map((c) => `<span class="chip">${esc(c.tool)}(${esc(Object.values(c.args).join(", "))})</span>`).join("")}</div>` : "")
         + (t.detail?.notes ? `<p class="notes">${esc(t.detail.notes)}</p>` : "");
     }
     if (t.node === "diagnose" && t.detail?.votes) {
