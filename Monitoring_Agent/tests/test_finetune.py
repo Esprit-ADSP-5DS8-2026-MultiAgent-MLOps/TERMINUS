@@ -122,3 +122,30 @@ def test_prompt_injection_through_data_cannot_drive_the_agent(tmp_path):
         # preuves absentes / cause contredite par les signaux -> révision puis repli sur les règles
         assert run.policy.final_action == "notify_data_team", run.trace[-1].summary
         assert run.status != "executed" or run.policy.final_action not in ("rollback_model", "request_retraining")
+
+
+def test_quota_per_minute_pauses_but_daily_quota_stops():
+    assert ft_teacher.quota_wait("Rate limit reached ... tokens per minute (TPM) ... Please try again in 7.66s") == (7.66, False)
+    wait, daily = ft_teacher.quota_wait("Rate limit ... tokens per day (TPD): Limit 200000 ... try again in 1h2m3.5s")
+    assert daily and wait == 3723.5
+    assert ft_teacher.quota_wait("try again in 450ms")[0] == 2.0
+
+
+def test_teacher_waits_on_per_minute_quota_and_retries_same_scenario(tmp_path, monkeypatch):
+    from monitoring_agent.agent.llm import LLMUnavailable
+    scen = tmp_path / "s.jsonl"
+    scen.write_text(json.dumps(_scenario()) + "\n", encoding="utf-8")
+    t, slept = Teacher(), []
+    calls = {"n": 0}
+    real = t.chat
+
+    def chat(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise LLMUnavailable("HTTP 429 tokens per minute (TPM) Please try again in 3.2s")
+        return real(*a, **k)
+
+    t.chat = chat
+    monkeypatch.setattr(ft_teacher, "teachers", lambda spec=None: [t])
+    stats = ft_teacher.teach(scen, tmp_path / "t.jsonl", progress=lambda *_: None, sleep=slept.append)
+    assert stats["pauses"] == 1 and slept and stats["teacher_rationalized"] == 1   # pas abandonné : repris après la pause

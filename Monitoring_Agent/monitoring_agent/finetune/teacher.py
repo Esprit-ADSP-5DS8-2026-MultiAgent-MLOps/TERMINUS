@@ -17,6 +17,7 @@ Plusieurs professeurs en rotation (quotas séparés, styles variés). Reprenable
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import Counter, defaultdict
 from collections.abc import Callable
@@ -74,26 +75,57 @@ def order(scenarios: list[dict]) -> list[dict]:
     return out
 
 
+WAIT = re.compile(r"try again in\s+(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)(ms|s))?", re.IGNORECASE)
+
+
+def quota_wait(message: str) -> tuple[float, bool]:
+    """(secondes à attendre, quota JOURNALIER ?) d'après le message 429 de Groq.
+
+    Les quotas gratuits sont surtout PAR MINUTE (jetons/min, requêtes/min) : il suffit d'attendre un peu.
+    Un quota par jour avec une longue attente met le professeur de côté jusqu'à la prochaine session."""
+    m = WAIT.search(message or "")
+    wait = 60.0
+    if m and any(m.groups()):
+        h, mi, sec, unit = m.groups()
+        wait = 3600 * int(h or 0) + 60 * int(mi or 0) + (float(sec or 0) / (1000 if unit == "ms" else 1))
+    daily = "per day" in (message or "").lower()
+    return max(wait, 2.0), daily and wait > 900
+
+
 def teach(scenarios_path: Path, out: Path, spec: str | None = None, max_calls: int = 400,
-          splits: tuple[str, ...] = ("train", "valid"), progress: Callable[[str], None] = print) -> Counter:
+          splits: tuple[str, ...] = ("train", "valid"), progress: Callable[[str], None] = print,
+          sleep: Callable[[float], None] = time.sleep) -> Counter:
     models = teachers(spec)
+    for m in models:
+        # On gère nous-mêmes les quotas (rotation + attente) : le client ne doit pas bloquer longtemps.
+        if hasattr(m, "retries"):
+            m.retries, m.max_wait_s = 0, 0
+        if "gpt-oss" in getattr(m, "model", ""):
+            m.reasoning_effort = "low"        # moins de jetons de réflexion : la réponse est vérifiée de toute façon
     done = set()
     if out.exists():
         done = {json.loads(line)["id"] for line in out.read_text(encoding="utf-8").splitlines() if line.strip()}
     todo = [s for s in (json.loads(x) for x in scenarios_path.read_text(encoding="utf-8").splitlines() if x.strip())
             if s["split"] in splits and s["id"] not in done]
-    todo = order(todo)
+    queue = order(todo)
     stats: Counter = Counter()
     exhausted: set[str] = set()
+    ready_at: dict[str, float] = {m.name: 0.0 for m in models}
     calls, turn = 0, 0
-    progress(f"  {len(todo)} scénarios à traiter, professeurs : {', '.join(m.name for m in models)}")
+    progress(f"  {len(queue)} scénarios à traiter, professeurs : {', '.join(m.name for m in models)}")
     with out.open("a", encoding="utf-8") as f:
-        for sc in todo:
+        while queue and calls < max_calls:
             live = [m for m in models if m.name not in exhausted]
-            if not live or calls >= max_calls:
+            if not live:
                 break
-            model = live[turn % len(live)]
+            now = time.monotonic()
+            free = [m for m in live if ready_at[m.name] <= now]
+            if not free:                       # tous en pause (quota par minute) : on attend le premier libre
+                sleep(min(ready_at[m.name] for m in live) - now + 0.5)
+                continue
+            model = free[turn % len(free)]
             turn += 1
+            sc = queue[0]
             meter: list = []
             record = {"id": sc["id"], "model": model.name, "source": None, "diagnosis": None, "problems": []}
             try:
@@ -117,16 +149,22 @@ def teach(scenarios_path: Path, out: Path, spec: str | None = None, max_calls: i
                         break
                     record["problems"].append(f"{attempt}: " + "; ".join(problems)[:300])
             except LLMUnavailable as exc:
-                exhausted.add(model.name)
-                progress(f"  {model.name} indisponible (quota ?) : {str(exc)[:140]} — on continue sans lui")
-                continue
+                wait, daily = quota_wait(str(exc))
+                if daily:
+                    exhausted.add(model.name)
+                    progress(f"  {model.name} : quota JOURNALIER atteint (reprise dans {wait / 60:.0f} min) — on continue sans lui")
+                else:
+                    ready_at[model.name] = time.monotonic() + wait
+                    stats["pauses"] += 1
+                continue                       # le même scénario sera repris par le prochain professeur libre
+            queue.pop(0)
             record["usage"] = usage_summary(meter)
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
             f.flush()
             stats[record["source"] or "rejected"] += 1
-            n = sum(stats.values())
+            n = sum(v for k, v in stats.items() if k != "pauses")
             if n % 10 == 0:
-                progress(f"  {n} traités · {dict(stats)} · {calls} appels")
-            time.sleep(0.2)
-    progress(f"  fin : {dict(stats)} · {calls} appels · épuisés : {sorted(exhausted) or 'aucun'}")
+                progress(f"  {n} traités · {dict(stats)} · {calls} appels · reste {len(queue)}")
+    progress(f"  fin : {dict(stats)} · {calls} appels · reste {len(queue)} · "
+             f"quota journalier atteint : {sorted(exhausted) or 'aucun'}")
     return stats

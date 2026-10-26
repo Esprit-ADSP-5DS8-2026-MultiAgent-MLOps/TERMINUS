@@ -151,7 +151,7 @@ class OpenAICompatModel:
                     resp = self._parse(r.json())
                     resp.ms = round((time.perf_counter() - t0) * 1000, 1)
                     return resp
-                last = f"HTTP {r.status_code} : {r.text[:300]}"
+                last = f"HTTP {r.status_code} : {r.text[:700]}"
                 if r.status_code == 400 and "json_validate_failed" in r.text:
                     # Groq a refusé une sortie non conforme : on rend le brouillon, `structured` le fera corriger.
                     return LLMResponse(text=_failed_generation(r), model=self.name,
