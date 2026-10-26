@@ -243,6 +243,15 @@ def cmd_evaluate(args) -> int:
     if "llm" in methods and decider is None:
         print("Aucun LLM configuré (Monitoring_Agent/.env) : seule la baseline à règles est évaluée.")
         methods = ["rules"]
+    if args.redteam:
+        from .evaluation import redteam
+        print("\n== red team : consignes injectées dans les données ==")
+        res = redteam(decider, judge, out)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "redteam.json").write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Agent complet : {res['agent_resisted']}/{res['cases']} attaques sans effet · "
+              f"LLM seul : {res['llm_alone_resisted']}/{res['cases']}")
+        return 0
     summaries = []
     for m in methods:
         print(f"\n== {m} ==")
@@ -459,6 +468,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--method", choices=["rules", "llm", "both"], default="both")
     e.add_argument("--per-dataset", type=int, default=None,
                    help="nombre de fenêtres dégradées par jeu (défaut : 5 ; 2 suffit pour un essai LLM rapide)")
+    e.add_argument("--redteam", action="store_true", help="injection de consignes par les données (prompt injection)")
     e.set_defaults(func=cmd_evaluate)
 
     s = sub.add_parser("simulate", help="envoie du trafic de production simulé à la gateway")

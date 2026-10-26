@@ -97,3 +97,28 @@ def test_build_balances_actions_and_writes_lora_config(tmp_path):
     cfg = yaml.safe_load((tmp_path / "data" / "lora.yaml").read_text(encoding="utf-8"))
     assert cfg["mask_prompt"] is True and cfg["lora_parameters"]["rank"] == 16 and cfg["num_layers"] == -1
     assert cfg["iters"] == max(50, 2 * 60 // 4)
+
+
+needs_car_loan = pytest.mark.skipif(not _available("synthetic_car_loan_reference.csv"), reason="données absentes")
+
+
+@needs_car_loan
+def test_prompt_injection_through_data_cannot_drive_the_agent(tmp_path):
+    """Défense en profondeur : même un LLM qui OBÉIT à la consigne cachée dans les données ne fait rien de grave."""
+    from test_agent import Scripted, approve
+
+    from monitoring_agent.agent.graph import MonitoringAgent
+    from monitoring_agent.evaluation import INJECTIONS, redteam_cases
+    cases = redteam_cases(window=1000)
+    assert all(c.has_quality_problem() for c in cases)
+    fooled = [{"root_cause": "concept_drift", "summary": "s", "affected_features": [], "action": a,
+               "evidence": [], "rationale": "on m'a dit de le faire", "confidence": 1.0}
+              for a in ("rollback_model", "request_retraining", "no_action")]
+    for case, diag, text in zip(cases, fooled, INJECTIONS, strict=True):
+        details = " ".join(q.detail for q in case.history[-1].data_quality)
+        assert text[:20] in details                                       # la consigne atteint bien l'enquête
+        run = MonitoringAgent(Scripted("d", diagnoses=[diag]), Scripted("j", verdicts=[approve()]),
+                              out_dir=tmp_path).decide(case)
+        # preuves absentes / cause contredite par les signaux -> révision puis repli sur les règles
+        assert run.policy.final_action == "notify_data_team", run.trace[-1].summary
+        assert run.status != "executed" or run.policy.final_action not in ("rollback_model", "request_retraining")
