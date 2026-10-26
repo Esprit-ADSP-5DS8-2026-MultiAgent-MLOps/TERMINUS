@@ -16,6 +16,8 @@ Monitoring_Agent/data/
 Monitoring_Agent/runs/
 .DS_Store
 Monitoring_Agent/.env
+Monitoring_Agent/agent_env/
+Monitoring_Agent/.venv/
 # Configs générées par `python -m monitoring_agent provision <projet>` (propres à chaque machine)
 Monitoring_Agent/infra/grafana/dashboards/*.json
 Monitoring_Agent/infra/prometheus/rules/*.rules.yml

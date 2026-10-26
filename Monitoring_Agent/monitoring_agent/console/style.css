@@ -157,6 +157,9 @@ table.mini td.num { text-align: right; }
 .decision .who { color: var(--agent); }
 .decision.pending .who { color: var(--warn); }
 .decision-actions { display: flex; gap: 8px; margin-top: 6px; }
+.decision.working { border-left-color: var(--agent); background: var(--agent-soft); cursor: default; }
+.decision.working .what::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 8px; border-radius: 50%; background: var(--agent); animation: pulse 1.2s ease-in-out infinite; vertical-align: middle; }
+.usage { color: var(--ink-3); font-size: 12px; margin-left: 6px; }
 .decision.fresh { animation: arrive .6s ease-out; }
 @keyframes arrive { from { transform: translateX(14px); opacity: 0; } }
 .alerts h3 { margin-bottom: 6px; }

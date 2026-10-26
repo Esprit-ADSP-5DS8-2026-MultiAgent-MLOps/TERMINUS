@@ -93,6 +93,7 @@ async function refresh() {
     }
     renderBar(); renderFilm(); renderHeatmap(); renderPerf(); renderWindow();
     if (changedDecisions) renderDecisions();
+    renderBusy();
     renderAlerts();
     if (state.openId && changedDecisions) openDecision(state.openId, true);
     state.first = false;
@@ -357,6 +358,7 @@ function renderDecisions() {
     return;
   }
   list.innerHTML = "";
+  renderBusy();
   for (const d of ds) {
     const [what, who] = decisionLine(d);
     const li = document.createElement("li");
@@ -371,6 +373,20 @@ function renderDecisions() {
     list.append(li);
     state.seen.add(d.id);
   }
+}
+
+function renderBusy() {
+  const a = state.status?.agent;
+  let card = $("busy-card");
+  if (!a?.busy) { card?.remove(); return; }
+  if (!card) {
+    card = document.createElement("li");
+    card.id = "busy-card";
+    $("decisions").prepend(card);
+  }
+  const queued = a.pending_window != null ? ` La fenêtre ${a.pending_window} attend son tour.` : "";
+  card.innerHTML = `<div class="decision working"><span class="what">Enquête en cours</span>
+    <span class="why">L'agent analyse la fenêtre ${a.busy_window ?? "?"} : outils, diagnostics, vérification, juge.${queued}</span></div>`;
 }
 
 function renderAlerts() {
@@ -454,6 +470,10 @@ function recorderHTML(run) {
       <div><dt>Statut</dt><dd><span class="stamp ${statusStamp[0]}">${statusStamp[1]}</span></dd></div>
       ${d ? `<div><dt>Confiance</dt><dd>${fmt(d.confidence, 2)}</dd></div><div><dt>Accord des diagnostics</dt><dd>${Math.round(run.agreement * 100)} %</dd></div>` : ""}
       <div><dt>Durée</dt><dd>${fmt(run.trace.reduce((s, t) => s + t.ms, 0) / 1000, 1)} s</dd></div>
+      ${(() => {
+        const u = run.trace.reduce((acc, t) => { const x = t.detail?.usage; if (x) { acc.calls += x.calls; acc.tok += (x.prompt_tokens || 0) + (x.completion_tokens || 0); } return acc; }, { calls: 0, tok: 0 });
+        return u.calls ? `<div><dt>Appels LLM</dt><dd>${u.calls}</dd></div><div><dt>Jetons</dt><dd>${int(u.tok)}</dd></div>` : "";
+      })()}
     </dl>
     <p class="hint">Décideur ${esc(deciderName(run.decider))}${run.judge ? `, juge ${esc(run.judge)}` : ", sans juge"}</p>
     ${d ? `<p class="rec-why"><b>${esc(d.summary)}</b> ${esc(d.rationale)}</p>` : ""}`;
@@ -502,7 +522,7 @@ function recorderHTML(run) {
     return `<li class="${cls}">
       <div class="stage-head"><span class="stage-name">${esc(name)}<small>${esc(who)}</small></span><span class="stage-time">${t.ms >= 1000 ? `${fmt(t.ms / 1000, 1)} s` : `${Math.round(t.ms)} ms`}</span></div>
       <div class="stage-bar"><i style="width:${Math.max(1.5, (100 * t.ms) / maxMs)}%"></i></div>
-      <p class="stage-sum">${esc(t.summary)}</p>
+      <p class="stage-sum">${esc(t.summary)}${t.detail?.usage?.calls ? ` <span class="usage">${t.detail.usage.calls} appel${t.detail.usage.calls > 1 ? "s" : ""}, ${int((t.detail.usage.prompt_tokens || 0) + (t.detail.usage.completion_tokens || 0))} jetons</span>` : ""}</p>
       ${body ? `<div class="stage-body">${body}</div>` : ""}
     </li>`;
   });

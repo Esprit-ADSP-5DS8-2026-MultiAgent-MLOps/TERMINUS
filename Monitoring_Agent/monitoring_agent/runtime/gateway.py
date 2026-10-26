@@ -175,7 +175,9 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
             a = supervisor.agent
             agent_info = {"decider": a.decider.name if a.decider else "règles (aucune clé LLM)",
                           "judge": a.judge.name if a.judge else None,
-                          "busy": bool(supervisor.running and not supervisor.running.done())}
+                          "busy": bool(supervisor.running and not supervisor.running.done()),
+                          "busy_window": supervisor.busy_window,
+                          "pending_window": supervisor.pending.window.index if supervisor.pending else None}
         m = target.mapping
         return {"project": target.project, "window_size": target.window_size, **store.traffic_stats(),
                 "windows": store.last_window_idx() + 1, "upstream_url": target.upstream_url,

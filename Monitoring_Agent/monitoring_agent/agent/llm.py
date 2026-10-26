@@ -62,13 +62,28 @@ class LLMResponse:
     tool_calls: list[ToolCall] = field(default_factory=list)
     model: str = ""
     raw_message: dict = field(default_factory=dict)
+    usage: dict = field(default_factory=dict)      # jetons : prompt_tokens, completion_tokens, total_tokens
+    ms: float = 0.0                                # latence de l'appel
+
+
+def usage_summary(responses: list[LLMResponse]) -> dict:
+    """Agrège les appels d'une étape : nombre, jetons, latence, par modèle (pour la trace et Langfuse)."""
+    out: dict = {"calls": len(responses), "prompt_tokens": 0, "completion_tokens": 0, "ms": 0.0, "models": {}}
+    for r in responses:
+        out["prompt_tokens"] += int(r.usage.get("prompt_tokens", 0) or 0)
+        out["completion_tokens"] += int(r.usage.get("completion_tokens", 0) or 0)
+        out["ms"] += r.ms
+        out["models"][r.model] = out["models"].get(r.model, 0) + 1
+    out["ms"] = round(out["ms"], 1)
+    return out
 
 
 class ChatModel(Protocol):
     name: str
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool = False,
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool | dict = False,
              temperature: float = 0.0) -> LLMResponse: ...
+    # json_mode : False (texte libre), True (un objet JSON), ou un JSON Schema (sortie contrainte au décodage).
 
 
 def _settings() -> dict[str, str]:
@@ -89,27 +104,45 @@ class OpenAICompatModel:
         # Modèles « de raisonnement » (gpt-oss) : ils réfléchissent avant de répondre, et ces jetons
         # comptent dans max_tokens. « medium » : bon compromis qualité / latence / quota.
         self.reasoning_effort = reasoning_effort or ("medium" if "gpt-oss" in model else None)
+        self.schema_ok = True   # passe à False si le fournisseur refuse response_format=json_schema
 
     def chat(self, messages, tools=None, json_mode=False, temperature=0.0) -> LLMResponse:
         body: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": temperature,
                                 "max_tokens": self.max_tokens}
         if tools:
             body["tools"], body["tool_choice"] = tools, "auto"
-        if json_mode:
+        if isinstance(json_mode, dict) and self.schema_ok:
+            # Décodage CONTRAINT : le modèle ne peut produire que des jetons conformes au schéma
+            # (énumérations des causes / actions comprises). strict=False : « best effort » accepté par
+            # Groq, Gemini et Ollama ; la validation Pydantic reste le contrôle final.
+            body["response_format"] = {"type": "json_schema",
+                                       "json_schema": {"name": json_mode.get("title", "output"), "schema": json_mode,
+                                                       "strict": False}}
+        elif json_mode:
             body["response_format"] = {"type": "json_object"}
         if self.reasoning_effort:
             body["reasoning_effort"] = self.reasoning_effort
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         last = ""
         for attempt in range(self.retries + 1):
+            t0 = time.perf_counter()
             try:
                 r = httpx.post(f"{self.base_url}/chat/completions", json=body, headers=headers, timeout=self.timeout_s)
             except httpx.HTTPError as exc:
                 last, wait = f"réseau : {exc}", 2.0 * (attempt + 1)
             else:
                 if r.status_code == 200:
-                    return self._parse(r.json())
+                    resp = self._parse(r.json())
+                    resp.ms = round((time.perf_counter() - t0) * 1000, 1)
+                    return resp
                 last = f"HTTP {r.status_code} : {r.text[:300]}"
+                if r.status_code == 400 and "json_validate_failed" in r.text:
+                    # Groq a refusé une sortie non conforme : on rend le brouillon, `structured` le fera corriger.
+                    return LLMResponse(text=_failed_generation(r), model=self.name,
+                                       ms=round((time.perf_counter() - t0) * 1000, 1))
+                if r.status_code == 400 and isinstance(json_mode, dict) and self.schema_ok and _schema_refused(r.text):
+                    self.schema_ok = False                    # fournisseur sans json_schema : repli json_object
+                    return self.chat(messages, tools, True, temperature)
                 if r.status_code not in (408, 429, 500, 502, 503, 504):
                     raise LLMError(f"{self.name} — {last}")          # clé invalide, modèle inconnu... : définitif
                 wait = _retry_after(r) or 2.0 * (attempt + 1)
@@ -135,7 +168,44 @@ class OpenAICompatModel:
         if msg.get("tool_calls"):
             clean["tool_calls"] = [{"id": c.id, "type": "function",
                                     "function": {"name": c.name, "arguments": json.dumps(c.arguments)}} for c in calls]
-        return LLMResponse(text=msg.get("content") or "", tool_calls=calls, model=self.name, raw_message=clean)
+        usage = {k: v for k, v in (data.get("usage") or {}).items()
+                 if k in ("prompt_tokens", "completion_tokens", "total_tokens")}
+        return LLMResponse(text=msg.get("content") or "", tool_calls=calls, model=self.name, raw_message=clean,
+                           usage=usage)
+
+
+def _failed_generation(r: httpx.Response) -> str:
+    try:
+        return str(r.json().get("error", {}).get("failed_generation") or "")
+    except ValueError:
+        return ""
+
+
+def _schema_refused(text: str) -> bool:
+    t = text.lower()
+    return "response_format" in t or "json_schema" in t or "responseschema" in t
+
+
+def llm_schema(model: type[BaseModel]) -> dict:
+    """Schéma Pydantic -> JSON Schema portable : références internes déroulées, titres/défauts retirés."""
+    raw = model.model_json_schema()
+    defs = raw.pop("$defs", {})
+
+    def clean(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return clean(defs[node["$ref"].split("/")[-1]])
+            out = {k: clean(v) for k, v in node.items() if k not in ("title", "default")}
+            if "properties" in out and "additionalProperties" not in out:
+                out["required"] = list(out["properties"])   # côté LLM, tous les champs sont attendus
+            return out
+        if isinstance(node, list):
+            return [clean(x) for x in node]
+        return node
+
+    out = clean(raw)
+    out["title"] = model.__name__
+    return out
 
 
 def _retry_after(r: httpx.Response) -> float:
@@ -211,11 +281,15 @@ def extract_json(text: str) -> dict:
 
 
 def structured(model: ChatModel, messages: list[dict], schema: type[T], temperature: float = 0.0,
-               attempts: int = 2) -> T:
+               attempts: int = 2, meter: list | None = None) -> T:
+    """`meter` : liste qui reçoit chaque réponse brute (jetons, latence) pour la trace."""
     msgs = list(messages)
     last_error = ""
+    json_schema = llm_schema(schema)
     for _ in range(attempts):
-        resp = model.chat(msgs, json_mode=True, temperature=temperature)
+        resp = model.chat(msgs, json_mode=json_schema, temperature=temperature)
+        if meter is not None:
+            meter.append(resp)
         try:
             return schema.model_validate(extract_json(resp.text))
         except (ValueError, ValidationError) as exc:

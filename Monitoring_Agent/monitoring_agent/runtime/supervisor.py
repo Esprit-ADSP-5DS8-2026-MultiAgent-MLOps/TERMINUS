@@ -12,6 +12,7 @@ Superviseur : relie le moniteur (qui détecte) à l'agent (qui décide).
 from __future__ import annotations
 
 import logging
+import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
 import pandas as pd
@@ -39,6 +40,11 @@ class Supervisor:
         self.agent = agent
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent4")
         self.running: Future | None = None
+        self.busy_window: int | None = None
+        # Réveil arrivé pendant que l'agent travaillait : on garde le PLUS RÉCENT et on le rejoue après.
+        # (Sans ça, des labels qui révèlent un concept drift pendant une enquête étaient perdus.)
+        self.pending: WindowReport | None = None
+        self._lock = threading.Lock()
 
     # -- dossier d'enquête --------------------------------------------------------------
 
@@ -82,12 +88,26 @@ class Supervisor:
         return True, "nouvelle situation"
 
     def on_trigger(self, report: WindowReport) -> None:
-        ok, why = self.should_run(report)
-        if not ok:
-            log.info("fenêtre %d : agent non relancé (%s)", report.window.index, why)
-            return
-        log.info("fenêtre %d : l'agent enquête (%s)", report.window.index, why)
-        self.running = self.pool.submit(self._decide, report.window.index)
+        with self._lock:
+            if self.running and not self.running.done():
+                self.pending = report
+                log.info("fenêtre %d : l'agent travaille, réveil mis en attente", report.window.index)
+                return
+            ok, why = self.should_run(report)
+            if not ok:
+                log.info("fenêtre %d : agent non relancé (%s)", report.window.index, why)
+                return
+            log.info("fenêtre %d : l'agent enquête (%s)", report.window.index, why)
+            self.busy_window = report.window.index
+            self.running = self.pool.submit(self._decide, report.window.index)
+            self.running.add_done_callback(self._after)
+
+    def _after(self, _future: Future) -> None:
+        with self._lock:
+            pending, self.pending, self.busy_window = self.pending, None, None
+        if pending is not None:
+            log.info("fenêtre %d : réveil en attente rejoué", pending.window.index)
+            self.on_trigger(pending)
 
     def decide_now(self) -> AgentRun:
         return self._decide(None)

@@ -28,6 +28,9 @@ ACTION_RISK: dict[str, str] = {
 }
 
 
+JUDGE_CRITERIA = ("grounding", "causality", "proportionality", "safety")
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -37,7 +40,7 @@ class LLMModel(BaseModel):
 
 
 class Evidence(LLMModel):
-    fact: str = Field(description="clé exacte d'un fait de la liste FACTS")
+    fact: str = Field(description="clé exacte d'un fait de <faits>")
     value: float = Field(description="valeur du fait, recopiée")
     claim: str = Field(description="ce que ce fait montre, en une phrase")
 
@@ -54,7 +57,10 @@ class Diagnosis(LLMModel):
 
 class JudgeVerdict(LLMModel):
     verdict: Literal["approve", "revise", "reject"]
-    scores: dict[str, int] = {}
+    # dict côté code (tolérant), mais schéma explicite côté LLM : les 4 critères, notes entières de 1 à 5.
+    scores: dict[str, int] = Field(default={}, json_schema_extra={
+        "properties": {k: {"type": "integer", "minimum": 1, "maximum": 5} for k in JUDGE_CRITERIA},
+        "required": list(JUDGE_CRITERIA)})
     critique: str = ""
 
 
@@ -112,3 +118,13 @@ class AgentRun(BaseModel):
     human: dict | None = None
     trace: list[TraceStep] = []
     error: str | None = None
+
+    @property
+    def usage(self) -> dict:
+        """Total des appels LLM de la décision (jetons, appels, temps passé dans les LLM)."""
+        tot = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "ms": 0.0}
+        for t in self.trace:
+            u = t.detail.get("usage") or {}
+            for k in tot:
+                tot[k] += u.get(k, 0) or 0
+        return tot

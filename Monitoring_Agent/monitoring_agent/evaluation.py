@@ -30,7 +30,7 @@ from pathlib import Path
 from . import datasets
 from .agent import prompts
 from .agent.context import Case, case_facts
-from .agent.graph import MonitoringAgent
+from .agent.graph import MonitoringAgent, build_messages
 from .analysis import Analyzer, make_windows
 from .config import AnalyzerConfig
 
@@ -112,7 +112,7 @@ def evaluate(method: str, decider=None, judge=None, per_dataset: int | None = No
                 and verdict == "approve" and run.diagnosis):
             facts = case_facts(case)
             if all(e.fact in facts for e in run.diagnosis.evidence):
-                msgs = agent._messages(prompts.DIAGNOSER, case, facts)
+                msgs = build_messages(prompts.DIAGNOSER, case, facts)   # format « SLM » : faits seuls
                 sft.append({"messages": msgs + [{"role": "assistant", "content": run.diagnosis.model_dump_json()}],
                             "meta": {"dataset": truth.dataset, "window": row["window"], "prompt": prompts.PROMPT_VERSION}})
 

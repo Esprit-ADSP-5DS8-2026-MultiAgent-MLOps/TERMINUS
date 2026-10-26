@@ -29,6 +29,7 @@ import time
 import uuid
 from collections import Counter
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
@@ -41,7 +42,7 @@ from . import prompts
 from .actions import execute
 from .context import Case, call_tool, case_facts, case_summary, compact, facts_block, tool_facts, tool_specs
 from .guards import evaluate, verify
-from .llm import ChatModel, LLMError, structured
+from .llm import ChatModel, LLMError, structured, usage_summary
 from .rules import diagnose_by_rules
 from .schemas import AgentRun, Diagnosis, JudgeVerdict, PolicyDecision, TraceStep, Verification
 
@@ -57,6 +58,8 @@ class AgentState(TypedDict, total=False):
     verification: dict
     verdicts: Annotated[list[dict], operator.add]
     critique: str
+    similar: str                 # cas passés retrouvés par la mémoire d'incidents (RAG), déjà formatés
+    similar_ids: list[str]
     revisions: int
     policy: dict
     status: str
@@ -70,6 +73,14 @@ class AgentState(TypedDict, total=False):
 def _step(node: str, t0: float, summary: str, **detail) -> dict:
     return {"trace": [TraceStep(node=node, ms=round((time.perf_counter() - t0) * 1000, 1),
                                 summary=summary, detail=detail).model_dump()]}
+
+
+def build_messages(system: str, case: Case, facts: dict, notes: str | None = None, similar: str | None = None,
+                   critique: str | None = None, extra: str | None = None) -> list[dict]:
+    """Messages d'un appel : MÊME format en production, en évaluation et dans le dataset de fine-tuning."""
+    user = prompts.user_message(case_summary(case), facts_block(facts), notes=notes, similar=similar,
+                                critique=critique, extra=extra)
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def vote(samples: list[Diagnosis]) -> tuple[Diagnosis, float]:
@@ -141,9 +152,8 @@ class MonitoringAgent:
     def _case(self, state: AgentState) -> Case:
         return self.cases[state["run_id"]]
 
-    def _messages(self, system: str, case: Case, facts: dict, extra: str = "") -> list[dict]:
-        user = f"{case_summary(case)}\n\nFACTS (clé = valeur) :\n{facts_block(facts)}"
-        return [{"role": "system", "content": system}, {"role": "user", "content": user + (f"\n\n{extra}" if extra else "")}]
+    def _messages(self, system: str, case: Case, facts: dict, **parts: str | None) -> list[dict]:
+        return build_messages(system, case, facts, **parts)
 
     def prepare(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
@@ -158,10 +168,11 @@ class MonitoringAgent:
             return _step("investigate", t0, "aucun LLM configuré : enquête sautée")
         case, facts = self._case(state), dict(state["facts"])
         messages = self._messages(prompts.INVESTIGATOR, case, facts)
-        observations, notes = [], ""
+        observations, notes, meter = [], "", []
         try:
             for _ in range(self.config.max_tool_calls):
                 resp = self.decider.chat(messages, tools=tool_specs(), temperature=0.0)
+                meter.append(resp)
                 if not resp.tool_calls:
                     notes = resp.text.strip()
                     break
@@ -173,11 +184,13 @@ class MonitoringAgent:
                     messages.append({"role": "tool", "tool_call_id": call.id, "content": compact(result)})
         except LLMError as exc:
             return {"facts": facts, "observations": observations,
-                    **_step("investigate", t0, f"enquête interrompue : {exc}"[:200], error=str(exc))}
+                    **_step("investigate", t0, f"enquête interrompue : {exc}"[:200], error=str(exc),
+                            usage=usage_summary(meter))}
         calls = ", ".join(f"{o['tool']}({', '.join(f'{k}={v}' for k, v in o['args'].items())})" for o in observations)
         return {"facts": facts, "observations": observations, "notes": notes,
                 **_step("investigate", t0, f"{len(observations)} appels d'outils : {calls or 'aucun'}",
-                        notes=notes, tools=[{"tool": o["tool"], "args": o["args"]} for o in observations])}
+                        notes=notes, tools=[{"tool": o["tool"], "args": o["args"]} for o in observations],
+                        usage=usage_summary(meter))}
 
     def diagnose(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
@@ -186,29 +199,36 @@ class MonitoringAgent:
             d = diagnose_by_rules(case)
             return {"samples": [d.model_dump()], "diagnosis": d.model_dump(), "agreement": 1.0, "decider": "rules",
                     **_step("diagnose", t0, f"décideur à règles : {d.root_cause} -> {d.action}")}
-        extra = f"NOTE D'ENQUÊTE :\n{state.get('notes') or '(aucune)'}"
-        if state.get("critique"):
-            extra += f"\n\nTA PROPOSITION PRÉCÉDENTE A ÉTÉ REFUSÉE. Corrige-la :\n{state['critique']}"
-        messages = self._messages(prompts.DIAGNOSER, case, state["facts"], extra)
-        samples, errors = [], []
-        for i in range(self.config.samples):
+        messages = self._messages(prompts.DIAGNOSER, case, state["facts"], notes=state.get("notes"),
+                                  similar=state.get("similar"), critique=state.get("critique"))
+        # Les N diagnostics sont INDÉPENDANTS : on les lance en parallèle (latence ÷ N).
+        meter: list = []
+
+        def one(i: int):
             temp = 0.0 if i == 0 else self.config.sample_temperature
             try:
-                samples.append(structured(self.decider, messages, Diagnosis, temperature=temp))
+                return structured(self.decider, messages, Diagnosis, temperature=temp, meter=meter), None
             except LLMError as exc:
-                errors.append(str(exc)[:200])
+                return None, str(exc)[:200]
+
+        with ThreadPoolExecutor(max_workers=self.config.samples) as pool:
+            results = list(pool.map(one, range(self.config.samples)))
+        samples = [d for d, _ in results if d is not None]
+        errors = [e for _, e in results if e]
         if not samples:   # tous les appels ont échoué : repli sur les règles, l'agent continue
             d = diagnose_by_rules(case)
             return {"samples": [d.model_dump()], "diagnosis": d.model_dump(), "agreement": 1.0,
                     "decider": "rules (repli : LLM indisponible)", "error": "; ".join(errors),
-                    **_step("diagnose", t0, "LLM indisponible : repli sur le décideur à règles", errors=errors)}
+                    **_step("diagnose", t0, "LLM indisponible : repli sur le décideur à règles", errors=errors,
+                            usage=usage_summary(meter))}
         chosen, agreement = vote(samples)
         name = getattr(self.decider, "last_used", "") or self.decider.name
         votes = dict(Counter(s.action for s in samples))
         return {"samples": [s.model_dump() for s in samples], "diagnosis": chosen.model_dump(),
                 "agreement": agreement, "decider": name, "critique": "",
                 **_step("diagnose", t0, f"{len(samples)} diagnostics, votes {votes} -> {chosen.root_cause} / "
-                        f"{chosen.action} (accord {agreement:.0%})", votes=votes, errors=errors)}
+                        f"{chosen.action} (accord {agreement:.0%})", votes=votes, errors=errors,
+                        usage=usage_summary(meter))}
 
     def verify_node(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
@@ -237,16 +257,19 @@ class MonitoringAgent:
         if self.judge is None:
             return _step("judge", t0, "aucun juge configuré")
         case = self._case(state)
-        extra = (f"PROPOSITION À ÉVALUER :\n{compact(state['diagnosis'])}\n\n"
-                 f"VÉRIFICATION AUTOMATIQUE DES PREUVES :\n{compact(state.get('verification'))}")
+        extra = (f"<proposition>\n{compact(state['diagnosis'])}\n</proposition>\n\n"
+                 f"<verification_automatique>\n{compact(state.get('verification'))}\n</verification_automatique>")
+        meter: list = []
         try:
-            v = structured(self.judge, self._messages(prompts.JUDGE, case, state["facts"], extra), JudgeVerdict)
+            v = structured(self.judge, self._messages(prompts.JUDGE, case, state["facts"], extra=extra), JudgeVerdict,
+                           meter=meter)
         except LLMError as exc:
-            return _step("judge", t0, f"juge indisponible : {exc}"[:200])
+            return _step("judge", t0, f"juge indisponible : {exc}"[:200], usage=usage_summary(meter))
         update: dict[str, Any] = {"verdicts": [v.model_dump()]}
         if v.verdict == "revise" and state.get("revisions", 0) < self.config.max_revisions and self.decider is not None:
             update.update(revisions=state.get("revisions", 0) + 1, critique=f"Le juge demande une révision : {v.critique}")
-        return {**update, **_step("judge", t0, f"{v.verdict} · {v.scores} · {v.critique[:160]}")}
+        return {**update, **_step("judge", t0, f"{v.verdict} · {v.scores} · {v.critique[:160]}",
+                                  usage=usage_summary(meter))}
 
     def policy_node(self, state: AgentState) -> dict:
         t0 = time.perf_counter()

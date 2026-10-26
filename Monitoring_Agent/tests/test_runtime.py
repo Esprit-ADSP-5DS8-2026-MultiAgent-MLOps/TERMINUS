@@ -224,3 +224,29 @@ def test_late_labels_wake_the_agent_again(client):
     after = client.get("/monitoring/decisions").json()
     assert len(after) == 2
     assert "performance_drop_realized" in after[-1]["signals"]
+
+
+def test_trigger_during_work_is_replayed_not_lost(client):
+    """Un réveil qui arrive pendant une enquête est rejoué ensuite (bug observé en démo)."""
+    import time
+
+    sup = client.app.state.supervisor
+    calls = []
+
+    def slow(upto):
+        calls.append(upto)
+        time.sleep(0.3)
+
+    sup._decide = slow
+    send(client, rows(200, shift=2.0))
+    reports = client.app.state.monitor.step()
+    sup.pending = None
+    sup.running = None
+    sup.on_trigger(reports[0])
+    sup.on_trigger(reports[1])                 # arrive pendant que la 1re enquête tourne
+    assert sup.pending is not None
+    for _ in range(50):
+        if len(calls) == 2 and sup.running.done():
+            break
+        time.sleep(0.05)
+    assert calls[-1] == reports[1].window.index and len(calls) >= 2
