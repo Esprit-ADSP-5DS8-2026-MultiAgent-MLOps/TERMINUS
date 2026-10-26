@@ -358,6 +358,30 @@ def cmd_memory(args) -> int:
             print(f"  {mode:<28} hit@3 {m['hit@k']:.0%} · précision@3 {m['precision@k']:.0%} · MRR {m['mrr']:.2f} "
                   f"· sans résultat {m['no_result']:.0%}")
         return 0
+    if args.step == "search":
+        # Démo : un scénario de TEST (jamais en mémoire) -> les 3 cas retrouvés par chaque méthode
+        from .memory.store import _queries
+        rows = [json.loads(x) for x in scen.read_text(encoding="utf-8").splitlines() if x.strip()]
+        test = [r for r in rows if r["split"] == "test"]
+        sc = next((r for r in test if r["id"] == args.id), None) if args.id else test[0]
+        if sc is None:
+            print(f"scénario inconnu : {args.id} (ex. {test[0]['id']})")
+            return 1
+        print(f"Requête : {sc['id']} · injection {sc['injection']} · signaux {', '.join(sc['signals']) or 'aucun'}")
+        print(f"Bonne réponse (oracle) : {sc['oracle']['root_cause']} -> {sc['oracle']['action']}")
+        q_text, q_sig, _ = _queries(mem, [sc])[0]
+        print(f"Signature : {q_sig}")
+        for mode, w in (("text", None), ("sig", None), ("hybrid", None)):
+            hits = mem.search_vectors(q_text, q_sig, "ml", k=3, mode=mode, text_weight=w)
+            label = f"hybride (texte ×{mem.text_weight:g})" if mode == "hybrid" else mode
+            print(f"\n  {label}")
+            for h in hits:
+                ok = "✓" if h["root_cause"] == sc["oracle"]["root_cause"] else "✗"
+                ts = f"{h['text_sim']:.2f}" if h["text_sim"] else " —  "    # — : hors des 20 meilleurs candidats
+                ss = f"{h['sig_sim']:.2f}" if h["sig_sim"] else " —  "
+                print(f"    {ok} {h['id']} texte {ts} · chiffres {ss} — {h['title']} "
+                      f"-> {h['root_cause']} / {h['action']}")
+        return 0
     if args.step == "show":
         for c in mem.all()[: args.limit or 20]:
             print(f"{c.id} [{c.family}/{c.source}] {c.title} -> {c.root_cause} / {c.action} ({c.outcome})")
@@ -379,6 +403,45 @@ def cmd_langfuse(args) -> int:
         path = Path(args.dir) / "data" / "test_cases.jsonl"
         cases = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
         print(f"Dataset agent4-diagnosis-test : {obs.push_dataset(cases)} cas")
+    return 0
+
+
+def cmd_mcp_check(args) -> int:
+    """Client MCP de démonstration : lance le serveur en stdio (vrai transport JSON-RPC) et l'interroge."""
+    import asyncio
+
+    from mcp import Client, StdioServerParameters
+
+    from .agent.mcp_server import result_dict
+    from .datasets import PACKAGE_ROOT
+
+    async def run() -> None:
+        params = StdioServerParameters(command=sys.executable, args=["-m", "monitoring_agent", "mcp", args.project],
+                                       cwd=str(PACKAGE_ROOT))
+        async with Client(params) as c:
+            info = c.server_info
+            print(f"Serveur : {info.name if info else '?'} · protocole {c.protocol_version}")
+            tools = (await c.list_tools()).tools
+            print(f"\n{len(tools)} outils (tools/list) :")
+            for t in tools:
+                ro = getattr(getattr(t, "annotations", None), "read_only_hint", None)
+                ro = ro if ro is not None else getattr(getattr(t, "annotations", None), "readOnlyHint", None)
+                print(f"  - {t.name}{'  [lecture seule]' if ro else ''} : {(t.description or '').splitlines()[0]}")
+            res = (await c.list_resources()).resources
+            tpl = (await c.list_resource_templates()).resource_templates if hasattr(c, "list_resource_templates") else []
+            print(f"\nRessources : {', '.join(str(r.uri) for r in res)}"
+                  + (f" · modèles : {', '.join(getattr(t, 'uri_template', '') for t in tpl)}" if tpl else ""))
+            prompts = (await c.list_prompts()).prompts
+            print(f"Prompts : {', '.join(p.name for p in prompts)}")
+            status = await c.read_resource("monitoring://status")
+            text = status.contents[0].text if status.contents else "{}"
+            print("\nmonitoring://status (extrait) :\n  " + json.loads(text)["summary"].replace("\n", "\n  ")[:600])
+            hist = result_dict(await c.call_tool("performance_history", {"last_n": 4}))
+            print(f"\ntools/call performance_history -> {json.dumps(hist, ensure_ascii=False)[:400]}")
+            health = result_dict(await c.call_tool("service_health", {}))
+            print(f"tools/call service_health -> {json.dumps(health, ensure_ascii=False)[:300]}")
+
+    asyncio.run(run())
     return 0
 
 
@@ -503,11 +566,16 @@ def main(argv: list[str] | None = None) -> int:
     lfp.set_defaults(func=cmd_langfuse)
 
     me = sub.add_parser("memory", help="mémoire d'incidents (RAG hybride) : construire, évaluer, afficher")
-    me.add_argument("step", choices=["build", "eval", "show"])
+    me.add_argument("step", choices=["build", "eval", "show", "search"])
+    me.add_argument("--id", help="search : identifiant d'un scénario de test (défaut : le premier)")
     me.add_argument("--dir", default="runs/finetune", help="dossier contenant scenarios.jsonl")
     me.add_argument("--append", action="store_true")
     me.add_argument("--limit", type=int)
     me.set_defaults(func=cmd_memory)
+
+    mck = sub.add_parser("mcp-check", help="démo client MCP : liste et appelle les outils du serveur (stdio)")
+    mck.add_argument("project")
+    mck.set_defaults(func=cmd_mcp_check)
 
     ft = sub.add_parser("finetune", help="dataset de fine-tuning du diagnostiqueur local (Qwen3-4B, MLX)")
     ft.add_argument("step", choices=["bases", "scenarios", "teach", "build", "eval"])

@@ -110,6 +110,14 @@ def build(scenarios_path: Path, teacher_path: Path, out_dir: Path, templates: bo
         "seed": seed,
     }
     (out_dir / "lora.yaml").write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    # Variante « ~1 h » mesurée sur un M4 Pro 24 Go : 16 dernières couches, sans checkpointing, ~1,15 époque.
+    fast_iters = max(50, int(1.15 * n_train / batch_size))
+    fast_updates = max(1, fast_iters // grad_accum)
+    fast = {**config, "num_layers": 16, "grad_checkpoint": False, "iters": fast_iters, "val_batches": 8,
+            "steps_per_eval": 50, "save_every": 50,
+            "lr_schedule": {"name": "cosine_decay", "warmup": max(5, fast_updates // 10), "warmup_init": 1e-6,
+                            "arguments": [1e-4, fast_updates, 1e-6]}}
+    (out_dir / "lora_fast.yaml").write_text(yaml.safe_dump(fast, sort_keys=False, allow_unicode=True), encoding="utf-8")
     stats["lora"] = {"iters": iters, "updates": updates, "effective_batch": batch_size * grad_accum}
     (out_dir / "stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     return stats
