@@ -53,8 +53,10 @@ def column_quality(ref: ColumnReference, current: pd.DataFrame, cfg: QualityConf
         if len(vals) and ref.min is not None:
             out = float(np.mean((vals < ref.min) | (vals > ref.max)))
             if out > cfg.out_of_range_rate:
+                # Un peu hors bornes : le monde bouge (info). Massivement hors bornes : bug d'unité / de format.
                 issues.append(QualityIssue(
-                    feature=name, kind="out_of_range", value=round(out, 4), severity="info",
+                    feature=name, kind="out_of_range", value=round(out, 4),
+                    severity="warning" if out >= cfg.out_of_range_warning else "info",
                     detail=f"{out:.1%} hors de l'intervalle vu à l'entraînement [{ref.min:g}, {ref.max:g}]"))
     else:
         cats = stats.as_category_strings(present)

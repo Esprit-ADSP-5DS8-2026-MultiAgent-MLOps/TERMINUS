@@ -24,6 +24,7 @@ Sans LLM configuré, `diagnose` utilise le décideur à règles (rules.py) : l'a
 
 from __future__ import annotations
 
+import logging
 import operator
 import time
 import uuid
@@ -45,6 +46,8 @@ from .guards import evaluate, verify
 from .llm import ChatModel, LLMError, structured, usage_summary
 from .rules import diagnose_by_rules
 from .schemas import AgentRun, Diagnosis, JudgeVerdict, PolicyDecision, TraceStep, Verification
+
+log = logging.getLogger("monitoring_agent.agent")
 
 
 class AgentState(TypedDict, total=False):
@@ -93,8 +96,13 @@ def vote(samples: list[Diagnosis]) -> tuple[Diagnosis, float]:
 
 class MonitoringAgent:
     def __init__(self, decider: ChatModel | None, judge: ChatModel | None, out_dir: Path,
-                 config: AgentConfig | None = None, on_update: Callable[[AgentRun], None] | None = None):
+                 config: AgentConfig | None = None, on_update: Callable[[AgentRun], None] | None = None,
+                 investigator: ChatModel | None = None):
         self.decider, self.judge = decider, judge
+        # Diagnostiqueur local (SLM fine-tuné) : l'enquête est confiée à un grand modèle, et le SLM reçoit
+        # exactement le format sur lequel il a été entraîné (faits seuls).
+        self.investigator = investigator or getattr(decider, "investigator", None) or decider
+        self.facts_only = bool(getattr(decider, "local", False))
         self.out_dir = Path(out_dir)
         self.config = config or AgentConfig()
         self.on_update = on_update or (lambda run: None)
@@ -162,35 +170,50 @@ class MonitoringAgent:
         return {"facts": facts, **_step("prepare", t0, f"{len(facts)} faits calculés, "
                                         f"{len(case.current.signals)} signaux", signals=[s.kind for s in case.current.signals])}
 
+    def _toolbox(self, case: Case):
+        """Outils de l'enquête : via un serveur MCP (découverte + appels standard), sinon appel direct."""
+        if self.config.use_mcp:
+            try:
+                from .mcp_server import MCPToolbox, build_server
+                return MCPToolbox(build_server(lambda: case)).__enter__(), "mcp"
+            except Exception:
+                log.warning("serveur MCP indisponible, appel direct des outils", exc_info=True)
+        return None, "direct"
+
     def investigate(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
-        if self.decider is None:
+        if self.investigator is None:
             return _step("investigate", t0, "aucun LLM configuré : enquête sautée")
         case, facts = self._case(state), dict(state["facts"])
         messages = self._messages(prompts.INVESTIGATOR, case, facts)
         observations, notes, meter = [], "", []
+        box, transport = self._toolbox(case)
+        specs = box.specs if box else tool_specs()
         try:
             for _ in range(self.config.max_tool_calls):
-                resp = self.decider.chat(messages, tools=tool_specs(), temperature=0.0)
+                resp = self.investigator.chat(messages, tools=specs, temperature=0.0)
                 meter.append(resp)
                 if not resp.tool_calls:
                     notes = resp.text.strip()
                     break
                 messages.append(resp.raw_message)
                 for call in resp.tool_calls:
-                    result = call_tool(case, call.name, call.arguments)
+                    result = box.call(call.name, call.arguments) if box else call_tool(case, call.name, call.arguments)
                     facts.update(tool_facts(call.name, call.arguments, result))
                     observations.append({"tool": call.name, "args": call.arguments, "result": result})
                     messages.append({"role": "tool", "tool_call_id": call.id, "content": compact(result)})
         except LLMError as exc:
             return {"facts": facts, "observations": observations,
                     **_step("investigate", t0, f"enquête interrompue : {exc}"[:200], error=str(exc),
-                            usage=usage_summary(meter))}
+                            usage=usage_summary(meter), transport=transport)}
+        finally:
+            if box:
+                box.__exit__(None, None, None)
         calls = ", ".join(f"{o['tool']}({', '.join(f'{k}={v}' for k, v in o['args'].items())})" for o in observations)
         return {"facts": facts, "observations": observations, "notes": notes,
-                **_step("investigate", t0, f"{len(observations)} appels d'outils : {calls or 'aucun'}",
+                **_step("investigate", t0, f"{len(observations)} appels d'outils ({transport}) : {calls or 'aucun'}",
                         notes=notes, tools=[{"tool": o["tool"], "args": o["args"]} for o in observations],
-                        usage=usage_summary(meter))}
+                        usage=usage_summary(meter), transport=transport, tools_available=len(specs))}
 
     def diagnose(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
@@ -199,8 +222,8 @@ class MonitoringAgent:
             d = diagnose_by_rules(case)
             return {"samples": [d.model_dump()], "diagnosis": d.model_dump(), "agreement": 1.0, "decider": "rules",
                     **_step("diagnose", t0, f"décideur à règles : {d.root_cause} -> {d.action}")}
-        messages = self._messages(prompts.DIAGNOSER, case, state["facts"], notes=state.get("notes"),
-                                  similar=state.get("similar"), critique=state.get("critique"))
+        context = {} if self.facts_only else {"notes": state.get("notes"), "similar": state.get("similar")}
+        messages = self._messages(prompts.DIAGNOSER, case, state["facts"], critique=state.get("critique"), **context)
         # Les N diagnostics sont INDÉPENDANTS : on les lance en parallèle (latence ÷ N).
         meter: list = []
 

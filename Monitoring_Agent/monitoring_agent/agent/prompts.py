@@ -13,7 +13,7 @@ Techniques utilisées (fiche pour la soutenance) :
   LLM-AS-JUDGE avec grille, FEW-SHOT DYNAMIQUE via la mémoire d'incidents (<cas_similaires>, RAG).
 """
 
-PROMPT_VERSION = "2026-10-26.2"
+PROMPT_VERSION = "2026-10-26.3"
 
 CONTEXT_RULES = """\
 Règles absolues :
@@ -32,10 +32,11 @@ Procédure (suis-la dans l'ordre, arrête-toi à la première étape qui s'appli
 2. Performance dégradée ? Compare perf.realized.* et perf.estimated.* à perf.bound
    (pour roc_auc/accuracy/f1 : dégradé si EN DESSOUS ; pour mae/rmse : dégradé si AU-DESSUS).
    a. mesurée dégradée mais estimée normale -> concept_drift (la relation entrées -> cible a changé) ;
-   b. estimée dégradée (avec ou sans mesurée) et des features en drift -> covariate_shift ;
+   b. estimée dégradée (avec ou sans mesurée) -> covariate_shift (l'estimation ne baisse que si les
+      entrées ont bougé) ;
    c. action : request_retraining si des labels existent (perf.labels_available = 1),
       sinon open_incident (on attend la vérité terrain avant de réentraîner).
-3. Drift des entrées ou des prédictions SANS dégradation -> benign_drift, action increase_monitoring.
+3. Features ou prédictions en drift SANS dégradation -> benign_drift, action increase_monitoring.
 4. Rien de significatif -> no_issue, action no_action.
 rollback_model n'est proposé que si le service est gravement dégradé juste après un déploiement."""
 

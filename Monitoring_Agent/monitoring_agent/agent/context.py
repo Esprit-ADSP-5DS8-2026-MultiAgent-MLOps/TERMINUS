@@ -127,8 +127,9 @@ def case_facts(case: Case) -> dict[str, float]:
 def case_summary(case: Case) -> str:
     """Résumé déterministe de la situation, pour le LLM (et pour l'humain dans la console)."""
     w, m = case.current, case.mapping
+    threshold = f" (seuil métier {m.min_threshold:g})" if m.min_threshold is not None else ""
     lines = [(f"Projet : {case.project} · tâche {m.task} · métrique principale {m.primary_metric}"
-             f" (seuil métier {m.min_threshold}) · {len(m.features)} features."),
+             f"{threshold} · {len(m.features)} features."),
              f"Fenêtre courante : n°{w.window.index}, {w.window.n_rows} prédictions, sévérité {w.severity}.",
              "Signaux calculés par le moteur d'analyse :"]
     lines += [f"  - [{s.severity}] {s.kind} : {s.message}" for s in w.signals] or ["  - aucun"]

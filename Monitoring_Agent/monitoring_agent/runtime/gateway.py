@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -72,6 +73,14 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     if agent and supervisor is None:
         supervisor = Supervisor(target, store)
     monitor = Monitor(target, store, metrics, on_trigger=supervisor.on_trigger if supervisor else None)
+    # Serveur MCP du projet, monté sur /mcp/ (Streamable HTTP) : Claude Desktop, MCP Inspector, l'orchestrateur
+    # ou un autre agent peuvent interroger le monitoring avec les mêmes outils que l'enquêteur.
+    from ..agent.mcp_server import server_for_target
+    mcp_server = server_for_target(target, store)
+    from mcp.server.transport_security import TransportSecuritySettings
+    hosts = os.environ.get("MONITORING_MCP_ALLOWED_HOSTS", "localhost:*,127.0.0.1:*,host.docker.internal:*").split(",")
+    mcp_app = mcp_server.streamable_http_app(   # protection DNS-rebinding : seuls ces hôtes sont acceptés
+        streamable_http_path="/", transport_security=TransportSecuritySettings(allowed_hosts=hosts))
 
     async def monitor_loop(client: httpx.AsyncClient) -> None:
         while True:
@@ -92,7 +101,8 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     async def lifespan(app: FastAPI):
         app.state.client = httpx.AsyncClient(base_url=target.upstream_url, timeout=10.0, transport=transport)
         task = asyncio.create_task(monitor_loop(app.state.client)) if run_monitor else None
-        yield
+        async with mcp_server.session_manager.run():   # le cycle de vie d'une sous-app montée n'est pas lancé seul
+            yield
         if task:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -105,6 +115,7 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     app = FastAPI(title=f"Monitoring gateway — {target.project}", version="0.2", lifespan=lifespan)
     app.state.store, app.state.metrics, app.state.monitor, app.state.target = store, metrics, monitor, target
     app.state.supervisor = supervisor
+    app.mount("/mcp", mcp_app)
 
     @app.post("/predict")
     async def predict(request: Request):

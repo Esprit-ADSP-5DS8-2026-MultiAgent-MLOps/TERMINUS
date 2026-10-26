@@ -31,7 +31,8 @@ class QualityConfig:
     missing_critical: float = 0.20
     unseen_rate: float = 0.01          # >1 % de catégories jamais vues
     unseen_critical: float = 0.10
-    out_of_range_rate: float = 0.01    # >1 % hors de [min, max] de la référence
+    out_of_range_rate: float = 0.01    # >1 % hors de [min, max] de la référence : information
+    out_of_range_warning: float = 0.30  # >=30 % hors de TOUT ce qui a été vu : changement d'unité, pas un drift
     type_mismatch_rate: float = 0.0    # une seule valeur non numérique suffit
 
 
@@ -70,4 +71,5 @@ class AgentConfig:
     sample_temperature: float = 0.7    # diversité entre les 3 (le vote mesure l'incertitude)
     max_tool_calls: int = 6            # budget de l'enquête
     max_revisions: int = 1             # le juge peut demander UNE révision
+    use_mcp: bool = True               # l'enquêteur découvre et appelle les outils via MCP (sinon : appel direct)
     policy: PolicyConfig = field(default_factory=PolicyConfig)

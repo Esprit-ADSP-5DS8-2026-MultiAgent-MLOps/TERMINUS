@@ -29,7 +29,9 @@ PROVIDERS = {
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
+    "mlx": ("http://127.0.0.1:8080/v1", None),      # mlx_lm.server (modèle local + adaptateur LoRA)
 }
+LOCAL = ("ollama", "mlx")
 # Les catalogues changent vite (llama-3.3 et gemini-2.5-flash ont été retirés en 2026) :
 # `python -m monitoring_agent llm-check` liste ce qui est disponible ; on surcharge dans .env.
 DEFAULTS = {
@@ -254,12 +256,24 @@ def build_model(spec: str, settings: dict[str, str]) -> OpenAICompatModel | None
                              reasoning_effort=settings.get("MONITORING_REASONING_EFFORT"))
 
 
+def _chain(specs: list[str], settings: dict[str, str]) -> ChatModel | None:
+    models = [m for m in (build_model(x, settings) for x in specs if x) if m is not None]
+    return FallbackModel(models) if len(models) > 1 else (models[0] if models else None)
+
+
 def decider_and_judge() -> tuple[ChatModel | None, ChatModel | None]:
+    """Décideur (avec repli) et juge, depuis .env.
+
+    Si le décideur est LOCAL (mlx / ollama : le Qwen fine-tuné), il ne fait que DIAGNOSTIQUER, sur les faits
+    seuls (le format appris à l'entraînement) ; l'enquête avec outils reste à un grand modèle
+    (MONITORING_INVESTIGATOR). Repli automatique sur Groq si le serveur local est arrêté."""
     s = _settings()
-    primary = build_model(s.get("MONITORING_DECIDER", DEFAULTS["MONITORING_DECIDER"]), s)
-    fallback = build_model(s.get("MONITORING_DECIDER_FALLBACK", DEFAULTS["MONITORING_DECIDER_FALLBACK"]), s)
-    chain = [m for m in (primary, fallback) if m is not None]
-    decider = FallbackModel(chain) if len(chain) > 1 else (chain[0] if chain else None)
+    spec = s.get("MONITORING_DECIDER", DEFAULTS["MONITORING_DECIDER"])
+    fallback = s.get("MONITORING_DECIDER_FALLBACK", DEFAULTS["MONITORING_DECIDER_FALLBACK"])
+    decider = _chain([spec, fallback], s)
+    if decider is not None and spec.partition(":")[0] in LOCAL:
+        decider.local = True
+        decider.investigator = _chain([s.get("MONITORING_INVESTIGATOR", DEFAULTS["MONITORING_DECIDER"]), fallback], s)
     judge = build_model(s.get("MONITORING_JUDGE", DEFAULTS["MONITORING_JUDGE"]), s)
     return decider, judge
 

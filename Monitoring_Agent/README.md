@@ -206,6 +206,42 @@ rejet explicite du juge, désaccord entre le LLM et le second avis déterministe
 disjoncteur. Si le juge est indisponible ou hésite, LLM + règles concordants suffisent ; si les preuves du LLM
 restent invérifiables, l'agent applique le décideur à règles au lieu d'escalader.
 
+## Étape 6 — Outils en MCP
+
+Les outils d'enquête (lecture seule) sont servis par un **serveur MCP** (`agent/mcp_server.py`, SDK `mcp` 2.x) :
+8 outils (`feature_history`, `performance_history`, `quality_details`, `prediction_drift`, `active_alerts`,
+`previous_decisions`, `window_facts_at`, `service_health` via Prometheus), des ressources
+(`monitoring://status`, `monitoring://policy`, `monitoring://decisions/{id}`) et des prompts (`diagnose`, `explain_decision`).
+
+- l'enquêteur de l'agent est un **client MCP** : il découvre les outils (`tools/list`) puis les appelle (`tools/call`) ;
+- la gateway monte le même serveur sur **`http://localhost:8100/mcp/`** (Streamable HTTP) ;
+- en stdio pour Claude Desktop / MCP Inspector : `python -m monitoring_agent mcp credit_risk`.
+
+Aucun outil MCP n'agit : agir reste derrière la vérification, le juge et la policy.
+
+## Étape 7 — Fine-tuning du diagnostiqueur local (Qwen3-4B-Instruct-2507, MLX)
+
+```bash
+python -m monitoring_agent finetune bases                    # bases disponibles (data/)
+python -m monitoring_agent finetune scenarios --per-base 220 # scénarios injectés + étiquetés (reprenable)
+python -m monitoring_agent finetune teach --max-calls 400    # distillation vérifiée (Groq), reprenable, à relancer
+python -m monitoring_agent finetune build                    # train/valid/test + lora.yaml
+mlx_lm.lora --config runs/finetune/data/lora.yaml            # QLoRA sur Mac (Apple Silicon)
+mlx_lm.server --model mlx-community/Qwen3-4B-Instruct-2507-4bit \
+              --adapter-path runs/finetune/data/adapters --port 8080
+python -m monitoring_agent finetune eval --models mlx:default_model,groq:openai/gpt-oss-120b
+```
+
+- **Scénarios** : on casse la production d'une façon connue (shift, concept, pannes de données, labels en retard)
+  et le vrai moteur d'analyse calcule les signaux. Un scénario n'est gardé que si l'injection et l'oracle
+  (la procédure, `rules.procedure`) concluent la même chose.
+- **Découpage par base** : train = 6 bases, valid = `mc_prepaid`, test = `car_loan` / `car_price` (jamais vues).
+- **Professeur** : réponse à l'aveugle gardée si cause + action + preuves vérifiées ; sinon rationalisation (STaR)
+  avec la bonne réponse en indice ; l'exemple d'entraînement garde le prompt sans l'indice.
+- **LoRA** : rang 16, alpha 32, toutes les couches, lr 1e-4 cosinus + warmup, batch effectif 8, `mask_prompt`.
+- **En production** : `MONITORING_DECIDER=mlx:default_model` dans `.env` → le SLM diagnostique (faits seuls),
+  l'enquête reste à `MONITORING_INVESTIGATOR` (Groq), repli automatique sur Groq si le serveur local est arrêté.
+
 ## Structure
 
 ```

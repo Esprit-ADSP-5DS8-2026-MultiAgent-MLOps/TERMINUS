@@ -32,35 +32,54 @@ def claim_for(key: str) -> str:
     return key
 
 
+def procedure(case: Case) -> tuple[str, str]:
+    """La PROCÉDURE du prompt (prompts.PROCEDURE), en code : (cause, action).
+
+    Source unique de vérité : le décideur à règles, l'oracle du dataset de fine-tuning et le prompt
+    suivent le même ordre. Un changement ici doit être répercuté dans prompts.PROCEDURE."""
+    kinds = case.signal_kinds()
+    perf = case.current.performance
+    labels = bool(perf and perf.labels_available)
+    if case.has_quality_problem():
+        return "data_quality", "notify_data_team"
+    if kinds & {"performance_drop_realized", "performance_drop_estimated"}:
+        cause = "concept_drift" if "concept_drift_suspected" in kinds else "covariate_shift"
+        return cause, "request_retraining" if labels else "open_incident"
+    if case.current.dataset_drift.n_drifted or "prediction_drift" in kinds:
+        return "benign_drift", "increase_monitoring"
+    return "no_issue", "no_action"
+
+
 def diagnose_by_rules(case: Case) -> Diagnosis:
     w, facts, m = case.current, case_facts(case), case.mapping.primary_metric
-    kinds = case.signal_kinds()
     drifted = w.dataset_drift.drifted_features
+    cause, action = procedure(case)
 
     def ev(*keys: str) -> list[Evidence]:
         return [Evidence(fact=k, value=facts[k], claim=claim_for(k)) for k in keys if k in facts]
 
     top_psi = sorted((k for k in facts if k.startswith("drift.") and k.endswith(".psi")),
                      key=lambda k: -facts[k])[:3]
+    perf_key = f"perf.realized.{m}" if f"perf.realized.{m}" in facts else f"perf.estimated.{m}"
+    labels = "" if action != "open_incident" else " Pas encore de labels : incident ouvert, réentraînement plus tard."
 
-    if case.has_quality_problem():
-        q = [k for k in facts if k.startswith("quality.")][:3]
-        return Diagnosis(root_cause="data_quality", summary="Problème de qualité des données détecté.",
+    if cause == "data_quality":
+        q = sorted((k for k in facts if k.startswith("quality.")), key=lambda k: -facts[k])[:3]
+        return Diagnosis(root_cause=cause, summary="Problème de qualité des données détecté.",
                          affected_features=sorted({k.split(".")[1] for k in q}), evidence=ev(*q),
-                         action="notify_data_team", rationale="La source de données doit être corrigée.", confidence=0.8)
-    if "concept_drift_suspected" in kinds:
-        return Diagnosis(root_cause="concept_drift", summary="Performance mesurée en baisse, estimation stable.",
+                         action=action, rationale="La source de données doit être corrigée avant tout réentraînement.",
+                         confidence=0.8)
+    if cause == "concept_drift":
+        return Diagnosis(root_cause=cause, summary="Performance mesurée en baisse, estimation stable.",
                          affected_features=drifted, evidence=ev(f"perf.realized.{m}", f"perf.estimated.{m}", "perf.bound"),
-                         action="request_retraining", rationale="La relation features -> cible a changé.", confidence=0.7)
-    if kinds & {"performance_drop_realized", "performance_drop_estimated"}:
-        key = f"perf.realized.{m}" if "performance_drop_realized" in kinds else f"perf.estimated.{m}"
-        return Diagnosis(root_cause="covariate_shift" if drifted else "concept_drift",
-                         summary="Baisse de performance associée au drift." if drifted else "Baisse de performance.",
-                         affected_features=drifted, evidence=ev(key, "perf.bound", *top_psi),
-                         action="request_retraining", rationale="Performance sous la variabilité normale.", confidence=0.7)
-    if drifted or "prediction_drift" in kinds:
-        return Diagnosis(root_cause="benign_drift", summary="Drift sans baisse de performance.",
+                         action=action, rationale="La relation features -> cible a changé." + labels, confidence=0.7)
+    if cause == "covariate_shift":
+        return Diagnosis(root_cause=cause, summary="Baisse de performance associée au drift des entrées.",
+                         affected_features=drifted, evidence=ev(perf_key, "perf.bound", *top_psi),
+                         action=action, rationale="Performance sous la variabilité normale." + labels, confidence=0.7)
+    if cause == "benign_drift":
+        return Diagnosis(root_cause=cause, summary="Drift sans baisse de performance.",
                          affected_features=drifted, evidence=ev(*top_psi),
-                         action="increase_monitoring", rationale="Drift ≠ dégradation : on surveille.", confidence=0.7)
+                         action=action, rationale="Drift ≠ dégradation : on surveille.", confidence=0.7)
     return Diagnosis(root_cause="no_issue", summary="Rien d'anormal.", action="no_action",
                      rationale="Aucun signal significatif.", confidence=0.9)

@@ -19,6 +19,7 @@ Ligne de commande de l'Agent 4.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -308,6 +309,63 @@ def cmd_simulate(args) -> int:
     return 0
 
 
+def cmd_mcp(args) -> int:
+    """Serveur MCP en stdio (Claude Desktop, MCP Inspector) sur un projet monitoré."""
+    from .agent.mcp_server import server_for_target
+    from .runtime.store import Store
+    from .runtime.target import MonitoringTarget
+    target = MonitoringTarget.load(args.project)
+    server_for_target(target, Store(target.store_path)).run("stdio")
+    return 0
+
+
+FT_DIR = "runs/finetune"
+FT_SPLITS = {"train": ["synthetic_sample", "employment_MA", "bank", "bike", "california", "california_reg"],
+             "valid": ["mc_prepaid"], "test": ["car_loan", "car_price"]}
+
+
+def cmd_finetune(args) -> int:
+    from pathlib import Path
+
+    from .finetune import bases
+    out = Path(args.dir)
+    scen, teach_out, data = out / "scenarios.jsonl", out / "teacher.jsonl", out / "data"
+    if args.step == "bases":
+        for name, line in bases.available().items():
+            print(f"  {name:<17} {line}")
+        return 0
+    if args.step == "scenarios":
+        from .finetune.scenarios import generate
+        per = {b: args.per_base for b in FT_SPLITS["train"]}
+        per |= {b: max(40, args.per_base // 2) for b in FT_SPLITS["valid"] + FT_SPLITS["test"]}
+        stats = generate(scen, per, workers=args.workers)
+        kept = sum(v for (_b, _i, ok), v in stats.items() if ok)
+        print(f"{kept} scénarios acceptés / {sum(stats.values())} générés -> {scen}")
+        return 0
+    if args.step == "teach":
+        from .finetune.teacher import teach
+        teach(scen, teach_out, args.teachers, args.max_calls)
+        return 0
+    if args.step == "build":
+        from .finetune.build import build
+        stats = build(scen, teach_out, data, templates=not args.no_templates, epochs=args.epochs)
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        print(f"\nEntraînement (Mac Apple Silicon) :\n  mlx_lm.lora --config {data / 'lora.yaml'}")
+        return 0
+    if args.step == "eval":
+        from .finetune.evaluate import evaluate_model, report
+        results = []
+        for spec in args.models.split(","):
+            print(f"\n== {spec}")
+            results.append(evaluate_model(spec.strip(), data / "test_cases.jsonl", args.limit))
+        md = report(results)
+        (out / "eval_slm.md").write_text(md, encoding="utf-8")
+        (out / "eval_slm.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("\n" + md)
+        return 0
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m monitoring_agent", description="Agent 4 : monitoring")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -370,6 +428,23 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--no-labels", action="store_true", help="aucun label de production (estimation seule)")
     a.add_argument("--out", help="chemin du monitoring_report.json")
     a.set_defaults(func=cmd_analyze)
+
+    mc = sub.add_parser("mcp", help="serveur MCP (stdio) d'un projet monitoré, pour Claude Desktop / MCP Inspector")
+    mc.add_argument("project")
+    mc.set_defaults(func=cmd_mcp)
+
+    ft = sub.add_parser("finetune", help="dataset de fine-tuning du diagnostiqueur local (Qwen3-4B, MLX)")
+    ft.add_argument("step", choices=["bases", "scenarios", "teach", "build", "eval"])
+    ft.add_argument("--dir", default=FT_DIR)
+    ft.add_argument("--per-base", type=int, default=220, help="scenarios : exemples acceptés par base d'entraînement")
+    ft.add_argument("--teachers", help="teach : liste fournisseur:modèle séparée par des virgules")
+    ft.add_argument("--max-calls", type=int, default=400, help="teach : budget d'appels LLM pour cette session")
+    ft.add_argument("--no-templates", action="store_true", help="build : seulement les exemples du professeur")
+    ft.add_argument("--epochs", type=int, default=2)
+    ft.add_argument("--workers", type=int, help="scenarios : processus en parallèle (défaut : nb de cœurs - 1)")
+    ft.add_argument("--models", default="mlx:default_model", help="eval : modèles à comparer (virgules)")
+    ft.add_argument("--limit", type=int)
+    ft.set_defaults(func=cmd_finetune)
 
     args = parser.parse_args(argv)
     return args.func(args)

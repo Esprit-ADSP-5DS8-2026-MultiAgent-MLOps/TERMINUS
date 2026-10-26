@@ -173,6 +173,9 @@ def test_full_graph_executes_retraining_request(analyzer, tmp_path):
     req = json.loads((tmp_path / "retraining_request.json").read_text())
     assert req["model_uri"] == "models:/demo/1" and req["reason"] == "performance_drop"
     assert len(run.samples) == 3 and run.agreement == 1.0
+    inv = run.trace[1].detail
+    assert inv["transport"] == "mcp" and inv["tools_available"] >= 8      # outils découverts via MCP (tools/list)
+    assert inv["tools"] == [{"tool": "feature_history", "args": {"feature": "x"}}]
 
 
 def test_hallucination_triggers_one_revision(analyzer, tmp_path):

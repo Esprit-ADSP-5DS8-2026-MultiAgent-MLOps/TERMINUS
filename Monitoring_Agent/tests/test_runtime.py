@@ -250,3 +250,12 @@ def test_trigger_during_work_is_replayed_not_lost(client):
             break
         time.sleep(0.05)
     assert calls[-1] == reports[1].window.index and len(calls) >= 2
+
+
+def test_gateway_exposes_mcp_server(client):
+    """Le monitoring est interrogeable en MCP (Streamable HTTP) par un client extérieur."""
+    r = client.post("/mcp/", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}}},
+        headers={"Accept": "application/json, text/event-stream", "Host": "localhost:8100"})
+    assert r.status_code == 200, r.text
+    assert "agent4-monitoring" in r.text

@@ -130,9 +130,15 @@ class DLE:
         self.sq_model = HistGradientBoostingRegressor(**params)
 
     def _frame(self, df: pd.DataFrame, y_pred) -> pd.DataFrame:
-        X = df[self.features].copy()
-        for c in self.categorical:
-            X[c] = pd.Categorical(X[c].astype("string"), categories=self.categories[c])
+        # Données abîmées (colonne absente, texte dans une colonne numérique) : l'estimation doit
+        # continuer — c'est justement là que la qualité des données lève son propre signal.
+        X = pd.DataFrame(index=df.index)
+        for c in self.features:
+            col = df[c] if c in df.columns else pd.Series(np.nan, index=df.index)
+            if c in self.categorical:
+                X[c] = pd.Categorical(col.astype("string"), categories=self.categories[c])
+            else:
+                X[c] = pd.to_numeric(col, errors="coerce")
         X["__prediction__"] = np.asarray(y_pred, dtype=float)
         return X
 
