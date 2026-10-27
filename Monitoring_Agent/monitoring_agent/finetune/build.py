@@ -110,10 +110,11 @@ def build(scenarios_path: Path, teacher_path: Path, out_dir: Path, templates: bo
         "seed": seed,
     }
     (out_dir / "lora.yaml").write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
-    # Variante « ~1 h » mesurée sur un M4 Pro 24 Go : 16 dernières couches, sans checkpointing, ~1,15 époque.
+    # Variante mesurée sur un M4 Pro 24 Go : 16 dernières couches, ~1,15 époque ; le checkpointing reste
+    # obligatoire (sans lui : « Insufficient Memory » sur 24 Go).
     fast_iters = max(50, int(1.15 * n_train / batch_size))
     fast_updates = max(1, fast_iters // grad_accum)
-    fast = {**config, "num_layers": 16, "grad_checkpoint": False, "iters": fast_iters, "val_batches": 8,
+    fast = {**config, "num_layers": 16, "grad_checkpoint": True, "iters": fast_iters, "val_batches": 8,
             "steps_per_eval": 50, "save_every": 50,
             "lr_schedule": {"name": "cosine_decay", "warmup": max(5, fast_updates // 10), "warmup_init": 1e-6,
                             "arguments": [1e-4, fast_updates, 1e-6]}}
