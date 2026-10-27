@@ -480,13 +480,19 @@ def cmd_finetune(args) -> int:
         return 0
     if args.step == "eval":
         from .finetune.evaluate import evaluate_model, report
-        results = []
-        for spec in args.models.split(","):
-            print(f"\n== {spec}")
-            results.append(evaluate_model(spec.strip(), data / "test_cases.jsonl", args.limit))
-        md = report(results)
+        # Résultats CUMULÉS entre les lancements (« modèle=étiquette ») : on peut évaluer le Qwen de base,
+        # redémarrer le serveur avec l'adaptateur, évaluer le fine-tuné, puis le grand LLM, et tout comparer.
+        store = out / "eval_slm.json"
+        results = {r["model"]: r for r in (json.loads(store.read_text(encoding="utf-8")) if store.exists() else [])}
+        for item in args.models.split(","):
+            spec, _, label = item.strip().partition("=")
+            print(f"\n== {label or spec}")
+            r = evaluate_model(spec, data / "test_cases.jsonl", args.limit)
+            r["model"] = label or spec
+            results[r["model"]] = r
+        md = report(list(results.values()))
         (out / "eval_slm.md").write_text(md, encoding="utf-8")
-        (out / "eval_slm.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+        store.write_text(json.dumps(list(results.values()), ensure_ascii=False, indent=2), encoding="utf-8")
         print("\n" + md)
         return 0
     return 1

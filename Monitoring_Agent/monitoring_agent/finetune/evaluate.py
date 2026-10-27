@@ -30,7 +30,11 @@ def evaluate_model(spec: str, cases_path: Path, limit: int | None = None, progre
     model = build_model(spec, _settings())
     if model is None:
         raise LLMError(f"clé manquante pour {spec}")
-    cases = [json.loads(x) for x in cases_path.read_text(encoding="utf-8").splitlines() if x.strip()][:limit]
+    cases = [json.loads(x) for x in cases_path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    if limit and limit < len(cases):
+        # Échantillon RÉGULIER (pas les N premiers) : car_loan ET car_price, toutes les injections
+        step = len(cases) / limit
+        cases = [cases[int(i * step)] for i in range(limit)]
     rows = []
     for i, c in enumerate(cases, 1):
         meter: list = []
