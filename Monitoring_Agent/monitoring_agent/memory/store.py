@@ -174,9 +174,12 @@ class IncidentMemory:
 
     def search_vectors(self, q_text, q_sig, family: str, k: int = 3, candidates: int = 20, min_text: float = 0.55,
                        min_sig: float = 0.75, mode: str = "hybrid", exclude: set[str] | None = None,
+                       exclude_sources: tuple[str, ...] = (),
                        text_weight: float | None = None) -> list[dict]:
         from qdrant_client import models
-        flt = models.Filter(must=[models.FieldCondition(key="family", match=models.MatchValue(value=family))])
+        flt = models.Filter(must=[models.FieldCondition(key="family", match=models.MatchValue(value=family))],
+                            must_not=[models.FieldCondition(key="source", match=models.MatchAny(any=list(exclude_sources)))]
+                            if exclude_sources else None)
         by_text = self.client.query_points(COLLECTION, query=list(map(float, q_text)), using="text", query_filter=flt,
                                            limit=candidates, with_payload=True).points
         by_sig = self.client.query_points(COLLECTION, query=list(map(float, q_sig)), using="sig", query_filter=flt,
@@ -226,6 +229,8 @@ def default_memory() -> IncidentMemory | None:
     if path not in _OPEN:
         try:
             _OPEN[path] = IncidentMemory(path)
+            import atexit
+            atexit.register(_OPEN[path].client.close)   # fermeture propre (sinon message d'erreur à la sortie)
         except Exception:
             log.warning("mémoire d'incidents indisponible (%s)", path, exc_info=True)
             return None
@@ -243,7 +248,9 @@ def _queries(memory: IncidentMemory, scenarios: list[dict]) -> list[tuple]:
 def _score(memory: IncidentMemory, queries: list[tuple], k: int, mode: str, text_weight: float | None = None) -> dict:
     hits_at, prec, rr, empty = [], [], [], 0
     for q_text, q_sig, cause in queries:
-        res = memory.search_vectors(q_text, q_sig, "ml", k=k, mode=mode, text_weight=text_weight)
+        # Les décisions de l'agent (ex. sur car_loan) sont exclues : sinon le test verrait ses propres bases.
+        res = memory.search_vectors(q_text, q_sig, "ml", k=k, mode=mode, text_weight=text_weight,
+                                    exclude_sources=("agent",))
         good = [h["root_cause"] == cause for h in res]
         empty += not res
         hits_at.append(any(good))

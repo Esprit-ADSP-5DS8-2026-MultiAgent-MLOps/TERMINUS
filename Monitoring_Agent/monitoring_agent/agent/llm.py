@@ -105,7 +105,9 @@ class OpenAICompatModel:
         self.retries, self.max_wait_s = retries, max_wait_s
         # Modèles « de raisonnement » (gpt-oss) : ils réfléchissent avant de répondre, et ces jetons
         # comptent dans max_tokens. « medium » : bon compromis qualité / latence / quota.
-        self.reasoning_effort = reasoning_effort or ("medium" if "gpt-oss" in model else None)
+        # Gemini 3.x réfléchit longuement par défaut (juge : ~80 s) : « low » suffit pour noter une grille.
+        self.reasoning_effort = reasoning_effort or ("medium" if "gpt-oss" in model else
+                                                     "low" if provider == "gemini" else None)
         self.schema_ok = True   # passe à False si le fournisseur refuse response_format=json_schema
 
     def chat(self, messages, tools=None, json_mode=False, temperature=0.0) -> LLMResponse:
@@ -267,7 +269,8 @@ def build_model(spec: str, settings: dict[str, str]) -> OpenAICompatModel | None
     if key_env and not key:
         return None
     return OpenAICompatModel(provider, model, key, settings.get(f"MONITORING_{provider.upper()}_BASE_URL"),
-                             reasoning_effort=settings.get("MONITORING_REASONING_EFFORT"))
+                             reasoning_effort=settings.get(f"MONITORING_{provider.upper()}_REASONING_EFFORT")
+                             or (settings.get("MONITORING_REASONING_EFFORT") if provider == "groq" else None))
 
 
 def _chain(specs: list[str], settings: dict[str, str]) -> ChatModel | None:
