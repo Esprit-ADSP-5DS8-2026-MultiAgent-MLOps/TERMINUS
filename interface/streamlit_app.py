@@ -78,6 +78,18 @@ GATES = {
     "manifest_confirmation": "Valider le manifeste proposé",
     "champion_replacement": "Mettre ce modèle en production",
     "retraining": "Réentraîner le modèle",
+    "failure_review": "Relancer l'étape qui a échoué",
+}
+
+SUPERVISORS = {"rules": "Règles (sans IA)", "gemini": "Gemini (LLM)"}
+FAILURES = {None: "aucune", "transient": "passagère (réseau)", "permanent": "permanente (erreur de contenu)"}
+ACTION_LABELS = {
+    "agent1": "lancer l'analyse", "agent2": "lancer MLflow", "agent3": "lancer le déploiement",
+    "agent4": "lancer le monitoring", "propose_manifest": "proposer un manifeste",
+    "gate_manifest": "demander une validation", "gate_champion": "demander une validation",
+    "gate_retraining": "demander une validation", "gate_failure": "demander à un humain",
+    "retry": "réessayer", "end_done": "terminer", "end_failed": "arrêter", "end_blocked": "arrêter",
+    "end_rejected": "arrêter", "end_manifest_proposed": "terminer",
 }
 
 # --- style -------------------------------------------------------------------
@@ -122,6 +134,7 @@ GATE_STATION = {"champion_replacement": "agent2", "manifest_confirmation": "agen
 def station_states(state: dict, pending_gate: str | None) -> dict[str, tuple[str, str]]:
     """Pour chaque station : (couleur, texte sous la station)."""
     results = dict(state.get("results", {}))
+    attempts = state.get("attempts", {})
     if "propose_manifest" in results:
         results["agent1"] = results["propose_manifest"]
     out = {}
@@ -133,7 +146,8 @@ def station_states(state: dict, pending_gate: str | None) -> dict[str, tuple[str
         color, label = RESULT_LOOK.get(r["status"], ("idle", r["status"]))
         if r["status"] == "NEEDS_APPROVAL" and GATE_STATION.get(pending_gate) != key:
             color, label = "ok", "terminé"  # sa décision a déjà été prise
-        out[key] = (color, f"{label} · {r['duration_s']} s")
+        tries = attempts.get(key, 0)
+        out[key] = (color, f"{label} · {r['duration_s']} s" + (f" · {tries + 1} essais" if tries else ""))
     return out
 
 
@@ -272,6 +286,15 @@ def quality_gauge(gate: dict) -> str:
 
 
 def gate_evidence(q: dict) -> None:
+    if q["gate"] == "failure_review":
+        step = STEP_NAMES.get(q.get("failed_step", ""), q.get("failed_step", ""))
+        reasons = "".join(f'<div class="d">{esc(r)}</div>' for r in q.get("reasons", []))
+        st.markdown(f'<div class="banner" style="--c:{COLORS["fail"]};padding:.6rem 1rem">'
+                    f'<div style="font-weight:600">{esc(step)} a échoué</div>{reasons}</div>',
+                    unsafe_allow_html=True)
+        if q.get("supervisor_explanation"):
+            st.caption(f"Avis du superviseur : {q['supervisor_explanation']}")
+        return
     data = load_json(q.get("file_to_review"))
     if data is None:
         return
@@ -320,6 +343,41 @@ def show_gate(run: Run) -> None:
         with st.spinner("Reprise du pipeline…"):
             run.answer({"decision": decision, "by": getpass.getuser(), "comment": comment})
         st.rerun()
+
+
+# --- décisions du superviseur -------------------------------------------------------
+
+GATE_STEPS = {
+    "gate_manifest": "la validation du manifeste",
+    "gate_champion": "la validation de la mise en production",
+    "gate_retraining": "la décision de réentraînement",
+    "gate_failure": "la décision après l'échec",
+}
+
+def supervision_panel(state: dict) -> None:
+    entries = state.get("supervision", [])
+    if not entries:
+        return
+    mode = state.get("supervisor_mode", "rules")
+    st.markdown(f"#### Décisions du superviseur · {SUPERVISORS.get(mode, mode)}")
+    fallbacks = sum(1 for e in entries if e.get("fallback"))
+    if mode != "rules":
+        agree = sum(1 for e in entries if not e.get("fallback") and e["action"] == e["rule_choice"])
+        st.caption(f"{len(entries)} décisions · {agree} identiques aux règles · "
+                   f"{len(entries) - agree - fallbacks} différentes · {fallbacks} reprises par les règles")
+    items = []
+    for e in entries:
+        kind = "fail" if e.get("fallback") else ("wait" if e["action"] != e["rule_choice"] else "ok")
+        after = STEP_NAMES.get(e["after"]) or GATE_STEPS.get(e["after"], e["after"])
+        note = (f'<div class="m" style="color:{COLORS["fail"]}">Secours : {esc(e["fallback"])}</div>'
+                if e.get("fallback") else "")
+        items.append(
+            f'<li style="--c:{COLORS[kind]}"><div class="n">Après {esc(after)} : '
+            f'{esc(ACTION_LABELS.get(e["action"], e["action"]))}</div>'
+            f'<div class="r">{esc(e["explanation"])}</div>{note}</li>'
+        )
+    with st.expander("Voir les décisions", expanded=mode != "rules"):
+        st.markdown('<ul class="log">' + "".join(items) + "</ul>", unsafe_allow_html=True)
 
 
 # --- projet refusé : ce qu'il faut corriger --------------------------------------------
@@ -445,6 +503,7 @@ def show_history(runs: list[Run]) -> None:
             "étapes": len(results),
             "durée (s)": round(sum((x.get("duration_s") or 0) for x in results.values()), 2),
             "décisions": len(s.get("decisions", [])),
+            "superviseur": SUPERVISORS.get(s.get("supervisor_mode", "rules"), "?"),
         })
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Runs", len(runs))
@@ -485,7 +544,7 @@ st.set_page_config(page_title="Orchestrateur MLOps", page_icon="🚉", layout="w
 st.markdown(CSS, unsafe_allow_html=True)
 st.title("Orchestrateur MLOps")
 st.markdown(
-    '<div class="subline">Validateur réel, agents 1 à 4 simulés en attendant leur intégration. '
+    '<div class="subline">Validateur réel, agents 1 à 4 simulés en attendant leur intégration, superviseur au choix. '
     f'Sauvegarde : <b>{esc(describe_backend(RUNS))}</b></div>',
     unsafe_allow_html=True,
 )
@@ -499,11 +558,18 @@ except RuntimeError as exc:  # base injoignable : on le dit clairement
 with st.sidebar:
     st.markdown("### Nouveau run")
     project = st.selectbox("Projet ML", list_projects(), format_func=project_label)
+    supervisor_mode = st.radio("Qui décide de la suite ?", list(SUPERVISORS),
+                               format_func=SUPERVISORS.get, horizontal=True)
+    if supervisor_mode == "gemini" and not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
+        st.warning("Clé GEMINI_API_KEY absente : les règles prendront le relais à chaque décision.")
     drift = st.toggle("Simuler un drift au monitoring")
+    failure = st.selectbox("Simuler une panne du déploiement", list(FAILURES), format_func=FAILURES.get)
     if st.button("Lancer le pipeline", type="primary", width="stretch"):
-        os.environ["ORCH_SIMULATE_DRIFT"] = "1" if drift else "0"
         with st.spinner("Validation du projet… jusqu'à une minute la première fois"):
-            st.session_state.run_id = Run.start(str(project), runs_dir=str(RUNS)).run_id
+            st.session_state.run_id = Run.start(
+                str(project), runs_dir=str(RUNS), supervisor=supervisor_mode,
+                simulate={"drift": drift, "failure": failure},
+            ).run_id
         st.rerun()
 
     pending = [r for r in all_runs if r.status in ("WAITING_HUMAN", "INTERRUPTED")]
@@ -528,7 +594,8 @@ with tab_run:
     else:
         run = Run.load(run_id, runs_dir=str(RUNS))
         state, status = run.state, run.status
-        st.markdown(f"#### Run {run.run_id} · {Path(state['project_dir']).name}")
+        mode = SUPERVISORS.get(state.get("supervisor_mode", "rules"), "")
+        st.markdown(f"#### Run {run.run_id} · {Path(state['project_dir']).name} · {mode}")
         st.markdown(linemap(run, state), unsafe_allow_html=True)
         kind, title, detail = FINAL_LOOK.get(status, ("idle", status, ""))
         st.markdown(banner(kind, title, detail), unsafe_allow_html=True)
@@ -546,6 +613,7 @@ with tab_run:
                 st.rerun()
             st.divider()
 
+        supervision_panel(state)
         left, right = st.columns([1, 1], gap="large")
         with left:
             st.markdown("#### Journal")

@@ -155,7 +155,11 @@ def _agent_name(node_name: str) -> str:
 def _record(node_name: str, result: AgentResult, started: float) -> dict:
     """Mise à jour de l'état : dernier résultat de l'étape + une ligne d'historique."""
     dumped = _dump(result, started)
-    return {"results": {node_name: dumped}, "history": [{"node": node_name, **dumped}]}
+    return {
+        "results": {node_name: dumped},
+        "history": [{"node": node_name, **dumped}],
+        "last_step": node_name,
+    }
 
 
 def _dump(result: AgentResult, started: float) -> dict:

@@ -8,6 +8,11 @@ Ligne de commande de l'orchestrateur.
     python -m orchestrator approve <run_id> [-m "commentaire"]
     python -m orchestrator reject  <run_id> [-m "commentaire"]
     python -m orchestrator resume  <run_id>                         # après un plantage
+    python -m orchestrator export-decisions -o decisions.jsonl      # décisions du superviseur
+
+Superviseur (qui décide de la suite après chaque étape) :
+    python -m orchestrator run eval/projects/credit_risk --supervisor gemini
+    python -m orchestrator run eval/projects/credit_risk --supervisor gemini --simulate-failure transient
 
 L'état de chaque run est sauvegardé dans runs/checkpoints.sqlite :
 un run en pause peut être approuvé plus tard, depuis un autre terminal.
@@ -17,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import sys
 
 from .checkpoint import describe_backend
@@ -55,6 +61,11 @@ def print_run(run: Run) -> None:
         print(f"  {icon} {name:<17} {r['status']:<15} {r['duration_s']}s")
         for reason in r["reasons"]:
             print(f"      → {reason}")
+    if s.get("supervisor_mode", "rules") != "rules":
+        print(f"\n  Superviseur : {s['supervisor_mode']}")
+        for d in s.get("supervision", []):
+            note = f"  [secours : {d['fallback']}]" if d.get("fallback") else ""
+            print(f"    après {d['after']:<16} → {d['action']:<16} {d['explanation']}{note}")
     for d in s.get("decisions", []):
         print(f"  ☐ {d['gate']} : {d['decision']} par {d['by']}")
     q = run.question
@@ -69,7 +80,10 @@ def print_run(run: Run) -> None:
 
 def cmd_run(args) -> Run:
     print(f"Pipeline sur {args.project_dir}… (le validateur peut prendre jusqu'à une minute)")
-    run = Run.start(args.project_dir, args.runs_dir)
+    simulate = None
+    if args.simulate_failure or args.simulate_drift:
+        simulate = {"failure": args.simulate_failure, "drift": args.simulate_drift}
+    run = Run.start(args.project_dir, args.runs_dir, supervisor=args.supervisor, simulate=simulate)
     if args.auto_approve:
         while not run.finished:
             print(f"── {run.question['gate']} : approuvé automatiquement (--auto-approve)")
@@ -96,6 +110,22 @@ def cmd_status(args) -> None:
         print(f"{run.run_id:<14}{run.status:<19}{project:<28}{len(s.get('decisions', []))}")
 
 
+def cmd_export(args) -> None:
+    """Exporte les décisions du superviseur (une par ligne, format JSONL)."""
+    count = 0
+    with open(args.output, "w", encoding="utf-8") as f:
+        for run in list_runs(args.runs_dir):
+            for d in run.state.get("supervision", []):
+                if "context" not in d:  # décision ancienne, sans la situation enregistrée
+                    continue
+                if args.supervisor and d["decider"] != args.supervisor:
+                    continue
+                row = {"run_id": run.run_id, **d}
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                count += 1
+    print(f"{count} décisions exportées dans {args.output}")
+
+
 def cmd_decide(args, decision: str) -> Run:
     run = Run.load(args.run_id, args.runs_dir)
     run.answer({"decision": decision, "by": getpass.getuser(), "comment": args.message})
@@ -116,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("run", help="exécuter le pipeline sur un projet")
     p.add_argument("project_dir")
+    p.add_argument("--supervisor", choices=["rules", "gemini"], default=None,
+                   help="qui décide de la suite : rules (défaut) ou gemini (clé dans GEMINI_API_KEY)")
+    p.add_argument("--simulate-failure", choices=["transient", "permanent"], default=None,
+                   help="démo : l'Agent 3 échoue (transient : une fois ; permanent : toujours)")
+    p.add_argument("--simulate-drift", action="store_true", help="démo : l'Agent 4 détecte un drift")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--auto-approve", action="store_true",
                       help="approuver toutes les gates (tests uniquement)")
@@ -133,10 +168,18 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("resume", help="reprendre un run arrêté par un plantage")
     p.add_argument("run_id")
 
+    p = sub.add_parser("export-decisions", help="exporter les décisions du superviseur (JSONL)")
+    p.add_argument("-o", "--output", default="decisions.jsonl", help="fichier de sortie")
+    p.add_argument("--supervisor", choices=["rules", "gemini"], default=None,
+                   help="garder seulement les décisions de ce décideur")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "status":
             cmd_status(args)
+            return 0
+        if args.cmd == "export-decisions":
+            cmd_export(args)
             return 0
         if args.cmd == "run":
             run = cmd_run(args)

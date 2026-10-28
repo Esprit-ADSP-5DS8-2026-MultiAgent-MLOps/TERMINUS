@@ -19,22 +19,32 @@ QUESTIONS = {
     "manifest_confirmation": "Le projet n'a pas de mlops.yaml. Valider le manifeste proposé ?",
     "champion_replacement": "Le candidat a passé le quality gate. Le promouvoir en champion ?",
     "retraining": "Un drift a été détecté. Lancer un réentraînement ?",
+    "failure_review": "Une étape a échoué. La relancer ?",
 }
 
 
-def make_gate(gate: str, artifact_key: str):
+def make_gate(gate: str, artifact_key: str | None, node_name: str):
     """Crée un nœud qui suspend le pipeline et enregistre la décision humaine."""
 
     def node(state: PipelineState) -> dict:
         # Tout ce qui est avant interrupt() est rejoué à la reprise : rien d'irréversible ici.
-        answer = interrupt({
+        question = {
             "gate": gate,
             "question": QUESTIONS[gate],
             "run_id": state["run_id"],
-            "file_to_review": state.get("artifacts", {}).get(artifact_key),
-        })
+            "file_to_review": state.get("artifacts", {}).get(artifact_key) if artifact_key else None,
+        }
+        if gate == "failure_review":  # l'humain doit voir quelle étape a échoué et pourquoi
+            step = state.get("failed_step", "")
+            result = state.get("results", {}).get(step, {})
+            question["failed_step"] = step
+            question["reasons"] = result.get("reasons", [])
+            explanations = [s for s in state.get("supervision", []) if s.get("action") == "gate_failure"]
+            if explanations:
+                question["supervisor_explanation"] = explanations[-1]["explanation"]
+        answer = interrupt(question)
         decision = HumanDecision(gate=gate, **answer)
-        update: dict = {"decisions": [decision.model_dump(mode="json")]}
+        update: dict = {"decisions": [decision.model_dump(mode="json")], "last_step": node_name}
         if gate == "retraining" and decision.decision == "approve":
             update["retrain_count"] = state.get("retrain_count", 0) + 1
         return update

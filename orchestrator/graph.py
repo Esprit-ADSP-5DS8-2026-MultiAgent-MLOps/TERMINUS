@@ -9,6 +9,7 @@ Pour brancher un vrai agent, remplace la fonction dans AGENTS, par exemple :
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Callable
@@ -17,12 +18,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
-from . import routing
 from .checkpoint import get_checkpointer
 from .gates import make_gate
+from .llm import get_decider
 from .nodes import make_agent_node, make_end, validate
 from .state import PipelineState, initial_state
+from .supervisor import DESTINATIONS, supervisor
 from .stubs.agents import (
+    SIMULATE_FILE,
     agent1_stub,
     agent2_stub,
     agent3_stub,
@@ -41,38 +44,30 @@ AGENTS = {
 END_STATUSES = ["DONE", "BLOCKED", "FAILED", "REJECTED", "MANIFEST_PROPOSED"]
 
 
+WORK_NODES = ["validate", *AGENTS, "gate_manifest", "gate_champion", "gate_retraining", "gate_failure"]
+
+
 def build_graph(checkpointer=None):
+    """Chaque étape renvoie vers le superviseur, qui choisit la suivante (supervisor.py)."""
     g = StateGraph(PipelineState)
 
-    # nœuds
+    # étapes
     g.add_node("validate", validate)
     for name, fn in AGENTS.items():
         g.add_node(name, make_agent_node(name, fn))
-    g.add_node("gate_manifest", make_gate("manifest_confirmation", "proposed_manifest"))
-    g.add_node("gate_champion", make_gate("champion_replacement", "mlflow_metadata"))
-    g.add_node("gate_retraining", make_gate("retraining", "retraining_request"))
+    g.add_node("gate_manifest", make_gate("manifest_confirmation", "proposed_manifest", "gate_manifest"))
+    g.add_node("gate_champion", make_gate("champion_replacement", "mlflow_metadata", "gate_champion"))
+    g.add_node("gate_retraining", make_gate("retraining", "retraining_request", "gate_retraining"))
+    g.add_node("gate_failure", make_gate("failure_review", None, "gate_failure"))
     for status in END_STATUSES:
         g.add_node(f"end_{status.lower()}", make_end(status))
         g.add_edge(f"end_{status.lower()}", END)
 
-    # transitions
+    # le superviseur décide de la suite après chaque étape
+    g.add_node("supervisor", supervisor, destinations=DESTINATIONS)
     g.add_edge(START, "validate")
-    g.add_conditional_edges("validate", routing.after_validate,
-                            ["agent1", "propose_manifest", "end_blocked", "end_failed"])
-    g.add_conditional_edges("propose_manifest", routing.after_propose_manifest,
-                            ["gate_manifest", "end_failed"])
-    g.add_conditional_edges("gate_manifest", routing.after_gate_manifest,
-                            ["end_manifest_proposed", "end_rejected"])
-    g.add_conditional_edges("agent1", routing.after_agent1, ["agent2", "end_failed"])
-    g.add_conditional_edges("agent2", routing.after_agent2,
-                            ["gate_champion", "agent3", "end_failed"])
-    g.add_conditional_edges("gate_champion", routing.after_gate_champion,
-                            ["agent3", "end_rejected"])
-    g.add_conditional_edges("agent3", routing.after_agent3, ["agent4", "end_failed"])
-    g.add_conditional_edges("agent4", routing.after_agent4,
-                            ["gate_retraining", "end_done", "end_failed"])
-    g.add_conditional_edges("gate_retraining", routing.after_gate_retraining,
-                            ["agent2", "end_done"])
+    for node in WORK_NODES:
+        g.add_edge(node, "supervisor")
 
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
@@ -104,12 +99,26 @@ class Run:
     # -- création / chargement ------------------------------------------------
 
     @classmethod
-    def start(cls, project_dir: str, runs_dir: str = "runs") -> "Run":
-        """Crée un nouveau run et l'exécute jusqu'à la première pause (ou la fin)."""
+    def start(cls, project_dir: str, runs_dir: str = "runs", supervisor: str | None = None,
+              simulate: dict | None = None) -> "Run":
+        """Crée un nouveau run et l'exécute jusqu'à la première pause (ou la fin).
+
+        supervisor : "rules" (défaut) ou "gemini" ; sinon la variable ORCH_SUPERVISOR.
+        simulate   : pannes simulées pour les démos, enregistrées avec le run
+                     ({"drift": bool, "failure": "transient" | "permanent" | None}).
+        """
+        mode = supervisor or os.environ.get("ORCH_SUPERVISOR", "rules")
+        get_decider(mode)  # erreur claire tout de suite si le mode est inconnu
         run = cls(uuid.uuid4().hex[:12], runs_dir)
         run.run_dir.mkdir(parents=True, exist_ok=True)
+        if simulate is None:  # par défaut, lues dans l'environnement
+            simulate = {
+                "drift": os.environ.get("ORCH_SIMULATE_DRIFT") == "1",
+                "failure": os.environ.get("ORCH_SIMULATE_FAILURE") or None,
+            }
+        (run.run_dir / SIMULATE_FILE).write_text(json.dumps(simulate))
         run.graph.invoke(
-            initial_state(run.run_id, str(Path(project_dir).resolve()), str(run.run_dir)),
+            initial_state(run.run_id, str(Path(project_dir).resolve()), str(run.run_dir), mode),
             run.config,
         )
         run._save_if_finished()
@@ -199,9 +208,10 @@ def list_runs(runs_dir: str = "runs") -> list[Run]:
     return runs
 
 
-def run_pipeline(project_dir: str, decide: Decider, runs_dir: str = "runs") -> dict:
+def run_pipeline(project_dir: str, decide: Decider, runs_dir: str = "runs",
+                 supervisor: str | None = None, simulate: dict | None = None) -> dict:
     """Exécute le pipeline de bout en bout. `decide` répond aux gates humaines."""
-    run = Run.start(project_dir, runs_dir)
+    run = Run.start(project_dir, runs_dir, supervisor=supervisor, simulate=simulate)
     while not run.finished:
         run.answer(decide(run.question))
     return run.summary()

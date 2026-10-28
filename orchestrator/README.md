@@ -51,7 +51,9 @@ Le réentraînement est limité à **une fois par run**.
 | `../common/schemas.py` | Le **contrat** commun : ce que chaque agent reçoit et renvoie |
 | `state.py` | La **mémoire** du pipeline : chemins, résultats, décisions |
 | `nodes.py` | Les **étapes** : le validateur et l'enveloppe commune des agents |
-| `routing.py` | Les **aiguillages** : quelle étape après chaque résultat |
+| `routing.py` | Les **règles** : quelle étape après chaque résultat |
+| `supervisor.py` | Le **superviseur** : choisit la suite parmi les actions autorisées |
+| `llm.py` | Les **décideurs** du superviseur : règles ou Gemini |
 | `gates.py` | Les **pauses humaines** (`interrupt` de LangGraph) |
 | `checkpoint.py` | La **sauvegarde** de l'état : SQLite par défaut, PostgreSQL si `ORCH_DATABASE_URL` est défini |
 | `graph.py` | Le **plan** du graphe et l'exécution d'un run |
@@ -73,7 +75,7 @@ Ou dans le terminal :
 python -m orchestrator run eval/projects/credit_risk                       # cas normal
 ORCH_SIMULATE_DRIFT=1 python -m orchestrator run eval/projects/credit_risk  # avec drift
 python -m orchestrator run eval/projects/variants/02_unpinned_deps         # projet rejeté
-python -m pytest tests/orchestrator -q                                     # 11 tests
+python -m pytest tests/orchestrator -q                                     # 28 tests
 ```
 
 ## Persistance : reprendre un run plus tard
@@ -108,6 +110,38 @@ Dans l'interface Streamlit, les runs en pause apparaissent dans le panneau de ga
 Chaque exécution crée `runs/<run_id>/` : un dossier par étape, la copie figée du projet
 (`snapshot/`) et `run_summary.json` (statut, durée, décisions humaines).
 
+## Le superviseur : qui décide de la suite ?
+
+Après chaque étape, le **superviseur** choisit la suivante (`supervisor.py`) :
+
+1. les **règles** calculent les actions autorisées à ce moment-là ;
+2. le **décideur** en choisit une et l'explique : `rules` (sans IA) ou `gemini` (LLM) ;
+3. le superviseur **vérifie** que l'action est autorisée ; sinon, ou si le LLM ne répond pas,
+   il applique la règle (solution de secours, notée dans les décisions).
+
+Le LLM peut : relancer une étape en échec (2 fois au plus), confier un échec à un humain,
+renoncer à une demande de réentraînement, et expliquer chaque décision.
+Il ne peut jamais : sauter une validation humaine, déployer un modèle refusé, dépasser la limite de tentatives.
+
+La configuration se met dans un fichier `.env` à la racine du projet (ignoré par Git) :
+
+```bash
+cp .env.example .env                 # puis mettre sa propre clé Google AI Studio dans GEMINI_API_KEY
+set -a; source .env; set +a          # à refaire dans chaque nouveau terminal
+python -m orchestrator run eval/projects/credit_risk --supervisor gemini
+python -m orchestrator run eval/projects/credit_risk --supervisor gemini --simulate-failure transient
+```
+
+Dans l'interface : « Qui décide de la suite ? » et « Simuler une panne du déploiement ».
+Chaque décision est enregistrée (situation vue, actions autorisées, action choisie, explication,
+décision des règles) : on peut ainsi comparer les règles et Gemini, et relire chaque décision.
+
+Pour relire les décisions des vrais runs, on les exporte (une par ligne) :
+
+```bash
+python -m orchestrator export-decisions -o decisions.jsonl --supervisor gemini
+```
+
 ## Brancher un vrai agent
 
 Chaque agent expose une seule fonction :
@@ -133,7 +167,8 @@ AGENTS["agent1"] = agent1_run
 | Contrat commun (J1) | Brancher les vrais agents (J3) |
 | Graphe complet avec stubs (J2) | Ajouter MLflow, MinIO, Prometheus… à `infra/` |
 | 3 gates humaines + interface Streamlit | Décisions humaines à distance (plusieurs utilisateurs) |
-| Boucle de réentraînement limitée | Langfuse |
+| Boucle de réentraînement limitée | Langfuse (tracer les appels au LLM) |
 | Traces de chaque run | Mode baseline sans LLM (évaluation) |
 | Persistance SQLite ou PostgreSQL, reprise des runs | |
 | Interface : plan de ligne, décisions, journal, historique | |
+| Superviseur : règles ou Gemini, avec garde-fous | |

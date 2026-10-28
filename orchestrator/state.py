@@ -36,8 +36,18 @@ class PipelineState(TypedDict, total=False):
     retrain_count: int
     final_status: str       # DONE, BLOCKED, FAILED, REJECTED_BY_HUMAN, MANIFEST_PROPOSED
 
+    # --- superviseur -----------------------------------------------------------
+    supervisor_mode: str    # "rules" (sans LLM) ou "gemini"
+    last_step: str          # dernière étape terminée (le superviseur décide de la suite)
+    # chaque décision du superviseur : action choisie, explication, qui a décidé
+    supervision: Annotated[list[dict], operator.add]
+    # nombre de nouvelles tentatives par étape (limite les boucles)
+    attempts: Annotated[dict[str, int], merge_dicts]
+    failed_step: str        # étape en échec soumise à un humain (gate failure_review)
 
-def initial_state(run_id: str, project_dir: str, run_dir: str) -> PipelineState:
+
+def initial_state(run_id: str, project_dir: str, run_dir: str,
+                  supervisor_mode: str = "rules") -> PipelineState:
     return {
         "run_id": run_id,
         "project_dir": project_dir,
@@ -47,4 +57,7 @@ def initial_state(run_id: str, project_dir: str, run_dir: str) -> PipelineState:
         "decisions": [],
         "history": [],
         "retrain_count": 0,
+        "supervisor_mode": supervisor_mode,
+        "supervision": [],
+        "attempts": {},
     }

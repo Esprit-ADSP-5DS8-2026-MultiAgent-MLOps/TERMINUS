@@ -6,8 +6,11 @@ Chaque stub respecte exactement le contrat : il reçoit un AgentInput,
 et renvoie un AgentResult. Quand un binôme livre son agent, on remplace
 la fonction correspondante dans orchestrator/graph.py (dictionnaire AGENTS).
 
-Pour simuler un drift (et tester la boucle de réentraînement) :
-    ORCH_SIMULATE_DRIFT=1 python -m orchestrator run ...
+Simulations pour les démos et les tests, enregistrées avec chaque run
+(fichier runs/<run_id>/simulate.json, écrit au lancement) :
+    ORCH_SIMULATE_DRIFT=1            l'Agent 4 détecte un drift
+    ORCH_SIMULATE_FAILURE=transient  l'Agent 3 échoue une fois (réseau), puis réussit
+    ORCH_SIMULATE_FAILURE=permanent  l'Agent 3 échoue à chaque fois (erreur de contenu)
 """
 
 from __future__ import annotations
@@ -38,6 +41,16 @@ from common.schemas import (
 )
 
 STUB_WARNING = "stub : résultat fictif, à remplacer par le vrai agent"
+SIMULATE_FILE = "simulate.json"
+
+
+def _simulation(inp: AgentInput) -> dict:
+    """Simulations du run : fichier écrit au lancement, sinon variables d'environnement."""
+    f = Path(inp.workdir).parent / SIMULATE_FILE
+    if f.exists():
+        return json.loads(f.read_text())
+    return {"drift": os.environ.get("ORCH_SIMULATE_DRIFT") == "1",
+            "failure": os.environ.get("ORCH_SIMULATE_FAILURE") or None}
 
 
 def _write(path: Path, model: BaseModel) -> str:
@@ -207,6 +220,18 @@ def agent2_stub(inp: AgentInput) -> AgentResult:
 
 
 def agent3_stub(inp: AgentInput) -> AgentResult:
+    failure = _simulation(inp).get("failure")
+    marker = Path(inp.workdir) / ".failed_once"
+    if failure == "transient" and not marker.exists():
+        marker.touch()  # la prochaine tentative réussira
+        raise ConnectionError("Docker Hub ne répond pas : délai dépassé pendant le push de l'image")
+    if failure == "permanent":
+        return AgentResult(
+            agent="agent3", status=AgentStatus.FAILED, can_proceed=False,
+            reasons=["Test d'inférence échoué : /predict renvoie une erreur 500 "
+                     "(colonnes d'entrée incompatibles avec le modèle)"],
+            warnings=[STUB_WARNING],
+        )
     meta = MlflowMetadata.model_validate_json(Path(inp.inputs["mlflow_metadata"]).read_text())
     checks = [CheckResult(name=n, passed=True, details="stub")
               for n in ("hadolint", "build", "trivy", "startup", "health", "inference")]
@@ -234,7 +259,7 @@ def agent3_stub(inp: AgentInput) -> AgentResult:
 
 def agent4_stub(inp: AgentInput) -> AgentResult:
     dep = DeploymentResult.model_validate_json(Path(inp.inputs["deployment_result"]).read_text())
-    if os.environ.get("ORCH_SIMULATE_DRIFT") != "1":
+    if not _simulation(inp).get("drift"):
         return AgentResult(agent="agent4", status=AgentStatus.OK, can_proceed=True,
                            warnings=[STUB_WARNING])
 

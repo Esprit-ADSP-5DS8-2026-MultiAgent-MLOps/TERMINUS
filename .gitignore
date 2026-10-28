@@ -10,3 +10,5 @@ rapport*.json
 eval/projects/variants/
 runs/
 infra/.env
+eval_results/
+.env

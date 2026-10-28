@@ -12,6 +12,7 @@ dependencies = [
     "langgraph-checkpoint-postgres==3.2.0",
     "psycopg[binary]==3.3.6",
     "streamlit==1.65.0",
+    "google-genai==2.33.0",
 ]
 
 [project.optional-dependencies]

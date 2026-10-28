@@ -294,7 +294,7 @@ class RetrainingRequest(Strict):
 
 
 class HumanDecision(Strict):
-    gate: Literal["manifest_confirmation", "champion_replacement", "retraining"]
+    gate: Literal["manifest_confirmation", "champion_replacement", "retraining", "failure_review"]
     decision: Literal["approve", "reject"]
     by: str
     comment: str = ""

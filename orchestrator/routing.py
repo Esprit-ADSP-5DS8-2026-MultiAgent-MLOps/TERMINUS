@@ -67,3 +67,8 @@ def after_agent4(state: PipelineState) -> str:
 def after_gate_retraining(state: PipelineState) -> str:
     # Réentraînement approuvé : le candidat repasse par Agent 2 (quality gate) puis Agent 3.
     return "agent2" if last_decision(state) == "approve" else "end_done"
+
+
+def after_gate_failure(state: PipelineState) -> str:
+    # L'humain a accepté de relancer l'étape en échec, ou a arrêté le run.
+    return state["failed_step"] if last_decision(state) == "approve" else "end_failed"
