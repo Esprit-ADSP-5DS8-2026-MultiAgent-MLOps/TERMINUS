@@ -1,0 +1,1030 @@
+{
+  "$defs": {
+    "AdmissionStatus": {
+      "enum": [
+        "ACCEPTED",
+        "REPAIR_REQUIRED",
+        "REJECTED",
+        "NEEDS_REVIEW"
+      ],
+      "title": "AdmissionStatus",
+      "type": "string"
+    },
+    "CarryForward": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "finding",
+            "derived"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "source"
+      ],
+      "title": "CarryForward",
+      "type": "object"
+    },
+    "Check": {
+      "properties": {
+        "caused_by": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caused By"
+        },
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "effective_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "grounded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Grounded"
+        },
+        "level": {
+          "default": "",
+          "title": "Level",
+          "type": "string"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "mandatory": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mandatory"
+        },
+        "na_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Na Reason"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "candidate",
+                "harness",
+                "sandbox",
+                "validator"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Severity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "python",
+                "llm",
+                "harness",
+                "policy"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus"
+        }
+      },
+      "required": [
+        "check_id",
+        "status"
+      ],
+      "title": "Check",
+      "type": "object"
+    },
+    "CheckStatus": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "WARNING",
+        "NOT_APPLICABLE",
+        "NOT_CHECKED"
+      ],
+      "title": "CheckStatus",
+      "type": "string"
+    },
+    "Failure": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/FailureKind"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message"
+      ],
+      "title": "Failure",
+      "type": "object"
+    },
+    "FailureKind": {
+      "enum": [
+        "LLM_ERROR",
+        "QUOTA",
+        "TIMEOUT",
+        "BUDGET_EXCEEDED",
+        "MAX_STEPS",
+        "NO_TOOL_USE",
+        "INVALID_SUBMISSION",
+        "INPUT_INVALID",
+        "INTERNAL"
+      ],
+      "title": "FailureKind",
+      "type": "string"
+    },
+    "Framework": {
+      "properties": {
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Framework",
+      "type": "object"
+    },
+    "Handoff": {
+      "description": "Ce dont l'agent suivant a besoin, sans parcourir la liste des constats.",
+      "properties": {
+        "can_proceed": {
+          "title": "Can Proceed",
+          "type": "boolean"
+        },
+        "carry_forward": {
+          "items": {
+            "$ref": "#/$defs/CarryForward"
+          },
+          "title": "Carry Forward",
+          "type": "array"
+        },
+        "data_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Path"
+        },
+        "data_summary": {
+          "additionalProperties": true,
+          "title": "Data Summary",
+          "type": "object"
+        },
+        "deterministic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deterministic"
+        },
+        "entrypoints": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Entrypoints",
+          "type": "object"
+        },
+        "feature_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Feature Columns",
+          "type": "array"
+        },
+        "interfaces": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Interfaces",
+          "type": "object"
+        },
+        "min_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Threshold"
+        },
+        "model_artifact": {
+          "default": "model.joblib",
+          "title": "Model Artifact",
+          "type": "string"
+        },
+        "observed_metrics": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Metrics"
+        },
+        "pinned_dependencies": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Pinned Dependencies",
+          "type": "object"
+        },
+        "primary_metric": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Metric"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "requires_human_confirmation": {
+          "title": "Requires Human Confirmation",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "READY",
+            "READY_WITH_WARNINGS",
+            "AWAITING_CONFIRMATION",
+            "INCOMPLETE",
+            "BLOCKED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task"
+        }
+      },
+      "required": [
+        "status",
+        "can_proceed",
+        "requires_human_confirmation"
+      ],
+      "title": "Handoff",
+      "type": "object"
+    },
+    "Issue": {
+      "properties": {
+        "category": {
+          "default": "other",
+          "enum": [
+            "structure",
+            "dependencies",
+            "code",
+            "data",
+            "ml_contract",
+            "security",
+            "execution",
+            "reproducibility",
+            "other"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "issue_id": {
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "nature": {
+          "$ref": "#/$defs/Nature",
+          "default": "mechanical"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity",
+          "default": "MAJOR"
+        },
+        "suggested_fix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suggested Fix"
+        }
+      },
+      "required": [
+        "issue_id",
+        "check_id",
+        "description"
+      ],
+      "title": "Issue",
+      "type": "object"
+    },
+    "LineageRef": {
+      "properties": {
+        "project_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Hash"
+        },
+        "report_id": {
+          "title": "Report Id",
+          "type": "string"
+        },
+        "report_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report Sha256"
+        },
+        "report_type": {
+          "enum": [
+            "validator",
+            "repair",
+            "judge"
+          ],
+          "title": "Report Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_type",
+        "report_id"
+      ],
+      "title": "LineageRef",
+      "type": "object"
+    },
+    "Nature": {
+      "enum": [
+        "mechanical",
+        "configuration",
+        "logic",
+        "methodological"
+      ],
+      "title": "Nature",
+      "type": "string"
+    },
+    "PolicyOutcome": {
+      "properties": {
+        "blocking_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocking Checks",
+          "type": "array"
+        },
+        "can_proceed": {
+          "title": "Can Proceed",
+          "type": "boolean"
+        },
+        "contract_id": {
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "contract_version": {
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "review_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Review Checks",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/AdmissionStatus"
+        },
+        "warning_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warning Checks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "contract_id",
+        "contract_version",
+        "status",
+        "can_proceed"
+      ],
+      "title": "PolicyOutcome",
+      "type": "object"
+    },
+    "ProjectSpec": {
+      "description": "Ce que le Validator a compris du projet (tâche, cible, métrique) : sert au handoff et à la comparaison avant/après.",
+      "properties": {
+        "data_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Path"
+        },
+        "deduced": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Deduced",
+          "type": "object"
+        },
+        "min_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Threshold"
+        },
+        "primary_metric": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Metric"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "enum": [
+                "classification",
+                "regression"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task"
+        }
+      },
+      "title": "ProjectSpec",
+      "type": "object"
+    },
+    "RunStatus": {
+      "enum": [
+        "OK",
+        "FAILED_CLOSED"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "Severity": {
+      "enum": [
+        "CRITICAL",
+        "MAJOR",
+        "MINOR"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "can_proceed": {
+      "default": false,
+      "title": "Can Proceed",
+      "type": "boolean"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/Check"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "contract_id": {
+      "default": "",
+      "title": "Contract Id",
+      "type": "string"
+    },
+    "created_at": {
+      "default": "",
+      "title": "Created At",
+      "type": "string"
+    },
+    "duration_s": {
+      "default": 0.0,
+      "title": "Duration S",
+      "type": "number"
+    },
+    "environment": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Environment"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Failure"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "frameworks": {
+      "items": {
+        "$ref": "#/$defs/Framework"
+      },
+      "title": "Frameworks",
+      "type": "array"
+    },
+    "handoff": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Handoff"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "hashed_files": {
+      "default": 0,
+      "title": "Hashed Files",
+      "type": "integer"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/Issue"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "limits": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limits",
+      "type": "array"
+    },
+    "lineage": {
+      "items": {
+        "$ref": "#/$defs/LineageRef"
+      },
+      "title": "Lineage",
+      "type": "array"
+    },
+    "llm": {
+      "additionalProperties": true,
+      "title": "Llm",
+      "type": "object"
+    },
+    "next_action": {
+      "default": "HUMAN_REVIEW",
+      "enum": [
+        "PROCEED",
+        "REPAIR",
+        "HUMAN_REVIEW",
+        "STOP"
+      ],
+      "title": "Next Action",
+      "type": "string"
+    },
+    "observed_metrics": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed Metrics"
+    },
+    "policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PolicyOutcome"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "policy_version": {
+      "default": "",
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "project": {
+      "title": "Project",
+      "type": "string"
+    },
+    "project_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project Hash"
+    },
+    "project_spec": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "project_type": {
+      "default": "unknown",
+      "title": "Project Type",
+      "type": "string"
+    },
+    "report_id": {
+      "default": "",
+      "title": "Report Id",
+      "type": "string"
+    },
+    "report_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Sha256"
+    },
+    "report_type": {
+      "const": "validator",
+      "default": "validator",
+      "title": "Report Type",
+      "type": "string"
+    },
+    "run_status": {
+      "$ref": "#/$defs/RunStatus",
+      "default": "OK"
+    },
+    "sandbox": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sandbox"
+    },
+    "schema_version": {
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "snapshot_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Path"
+    },
+    "status": {
+      "$ref": "#/$defs/AdmissionStatus"
+    },
+    "steps": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Summary"
+    }
+  },
+  "required": [
+    "project",
+    "status"
+  ],
+  "title": "ValidatorReport",
+  "type": "object"
+}

@@ -1,0 +1,8 @@
+{
+  "label": "bad",
+  "why": "ajoute un secret en clair dans la configuration",
+  "expected_scope_flags": [
+    "secret_added"
+  ],
+  "needs_llm": false
+}

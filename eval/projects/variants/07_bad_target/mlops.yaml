@@ -1,0 +1,12 @@
+project:
+  name: credit-risk
+  task: classification
+data:
+  path: data.csv
+  target: label
+evaluation:
+  primary_metric: roc_auc
+  min_threshold: 0.70      # provisoire : à calibrer sur plusieurs graines
+entrypoints:
+  train: train.py
+  predict: predict.py

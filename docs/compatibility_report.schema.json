@@ -1,0 +1,545 @@
+{
+  "$defs": {
+    "CarryForward": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "finding",
+            "derived"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "source"
+      ],
+      "title": "CarryForward",
+      "type": "object"
+    },
+    "Confirmation": {
+      "properties": {
+        "confirmed_at": {
+          "title": "Confirmed At",
+          "type": "string"
+        },
+        "confirmed_by": {
+          "title": "Confirmed By",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Sha256"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "confirmed_by",
+        "confirmed_at"
+      ],
+      "title": "Confirmation",
+      "type": "object"
+    },
+    "Finding": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hint"
+        },
+        "level": {
+          "title": "Level",
+          "type": "string"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        }
+      },
+      "required": [
+        "rule",
+        "code",
+        "severity",
+        "level",
+        "message"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "Handoff": {
+      "description": "Ce dont l'agent suivant a besoin, sans parcourir la liste des constats.",
+      "properties": {
+        "can_proceed": {
+          "title": "Can Proceed",
+          "type": "boolean"
+        },
+        "carry_forward": {
+          "items": {
+            "$ref": "#/$defs/CarryForward"
+          },
+          "title": "Carry Forward",
+          "type": "array"
+        },
+        "data_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Path"
+        },
+        "data_summary": {
+          "additionalProperties": true,
+          "title": "Data Summary",
+          "type": "object"
+        },
+        "deterministic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deterministic"
+        },
+        "entrypoints": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Entrypoints",
+          "type": "object"
+        },
+        "feature_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Feature Columns",
+          "type": "array"
+        },
+        "interfaces": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Interfaces",
+          "type": "object"
+        },
+        "min_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Threshold"
+        },
+        "model_artifact": {
+          "default": "model.joblib",
+          "title": "Model Artifact",
+          "type": "string"
+        },
+        "observed_metrics": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Metrics"
+        },
+        "pinned_dependencies": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Pinned Dependencies",
+          "type": "object"
+        },
+        "primary_metric": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Metric"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "requires_human_confirmation": {
+          "title": "Requires Human Confirmation",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "READY",
+            "READY_WITH_WARNINGS",
+            "AWAITING_CONFIRMATION",
+            "INCOMPLETE",
+            "BLOCKED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task"
+        }
+      },
+      "required": [
+        "status",
+        "can_proceed",
+        "requires_human_confirmation"
+      ],
+      "title": "Handoff",
+      "type": "object"
+    },
+    "LevelInfo": {
+      "properties": {
+        "duration_s": {
+          "default": 0.0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "enum": [
+            "done",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "LevelInfo",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "BLOCKER",
+        "CONFIRM",
+        "WARNING",
+        "INFO"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "Verdict": {
+      "enum": [
+        "ACCEPTED",
+        "ACCEPTED_WITH_WARNINGS",
+        "NEEDS_CONFIRMATION",
+        "REJECTED"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "confirmation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Confirmation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "contract_version": {
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "default": "",
+      "title": "Created At",
+      "type": "string"
+    },
+    "duration_s": {
+      "default": 0.0,
+      "title": "Duration S",
+      "type": "number"
+    },
+    "facts": {
+      "additionalProperties": true,
+      "title": "Facts",
+      "type": "object"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "handoff": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Handoff"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "hashed_files": {
+      "default": 0,
+      "title": "Hashed Files",
+      "type": "integer"
+    },
+    "levels": {
+      "items": {
+        "$ref": "#/$defs/LevelInfo"
+      },
+      "title": "Levels",
+      "type": "array"
+    },
+    "observed_metrics": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed Metrics"
+    },
+    "project": {
+      "title": "Project",
+      "type": "string"
+    },
+    "project_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project Hash"
+    },
+    "report_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Sha256"
+    },
+    "run_id": {
+      "default": "",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "sandbox": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sandbox"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "snapshot_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Path"
+    },
+    "summary": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Summary",
+      "type": "object"
+    },
+    "verdict": {
+      "$ref": "#/$defs/Verdict"
+    }
+  },
+  "required": [
+    "contract_version",
+    "project",
+    "verdict",
+    "summary",
+    "findings",
+    "levels"
+  ],
+  "title": "ValidationReport",
+  "type": "object"
+}

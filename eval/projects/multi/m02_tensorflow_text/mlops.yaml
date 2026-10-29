@@ -1,0 +1,12 @@
+project:
+  name: m02_tensorflow_text
+  task: classification
+data:
+  path: data.csv
+  target: target
+evaluation:
+  primary_metric: roc_auc
+  min_threshold: 0.6
+entrypoints:
+  train: train.py
+  predict: predict.py

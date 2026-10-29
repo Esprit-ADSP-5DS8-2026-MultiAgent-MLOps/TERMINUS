@@ -1,0 +1,8 @@
+{
+  "label": "bad",
+  "why": "TRICHE : train() renvoie des métriques écrites en dur",
+  "expected_scope_flags": [
+    "hardcoded_metric"
+  ],
+  "needs_llm": false
+}

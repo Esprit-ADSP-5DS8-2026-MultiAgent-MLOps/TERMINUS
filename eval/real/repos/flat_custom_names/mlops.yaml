@@ -1,0 +1,12 @@
+project:
+  name: credit-default
+  task: classification
+data:
+  path: data.csv
+  target: default
+evaluation:
+  primary_metric: roc_auc
+  min_threshold: 0.6
+entrypoints:
+  train: trainer:fit
+  predict: serving

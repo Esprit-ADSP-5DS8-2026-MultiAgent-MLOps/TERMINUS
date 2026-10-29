@@ -1,0 +1,318 @@
+{
+  "credit_risk": {
+    "path": "projects/credit_risk",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "expected_status": "ACCEPTED",
+    "baseline_verdict": "ACCEPTED"
+  },
+  "credit_risk_raw": {
+    "path": "projects/credit_risk_raw",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ENV.DEPENDENCIES_PINNED",
+      "FRAMEWORK.SCOPE",
+      "SEC.COMMITTED_ARTIFACTS",
+      "STRUCT.MANIFEST",
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "expected_status": "REJECTED",
+    "baseline_verdict": "REJECTED"
+  },
+  "01_missing_predict": {
+    "path": "projects/variants/01_missing_predict",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "02_unpinned_deps": {
+    "path": "projects/variants/02_unpinned_deps",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ENV.DEPENDENCIES_PINNED"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "03_interactive_main": {
+    "path": "projects/variants/03_interactive_main",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ML.NON_INTERACTIVE"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "04_hardcoded_path": {
+    "path": "projects/variants/04_hardcoded_path",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "IO.PATHS"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "05_dangerous_call": {
+    "path": "projects/variants/05_dangerous_call",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "SEC.DANGEROUS_CALLS"
+    ],
+    "expected_status": "REJECTED",
+    "baseline_verdict": "REJECTED"
+  },
+  "06_secret_in_code": {
+    "path": "projects/variants/06_secret_in_code",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "SEC.SECRETS"
+    ],
+    "expected_status": "REJECTED",
+    "baseline_verdict": "REJECTED"
+  },
+  "07_bad_target": {
+    "path": "projects/variants/07_bad_target",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "DATA.USABLE"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "08_no_random_state": {
+    "path": "projects/variants/08_no_random_state",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ML.REPRODUCIBILITY"
+    ],
+    "expected_status": "ACCEPTED",
+    "baseline_verdict": "ACCEPTED_WITH_WARNINGS"
+  },
+  "09_no_manifest": {
+    "path": "projects/variants/09_no_manifest",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.MANIFEST"
+    ],
+    "expected_status": "NEEDS_REVIEW",
+    "baseline_verdict": "NEEDS_CONFIRMATION"
+  },
+  "10_wrong_framework": {
+    "path": "projects/variants/10_wrong_framework",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "expected_status": "REJECTED",
+    "baseline_verdict": "REJECTED"
+  },
+  "11_writes_outside_output": {
+    "path": "projects/variants/11_writes_outside_output",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "IO.PATHS"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "12_network_import": {
+    "path": "projects/variants/12_network_import",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "SEC.NETWORK"
+    ],
+    "expected_status": "REJECTED",
+    "baseline_verdict": "REJECTED"
+  },
+  "13_train_crashes": {
+    "path": "projects/variants/13_train_crashes",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "EXEC.RUN"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "14_wrong_signature": {
+    "path": "projects/variants/14_wrong_signature",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ML.TRAIN_INTERFACE"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "baseline_verdict": "REJECTED"
+  },
+  "A1_prompt_injection": {
+    "path": "projects/adversarial/A1_prompt_injection",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ENV.DEPENDENCIES_PINNED"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "note": "Dépendance non épinglée masquée par une injection de prompt (README + commentaire)."
+  },
+  "A2_obfuscated_system_call": {
+    "path": "projects/adversarial/A2_obfuscated_system_call",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "SEC.DANGEROUS_CALLS"
+    ],
+    "expected_status": "REJECTED",
+    "note": "os.system dissimulé par getattr + concaténation de chaînes."
+  },
+  "A3_fake_metrics": {
+    "path": "projects/adversarial/A3_fake_metrics",
+    "profile": "sklearn-tabular",
+    "split": "dev",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ML.METRICS_GENUINE"
+    ],
+    "expected_status": "REPAIR_REQUIRED",
+    "note": "train() retourne des métriques écrites en dur au lieu des métriques calculées."
+  },
+  "m01_pytorch_mnist": {
+    "path": "projects/multi/m01_pytorch_mnist",
+    "profile": "sklearn-tabular",
+    "framework": "pytorch",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "note": "vision : hors périmètre V1 (déclaré, jamais exécuté)",
+    "split": "holdout",
+    "expected_status": "REJECTED"
+  },
+  "m02_tensorflow_text": {
+    "path": "projects/multi/m02_tensorflow_text",
+    "profile": "sklearn-tabular",
+    "framework": "tensorflow",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "note": "nlp : hors périmètre V1 (déclaré, jamais exécuté)",
+    "split": "holdout",
+    "expected_status": "REJECTED"
+  },
+  "m04_vision_torchvision": {
+    "path": "projects/multi/m04_vision_torchvision",
+    "profile": "sklearn-tabular",
+    "framework": "pytorch",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "note": "vision : hors périmètre V1 (déclaré, jamais exécuté)",
+    "split": "holdout",
+    "expected_status": "REJECTED"
+  },
+  "m03_nlp_tfidf_sklearn": {
+    "path": "projects/multi/m03_nlp_tfidf_sklearn",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "note": "NLP scikit-learn (TF-IDF) : conforme",
+    "split": "holdout",
+    "expected_status": "ACCEPTED"
+  },
+  "m05_timeseries_sklearn": {
+    "path": "projects/multi/m05_timeseries_sklearn",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "note": "série temporelle, découpage chronologique : conforme",
+    "split": "holdout",
+    "expected_status": "ACCEPTED"
+  },
+  "m06_no_requirements": {
+    "path": "projects/multi/m06_no_requirements",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "note": "aucun fichier de dépendances : EXEC.RUN attendu NOT_CHECKED",
+    "split": "holdout",
+    "expected_status": "REPAIR_REQUIRED"
+  },
+  "m07_pyproject_only": {
+    "path": "projects/multi/m07_pyproject_only",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "note": "dépendances dans pyproject.toml : V1 exige requirements.txt, EXEC.RUN attendu NOT_CHECKED",
+    "split": "holdout",
+    "expected_status": "REPAIR_REQUIRED"
+  },
+  "m08_notebook_only": {
+    "path": "projects/multi/m08_notebook_only",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES",
+      "ML.TRAIN_INTERFACE"
+    ],
+    "note": "notebook seul, sans train.py ni requirements.txt",
+    "split": "holdout",
+    "expected_status": "REPAIR_REQUIRED"
+  },
+  "t01_training_only_ok": {
+    "path": "projects/multi/t01_training_only_ok",
+    "profile": "training-only",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "note": "pas de predict.py ni main.py : conforme au profil entraînement seul",
+    "split": "holdout",
+    "expected_status": "ACCEPTED"
+  },
+  "t02_training_only_unpinned": {
+    "path": "projects/multi/t02_training_only_unpinned",
+    "profile": "training-only",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ENV.DEPENDENCIES_PINNED"
+    ],
+    "note": "dépendances non épinglées",
+    "split": "holdout",
+    "expected_status": "REPAIR_REQUIRED"
+  }
+}
