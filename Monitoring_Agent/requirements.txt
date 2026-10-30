@@ -29,6 +29,9 @@ slack-bolt>=1.18
 # RAG : base vectorielle locale + embeddings ONNX (sans torch)
 qdrant-client[fastembed]>=1.12
 
+# Hébergement du modèle fine-tuné sur Hugging Face (finetune publish)
+huggingface-hub>=0.24
+
 # Fine-tuning : seulement sur Mac Apple Silicon
 mlx-lm>=0.30 ; sys_platform == "darwin" and platform_machine == "arm64"
 

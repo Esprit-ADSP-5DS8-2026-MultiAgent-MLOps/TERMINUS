@@ -519,6 +519,32 @@ def cmd_finetune(args) -> int:
         print(json.dumps(stats, ensure_ascii=False, indent=2))
         print(f"\nEntraînement (Mac Apple Silicon) :\n  mlx_lm.lora --config {data / 'lora.yaml'}")
         return 0
+    if args.step == "export":
+        from .finetune.export import fuse, to_gguf
+        models = out / "models"
+        paths = fuse(Path(args.adapters), models)
+        print(f"MLX 4 bits : {paths['mlx']}\nf16        : {paths['hf']}")
+        if args.llama_cpp:
+            gguf = to_gguf(paths["hf"], models / "gguf", Path(args.llama_cpp), python=args.convert_python)
+            print(f"GGUF       : {gguf} ({gguf.stat().st_size / 1e9:.1f} Go)")
+        else:
+            print("Pour le GGUF (Ollama, Space) : relancer avec --llama-cpp <clone de llama.cpp>")
+        return 0
+    if args.step == "publish":
+        from .agent.llm import _settings
+        from .finetune.export import publish
+        token = _settings().get("HF_TOKEN")
+        if not token or not args.repo:
+            print("Il faut HF_TOKEN dans .env et --repo <utilisateur>/<nom>")
+            return 1
+        eval_md = (out / "eval_slm.md").read_text(encoding="utf-8") if (out / "eval_slm.md").exists() else ""
+        res = publish(out / "models", Path(args.adapters), args.repo, args.space, token, eval_md)
+        for k, v in res.items():
+            print(f"{k:<6}: {v}")
+        if "api" in res:
+            print(f"\nDans .env :\n  MONITORING_DECIDER=hf:agent4\n  MONITORING_HF_BASE_URL={res['api']}"
+                  "\n  MONITORING_HF_TIMEOUT_S=300")
+        return 0
     if args.step == "eval":
         from .finetune.evaluate import evaluate_model, report
         # Résultats cumulés entre les lancements (« modèle=étiquette ») : on peut évaluer le Qwen de base,
@@ -635,7 +661,7 @@ def main(argv: list[str] | None = None) -> int:
     mck.set_defaults(func=cmd_mcp_check)
 
     ft = sub.add_parser("finetune", help="dataset de fine-tuning du diagnostiqueur local (Qwen3-4B, MLX)")
-    ft.add_argument("step", choices=["bases", "scenarios", "teach", "build", "eval"])
+    ft.add_argument("step", choices=["bases", "scenarios", "teach", "build", "eval", "export", "publish"])
     ft.add_argument("--dir", default=FT_DIR)
     ft.add_argument("--per-base", type=int, default=220, help="scenarios : exemples acceptés par base d'entraînement")
     ft.add_argument("--teachers", help="teach : liste fournisseur:modèle séparée par des virgules")
@@ -645,6 +671,11 @@ def main(argv: list[str] | None = None) -> int:
     ft.add_argument("--workers", type=int, help="scenarios : processus en parallèle (défaut : nb de cœurs - 1)")
     ft.add_argument("--models", default="mlx:default_model", help="eval : modèles à comparer (virgules)")
     ft.add_argument("--limit", type=int)
+    ft.add_argument("--adapters", default=f"{FT_DIR}/data/adapters", help="export / publish : adaptateur LoRA")
+    ft.add_argument("--llama-cpp", help="export : clone de llama.cpp, pour produire le GGUF")
+    ft.add_argument("--convert-python", help="export : python qui a les dépendances de conversion de llama.cpp")
+    ft.add_argument("--repo", help="publish : dépôt du modèle sur Hugging Face (utilisateur/nom)")
+    ft.add_argument("--space", help="publish : Space qui sert le modèle (utilisateur/nom)")
     ft.set_defaults(func=cmd_finetune)
 
     args = parser.parse_args(argv)

@@ -160,6 +160,19 @@ python -m monitoring_agent finetune eval --models "mlx:default_model=qwen-finetu
 - 694 exemples d'entraînement (388 du professeur, 306 des règles), équilibrés par action.
 - QLoRA sur Qwen3-4B-Instruct-2507 quantifié en 4 bits : rang 16, alpha 32, 16 dernières couches, learning rate 1e-4 avec warmup et décroissance cosinus, batch effectif 8, perte calculée seulement sur la réponse, gradient checkpointing (obligatoire sur 24 Go). Meilleur checkpoint à l'itération 150 (perte de validation de 1,707 à 0,140).
 
+### Hébergement
+
+Code : `monitoring_agent/finetune/export.py`.
+
+1. `mlx_lm.fuse` fusionne l'adaptateur dans le modèle de base : une version MLX 4 bits (Mac) et une version f16.
+2. `convert_hf_to_gguf.py` et `llama-quantize` (llama.cpp) produisent un GGUF Q4_K_M, avec son `Modelfile` Ollama.
+3. `finetune publish` crée un dépôt de modèle privé sur Hugging Face (adaptateur, GGUF, MLX, fiche du modèle) et un
+   Space privé Docker basé sur l'image `llama.cpp:server` : il télécharge le GGUF au démarrage (secret `HF_TOKEN`)
+   et expose `/v1/chat/completions`, avec 3 requêtes en parallèle pour les 3 diagnostics.
+4. Côté agent, le fournisseur `hf` (`MONITORING_DECIDER=hf:agent4`) appelle ce Space avec `HF_TOKEN`. Comme `mlx` et
+   `ollama`, il est traité comme le diagnostiqueur fine-tuné : il reçoit les faits seuls, et l'enquête reste au
+   grand modèle. Le délai se règle avec `MONITORING_HF_TIMEOUT_S`.
+
 Les avis de la console (`ratings.jsonl`) fournissent de nouveaux exemples réels au même format, pour un futur réentraînement.
 
 ## 7. Notifications

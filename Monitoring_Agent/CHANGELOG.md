@@ -2,6 +2,13 @@
 
 Les changements notables de l'Agent 4. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [0.6.0] - 2026-10-30
+
+### Ajouté
+- `finetune export` : fusion de l'adaptateur (MLX 4 bits et f16) et conversion en GGUF Q4_K_M avec son Modelfile Ollama.
+- `finetune publish` : dépôt de modèle privé sur Hugging Face et Space privé qui sert le modèle (llama-server).
+- Fournisseur `hf` : l'agent appelle le modèle hébergé (`MONITORING_DECIDER=hf:agent4`), avec un délai réglable.
+
 ## [0.5.0] - 2026-10-30
 
 ### Ajouté

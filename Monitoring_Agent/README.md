@@ -192,6 +192,39 @@ Une décision approuvée ou corrigée devient un exemple d'entraînement, au mê
 python -m monitoring_agent ratings credit_risk --export runs/finetune/feedback.jsonl
 ```
 
+## Héberger le modèle fine-tuné
+
+Le diagnostiqueur fine-tuné tourne d'abord sur le Mac qui l'a entraîné (MLX). Pour que toute l'équipe et la
+pipeline puissent s'en servir, on le publie sur Hugging Face, dans un dépôt privé, et on le sert depuis un
+Space privé (llama-server, API compatible OpenAI). Tout est gratuit ; le Space tourne sur CPU, donc il est
+plus lent que le Mac.
+
+```bash
+# 0. Dans .env : HF_TOKEN=hf_... (jeton « Write » de huggingface.co)
+# 1. Fusionner l'adaptateur dans le modèle de base (Mac Apple Silicon)
+python -m monitoring_agent finetune export
+
+# 2. Convertir en GGUF (format d'Ollama et de llama.cpp), avec un environnement séparé pour la conversion
+brew install llama.cpp
+git clone --depth 1 https://github.com/ggml-org/llama.cpp ~/AI_projects/llama.cpp
+uv venv ~/AI_projects/llama.cpp/.venv --python 3.11
+uv pip install --python ~/AI_projects/llama.cpp/.venv/bin/python \
+    -r ~/AI_projects/llama.cpp/requirements/requirements-convert_hf_to_gguf.txt
+python -m monitoring_agent finetune export --llama-cpp ~/AI_projects/llama.cpp \
+    --convert-python ~/AI_projects/llama.cpp/.venv/bin/python
+
+# 3. Vérifier que la quantification n'a rien cassé (Ollama, en local)
+ollama create agent4-qwen -f runs/finetune/models/gguf/Modelfile
+python -m monitoring_agent finetune eval --models "ollama:agent4-qwen=qwen-gguf-q4"
+
+# 4. Publier le modèle et créer le Space qui le sert
+python -m monitoring_agent finetune publish --repo <utilisateur>/agent4-qwen3-4b --space <utilisateur>/agent4-diagnostiqueur
+```
+
+La dernière commande affiche les lignes à mettre dans `.env` (`MONITORING_DECIDER=hf:agent4`,
+`MONITORING_HF_BASE_URL`, `MONITORING_HF_TIMEOUT_S`). Si le Space dort ou ne répond pas, l'agent passe au
+modèle de secours (Groq) : la pipeline ne s'arrête jamais à cause de l'hébergement.
+
 ## Résultats
 
 Diagnostic sur 40 cas de test, tirés de deux jeux de données jamais vus pendant l'entraînement :
@@ -239,6 +272,7 @@ D'autres agents peuvent aussi interroger le monitoring en MCP sur `http://localh
 | `mcp <projet>`, `mcp-check <projet>` | Serveur MCP en stdio, et un client de démonstration. |
 | `memory build / eval / search` | Mémoire d'incidents (RAG). |
 | `finetune bases / scenarios / teach / build / eval` | Préparation et évaluation du fine-tuning. |
+| `finetune export / publish` | Fusion, GGUF et publication du modèle sur Hugging Face. |
 | `langfuse check / push-prompts / push-dataset` | Suivi des appels LLM dans Langfuse (optionnel). |
 
 Toutes se lancent avec `python -m monitoring_agent <commande>`. Ajoute `--help` pour les options.
@@ -268,7 +302,7 @@ Le détail technique (méthodes statistiques, seuils, MCP, RAG, fine-tuning, Lan
 
 - La référence est construite sur les données d'entraînement, donc la performance de référence est un peu optimiste. Le jeu de test enregistré par l'Agent 2 dans MLflow serait une meilleure référence.
 - La performance estimée ne voit pas le concept drift. Il faut attendre les labels pour le détecter.
-- Le modèle local tourne avec MLX, donc uniquement sur Mac Apple Silicon. Ailleurs, l'agent utilise Groq ou Ollama.
+- Le modèle fine-tuné tourne avec MLX sur Mac, avec Ollama ailleurs, ou depuis le Space Hugging Face. Le Space gratuit tourne sur CPU : une décision y prend plus de temps.
 - Les quotas gratuits de Groq limitent le nombre de décisions par jour avec les grands modèles.
 
 ## Contribuer

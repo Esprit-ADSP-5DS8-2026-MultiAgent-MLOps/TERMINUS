@@ -30,8 +30,12 @@ PROVIDERS = {
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
     "mlx": ("http://127.0.0.1:8080/v1", None),      # mlx_lm.server (modèle local + adaptateur LoRA)
+    # Notre modèle fine-tuné servi par un Space Hugging Face (llama-server). L'adresse vient de
+    # MONITORING_HF_BASE_URL ; le jeton HF_TOKEN ouvre le Space privé.
+    "hf": (None, "HF_TOKEN"),
 }
-LOCAL = ("ollama", "mlx")
+# Fournisseurs du diagnostiqueur fine-tuné : il reçoit les faits seuls, le format appris à l'entraînement.
+LOCAL = ("ollama", "mlx", "hf")
 # Les catalogues changent vite (llama-3.3 et gemini-2.5-flash ont été retirés en 2026) :
 # `python -m monitoring_agent llm-check` liste ce qui est disponible ; on surcharge dans .env.
 DEFAULTS = {
@@ -91,7 +95,7 @@ class ChatModel(Protocol):
 def _settings() -> dict[str, str]:
     env_file = Path(os.environ.get("MONITORING_ENV_FILE", PACKAGE_ROOT / ".env"))
     values = {k: v for k, v in dotenv_values(env_file).items() if v} if env_file.exists() else {}
-    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_", "SLACK_"))}}
+    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_", "SLACK_", "HF_"))}}
 
 
 class OpenAICompatModel:
@@ -269,7 +273,12 @@ def build_model(spec: str, settings: dict[str, str], timeout_s: float = 90,
     key = settings.get(key_env) if key_env else None
     if key_env and not key:
         return None
-    return OpenAICompatModel(provider, model, key, settings.get(f"MONITORING_{provider.upper()}_BASE_URL"),
+    base_url = settings.get(f"MONITORING_{provider.upper()}_BASE_URL") or PROVIDERS[provider][0]
+    if not base_url:
+        raise LLMError(f"MONITORING_{provider.upper()}_BASE_URL manquant pour {spec}")
+    # Un modèle servi sur CPU (Space gratuit) est lent : délai réglable par fournisseur
+    timeout_s = float(settings.get(f"MONITORING_{provider.upper()}_TIMEOUT_S", timeout_s))
+    return OpenAICompatModel(provider, model, key, base_url,
                              timeout_s=timeout_s, retries=retries,
                              reasoning_effort=settings.get(f"MONITORING_{provider.upper()}_REASONING_EFFORT")
                              or (settings.get("MONITORING_REASONING_EFFORT") if provider == "groq" else None))

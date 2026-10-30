@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ..config import DriftConfig
 from .context import Case, case_summary, compact
-from .llm import DEFAULTS, LLMError, _chain, _settings, usage_summary
+from .llm import DEFAULTS, LOCAL, LLMError, _chain, _settings, usage_summary
 from .prompts import PROCEDURE
 
 ASSISTANT_VERSION = "2026-10-30.2"
@@ -85,7 +85,7 @@ def assistant_model():
     spec = s.get("MONITORING_ASSISTANT") or s.get("MONITORING_INVESTIGATOR")
     if not spec:
         decider = s.get("MONITORING_DECIDER", DEFAULTS["MONITORING_DECIDER"])
-        spec = decider if decider.partition(":")[0] not in ("mlx", "ollama") else DEFAULTS["MONITORING_DECIDER"]
+        spec = decider if decider.partition(":")[0] not in LOCAL else DEFAULTS["MONITORING_DECIDER"]
     return _chain([spec, s.get("MONITORING_DECIDER_FALLBACK", DEFAULTS["MONITORING_DECIDER_FALLBACK"])], s)
 
 

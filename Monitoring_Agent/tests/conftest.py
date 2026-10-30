@@ -16,5 +16,5 @@ def no_real_llm(monkeypatch, tmp_path):
     monkeypatch.setenv("MONITORING_EMBEDDER", "hash")     # jamais de téléchargement de modèle
     for key in ("GROQ_API_KEY", "GEMINI_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY",
                 "MONITORING_NOTIFY_WEBHOOK", "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CHANNEL",
-                "SLACK_APPROVERS"):
+                "SLACK_APPROVERS", "HF_TOKEN"):
         monkeypatch.delenv(key, raising=False)

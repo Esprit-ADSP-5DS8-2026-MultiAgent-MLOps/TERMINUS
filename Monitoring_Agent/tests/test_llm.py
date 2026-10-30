@@ -67,3 +67,37 @@ def test_user_message_tags_isolate_data():
         assert f"<{tag}>" in msg and f"</{tag}>" in msg
     assert msg.index("<critique>") > msg.index("<faits>")              # la critique arrive en dernier
     assert "<note_enquete>" not in prompts.user_message("r", "f")      # pas de balise vide
+
+
+def test_hosted_finetuned_model_needs_its_url_and_gets_facts_only(monkeypatch, tmp_path):
+    import pytest as _pytest
+
+    from monitoring_agent.agent import llm
+    settings = {"HF_TOKEN": "hf_x"}
+    with _pytest.raises(llm.LLMError, match="MONITORING_HF_BASE_URL"):
+        llm.build_model("hf:agent4", settings)
+    m = llm.build_model("hf:agent4", settings | {"MONITORING_HF_BASE_URL": "https://u-s.hf.space/v1/",
+                                                 "MONITORING_HF_TIMEOUT_S": "300"})
+    assert m.base_url == "https://u-s.hf.space/v1" and m.timeout_s == 300 and m.api_key == "hf_x"
+    assert llm.build_model("hf:agent4", {}) is None                      # sans jeton : pas de modèle
+    env = tmp_path / ".env"
+    env.write_text("MONITORING_DECIDER=hf:agent4\nMONITORING_HF_BASE_URL=https://u-s.hf.space/v1\n"
+                   "HF_TOKEN=hf_x\nGROQ_API_KEY=g\n", encoding="utf-8")
+    monkeypatch.setenv("MONITORING_ENV_FILE", str(env))
+    decider, _ = llm.decider_and_judge()
+    assert decider.local and decider.investigator is not None           # faits seuls, enquête au grand modèle
+
+
+def test_export_writes_ollama_modelfile_and_space(tmp_path):
+    from monitoring_agent.finetune import export
+    space = export.prepare_space(tmp_path, "moi/agent4-qwen")
+    docker = (space / "Dockerfile").read_text(encoding="utf-8")
+    assert "moi/agent4-qwen" in docker and export.GGUF_NAME in docker and '"7860"' in docker
+    assert "app_port: 7860" in (space / "README.md").read_text(encoding="utf-8")
+    adapters = tmp_path / "adapters"
+    adapters.mkdir()
+    (adapters / "adapters.safetensors").write_bytes(b"x")
+    stage = export.prepare_repo(tmp_path, adapters, "moi/agent4-qwen", "| modèle | cas |")
+    modelfile = (stage / "Modelfile").read_text(encoding="utf-8")
+    assert f"FROM ./{export.GGUF_NAME}" in modelfile and "{{ .Role }}" in modelfile
+    assert (stage / "adapters" / "adapters.safetensors").exists()
