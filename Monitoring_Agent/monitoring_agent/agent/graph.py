@@ -27,11 +27,13 @@ from __future__ import annotations
 import contextvars
 import logging
 import operator
+import threading
 import time
 import uuid
 from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
@@ -46,7 +48,7 @@ from . import notify, prompts
 from .actions import execute
 from .context import Case, call_tool, case_facts, case_summary, compact, facts_block, tool_facts, tool_specs
 from .guards import evaluate, fix_claims, verify
-from .llm import ChatModel, LLMError, structured, usage_summary
+from .llm import ChatModel, LLMError, _settings, structured, usage_summary
 from .rules import diagnose_by_rules
 from .schemas import AgentRun, Diagnosis, JudgeVerdict, PolicyDecision, TraceStep, Verification
 
@@ -125,8 +127,13 @@ class MonitoringAgent:
         self.facts_only = bool(getattr(decider, "local", False))
         self.out_dir = Path(out_dir)
         self.config = config or AgentConfig()
+        always = [a.strip() for a in _settings().get("MONITORING_ALWAYS_HUMAN", "").split(",") if a.strip()]
+        if always and not self.config.policy.always_human:
+            self.config = replace(self.config, policy=replace(self.config.policy, always_human=tuple(always)))
         self.on_update = on_update or (lambda run: None)
         self.cases: dict[str, Case] = {}
+        # Console et Slack peuvent répondre en même temps : la première réponse gagne, la seconde est refusée.
+        self._resume_lock = threading.Lock()
         self.graph = self._build().compile(checkpointer=MemorySaver())
 
     # -- API ----------------------------------------------------------------------------
@@ -154,12 +161,17 @@ class MonitoringAgent:
         if run_id not in self.cases:
             raise KeyError(f"décision inconnue : {run_id}")
         cfg = {"configurable": {"thread_id": run_id}}
-        if not self.graph.get_state(cfg).interrupts:
-            raise RuntimeError(f"la décision {run_id} n'attend pas d'humain")
-        self.graph.invoke(Command(resume={"decision": decision, "by": by, "comment": comment}), cfg)
+        with self._resume_lock:
+            if not self.graph.get_state(cfg).interrupts:
+                raise RuntimeError(f"la décision {run_id} n'attend pas d'humain")
+            self.graph.invoke(Command(resume={"decision": decision, "by": by, "comment": comment}), cfg)
         obs.score_human(self.trace_ids.get(run_id), decision, comment)
         obs.flush()
-        return self._publish(run_id)
+        run = self._publish(run_id)
+        if run.status == "rejected_by_human":
+            # Une action approuvée est notifiée par le nœud act ; un rejet ne passe pas par act.
+            self._notify({**self.graph.get_state(cfg).values, "run_id": run_id}, "rejected")
+        return run
 
     def result(self, run_id: str, error: str | None = None) -> AgentRun:
         """État final (après invoke) : lu dans le checkpoint de LangGraph."""

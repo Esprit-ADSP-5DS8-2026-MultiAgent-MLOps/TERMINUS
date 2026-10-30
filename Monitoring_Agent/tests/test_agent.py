@@ -300,3 +300,24 @@ def test_assistant_sees_the_reason_of_recent_decisions(analyzer):
                                                          "root_cause": "concept_drift", "rationale": "mesurée < limite"}])
     block = _last_decisions(case)
     assert "concept_drift" in block and "mesurée < limite" in block
+
+
+def test_team_can_require_a_human_for_an_action(analyzer, tmp_path, monkeypatch):
+    monkeypatch.setenv("MONITORING_ALWAYS_HUMAN", "request_retraining")
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    agent = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), Scripted("j", verdicts=[approve()]),
+                            out_dir=tmp_path)
+    run = agent.decide(case)
+    assert run.status == "awaiting_human" and any(r.rule.startswith("R10") for r in run.policy.rules)
+    done = agent.resume(run.id, "approve", by="mohamed (Slack)")
+    assert done.status == "executed" and done.human["by"] == "mohamed (Slack)"
+    events = [json.loads(x)["event"] for x in (tmp_path / "notifications.jsonl").read_text().splitlines()]
+    assert events == ["awaiting_human", "executed"]
+    with pytest.raises(RuntimeError):
+        agent.resume(run.id, "reject")                      # la première réponse a gagné
+
+
+def test_chat_landmarks_separate_bound_and_business_threshold(analyzer):
+    from monitoring_agent.agent.assistant import _landmarks
+    block = _landmarks(make_case(analyzer, frame(1000, shift=1.5, flip=0.3)))
+    assert "limite_variabilite" in block and "psi_majeur" in block

@@ -63,6 +63,9 @@ class PolicyConfig:
     min_agreement: float = 0.66        # au moins 2 diagnostics sur 3 d'accord (2/3 = 0.666…)
     retrain_cooldown_h: float = 24.0   # pas deux demandes de réentraînement en 24 h
     max_auto_actions_24h: int = 10     # disjoncteur : au-delà, un humain reprend la main
+    # Actions que l'équipe veut toujours valider elle-même (ex. request_retraining).
+    # Réglable sans toucher au code : MONITORING_ALWAYS_HUMAN=request_retraining dans .env.
+    always_human: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

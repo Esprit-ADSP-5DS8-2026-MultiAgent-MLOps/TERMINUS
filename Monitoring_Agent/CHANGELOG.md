@@ -2,6 +2,17 @@
 
 Les changements notables de l'Agent 4. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [0.5.0] - 2026-10-30
+
+### Ajouté
+- App Slack en Socket Mode : notifications avec boutons Approuver / Rejeter, suite dans le fil du message, `/monitoring` et `@agent4` pour le chat, boutons d'avis. Manifest dans `infra/slack/manifest.yml`.
+- `SLACK_APPROVERS` : seules ces personnes peuvent valider ; la première réponse gagne (console ou Slack).
+- Règle R10 : `MONITORING_ALWAYS_HUMAN` pour que l'équipe valide toujours certaines actions.
+- Un rejet humain est aussi notifié.
+
+### Modifié
+- Prompt du chat (version `2026-10-30.2`) : vocabulaire du PSI (stable, modéré, majeur), distinction entre la limite de variabilité (qui décide) et le seuil métier (qui alerte), et les seuils réels du projet donnés dans `<reperes>`.
+
 ## [0.4.0] - 2026-10-30
 
 ### Ajouté

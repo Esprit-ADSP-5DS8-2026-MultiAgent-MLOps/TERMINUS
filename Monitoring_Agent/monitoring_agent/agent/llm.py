@@ -91,7 +91,7 @@ class ChatModel(Protocol):
 def _settings() -> dict[str, str]:
     env_file = Path(os.environ.get("MONITORING_ENV_FILE", PACKAGE_ROOT / ".env"))
     values = {k: v for k, v in dotenv_values(env_file).items() if v} if env_file.exists() else {}
-    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_"))}}
+    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_", "SLACK_"))}}
 
 
 class OpenAICompatModel:

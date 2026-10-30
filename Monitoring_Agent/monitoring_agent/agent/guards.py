@@ -177,6 +177,9 @@ def evaluate(diag: Diagnosis, case: Case, verification: Verification, verdict: J
         why = "juge indisponible" if verdict is None else f"le juge demande encore une révision ({verdict.critique[:100]})"
         if not rule("R7 avis du juge (ou second avis)", risk == "low" or rules_agree, f"{why} ; {agree_txt}"):
             human.append(f"{why}, et le second avis déterministe ne concorde pas")
+    if action in cfg.always_human:
+        human.append(f"l'équipe a demandé de valider elle-même « {action} »")
+        rule("R10 validation demandée par l'équipe", False, "MONITORING_ALWAYS_HUMAN")
     confident = diag.confidence >= cfg.min_confidence and agreement >= cfg.min_agreement
     if not rule("R8 confiance et accord", confident or risk == "low" or rules_agree,
                 f"confiance {diag.confidence:.2f} (min {cfg.min_confidence}), accord {agreement:.0%} "

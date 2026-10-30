@@ -141,6 +141,12 @@ def cmd_gateway(args) -> int:
         decider, judge = decider_and_judge()
         print(f"Agent : décideur {decider.name if decider else 'règles (aucune clé LLM)'} · "
               f"juge {judge.name if judge else 'aucun'}")
+        from .agent.notify import slack_settings
+        conf = slack_settings()
+        if conf["SLACK_BOT_TOKEN"] and conf["SLACK_APP_TOKEN"]:
+            print(f"Slack : app en Socket Mode, canal {conf['SLACK_CHANNEL'] or '?'}, "
+                  f"{len([u for u in conf['SLACK_APPROVERS'].split(',') if u.strip()]) or 'tout le canal'} "
+                  "approbateur(s)")
     uvicorn.run(create_app(target, check_interval_s=args.interval, agent=not args.no_agent),
                 host=args.host, port=args.port, log_level="warning")
     return 0

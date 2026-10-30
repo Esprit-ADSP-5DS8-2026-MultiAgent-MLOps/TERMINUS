@@ -49,14 +49,14 @@ class Supervisor:
 
     # -- dossier d'enquête --------------------------------------------------------------
 
-    def build_case(self, upto: int | None = None) -> Case:
+    def build_case(self, upto: int | None = None, detailed: bool = False) -> Case:
         reports = [WindowReport.model_validate(r) for r in self.store.window_reports(self.history + 50)]
         if upto is not None:
             reports = [r for r in reports if r.window.index <= upto]
         if not reports:
             raise RuntimeError("aucune fenêtre analysée")
         return Case(project=self.target.project, mapping=self.target.mapping, history=reports[-self.history:],
-                    alerts=self.store.firing_alerts(), decisions=self.store.decisions(20),
+                    alerts=self.store.firing_alerts(), decisions=self.store.decisions(20, detailed=detailed),
                     model_uri=self.target.model_uri, export_new_data=self.export_new_data)
 
     def export_new_data(self, path: str) -> str | None:

@@ -164,9 +164,17 @@ Les avis de la console (`ratings.jsonl`) fournissent de nouveaux exemples réels
 
 ## 7. Notifications
 
-Code : `monitoring_agent/agent/notify.py`.
+Code : `monitoring_agent/agent/notify.py` (envoi) et `monitoring_agent/runtime/slack.py` (réception des clics et des questions).
 
-Une notification part quand l'agent exécute `notify_data_team`, `open_incident`, `request_retraining` ou `rollback_model`, et quand une décision attend un humain. Elle va vers le webhook `MONITORING_NOTIFY_WEBHOOK` (Slack, Teams, Mattermost : champ `text` ; Discord : champ `content`) et toujours dans `notifications.jsonl`. Un échec de notification ne bloque jamais la décision.
+Une notification part quand l'agent exécute `notify_data_team`, `open_incident`, `request_retraining` ou `rollback_model`, quand une décision attend un humain, et quand un humain la rejette.
+
+- App Slack (prioritaire) : message en Block Kit. Une décision en attente a des boutons Approuver / Rejeter ; la suite (exécution ou rejet) est postée dans le fil et le message d'origine perd ses boutons. Le `ts` Slack est gardé dans `notifications.jsonl` pour retrouver le fil, même si la validation vient de la console.
+- Réception en Socket Mode (`slack-bolt`) : clic Approuver / Rejeter -> `Supervisor.resume`, comme `POST /monitoring/decisions/{id}/approve` ; `/monitoring` et `@agent4` -> le chat ; boutons Utile / Pas utile et Bonne décision -> `ratings.jsonl`.
+- Contrôles : seules les personnes de `SLACK_APPROVERS` peuvent valider ; un verrou dans `MonitoringAgent.resume` garantit que la première réponse gagne.
+- Webhook entrant (`MONITORING_NOTIFY_WEBHOOK`) si l'app n'est pas configurée : Slack, Teams, Mattermost (champ `text`), Discord (champ `content`).
+- Toujours une ligne dans `notifications.jsonl`. Un échec d'envoi ne bloque jamais la décision.
+
+`MONITORING_ALWAYS_HUMAN` (règle R10) liste les actions que l'équipe veut toujours valider elle-même.
 
 ## 8. Suivi des appels LLM (Langfuse)
 

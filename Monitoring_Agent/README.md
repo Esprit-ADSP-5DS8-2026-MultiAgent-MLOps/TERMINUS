@@ -123,6 +123,7 @@ Les quatre premières remplacent une action risquée par une action plus prudent
 | R7 | Le juge approuve, ou le décideur à règles arrive à la même conclusion | Deux avis indépendants valent mieux qu'un. |
 | R8 | Confiance d'au moins 0,6 et accord d'au moins deux diagnostics sur trois | Ne pas agir sur un diagnostic hésitant. |
 | R9 | Pas plus de 10 actions automatiques par 24 h | Un disjoncteur si quelque chose s'emballe. |
+| R10 (optionnelle) | Les actions listées dans `MONITORING_ALWAYS_HUMAN` attendent toujours un humain | L'équipe garde la main sur ce qu'elle choisit. |
 
 Le code est dans `monitoring_agent/agent/guards.py`.
 
@@ -145,16 +146,31 @@ Les fichiers sont écrits dans `runs/<projet>/actions/` :
 - `notifications.jsonl` : toutes les notifications envoyées ;
 - `rollback_request_<décision>.json` : seulement après validation humaine.
 
-### Recevoir les notifications sur Slack, Teams ou Discord
+### Slack : notifications et validations
 
-Crée un webhook entrant dans ton outil, puis ajoute dans `.env` :
+L'agent a sa propre app Slack. Elle poste dans un canal chaque action importante et, quand l'agent attend un humain, un message avec deux boutons **Approuver** et **Rejeter**. Le clic fait exactement la même chose que dans la console : l'agent reprend, exécute (ou non), et la suite arrive dans le fil du même message. On peut aussi poser une question avec `/monitoring <question>` ou en mentionnant `@agent4`.
+
+L'app fonctionne en Socket Mode : c'est la gateway qui ouvre la connexion vers Slack, donc pas de port à ouvrir ni d'URL publique.
+
+1. Sur https://api.slack.com/apps : Create New App > From a manifest > colle `infra/slack/manifest.yml`.
+2. Basic Information > App-Level Tokens : un jeton avec `connections:write` (il commence par `xapp-`).
+3. Install App : installe l'app, puis copie le Bot User OAuth Token (`xoxb-`).
+4. Dans le canal, `/invite @agent4`, puis récupère l'identifiant du canal (`C...`, dans les détails du canal).
+5. Dans `.env` :
 
 ```
-MONITORING_NOTIFY_WEBHOOK=https://hooks.slack.com/services/...
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+SLACK_CHANNEL=C...
+SLACK_APPROVERS=U...,U...        # qui peut approuver (vide = tout le canal)
 MONITORING_PUBLIC_URL=http://127.0.0.1:8100
 ```
 
-Le message contient la cause, l'action et un lien qui ouvre directement la décision dans la console. Sans webhook, les notifications sont seulement écrites dans `notifications.jsonl`.
+Seules les personnes de `SLACK_APPROVERS` peuvent valider, et la première réponse gagne (console ou Slack). Le nom Slack de la personne est enregistré dans la décision.
+
+Pour que l'équipe valide toujours certaines actions, même quand l'agent pourrait les faire seul : `MONITORING_ALWAYS_HUMAN=request_retraining`.
+
+Sans app Slack, un simple webhook entrant marche aussi (Slack, Teams, Discord, Mattermost), mais sans boutons : `MONITORING_NOTIFY_WEBHOOK=https://...`. Dans tous les cas, chaque notification est écrite dans `notifications.jsonl`.
 
 ## Demande à ton monitoring
 
@@ -216,7 +232,7 @@ D'autres agents peuvent aussi interroger le monitoring en MCP sur `http://localh
 | `gateway <projet>` | Lance la gateway, le moniteur, l'agent et la console. |
 | `simulate <projet>` | Envoie du trafic simulé avec un problème injecté. |
 | `decide <jeu> --at N` | Fait décider l'agent sur une fenêtre, hors ligne. |
-| `ask <projet> "question"` | Pose une question au monitoring. |
+| `ask <projet> "question"` | Pose une question au monitoring (aussi `/monitoring` dans Slack). |
 | `ratings <projet>` | Résume les avis collectés, `--export` pour le fine-tuning. |
 | `evaluate` | Évaluation chiffrée, `--redteam` pour les injections. |
 | `llm-check` | Vérifie les clés et liste les modèles disponibles. |

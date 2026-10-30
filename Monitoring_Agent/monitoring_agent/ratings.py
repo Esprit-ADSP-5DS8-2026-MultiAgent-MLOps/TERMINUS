@@ -91,3 +91,43 @@ def export(project_dir: Path, out: Path) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in examples), encoding="utf-8")
     return len(examples)
+
+
+def answer_snapshot(project_dir: Path, answer_id: str) -> dict | None:
+    """La question et la réponse du chat notées (assistant.jsonl)."""
+    path = project_dir / "assistant.jsonl"
+    if not path.exists():
+        return None
+    for line in reversed(path.read_text(encoding="utf-8").splitlines()):
+        rec = json.loads(line) if line.strip() else {}
+        if rec.get("id") == answer_id:
+            return {k: rec.get(k) for k in ("question", "answer", "tools", "model", "window", "prompt")}
+    return None
+
+
+def diagnoser_messages(supervisor, decision_id: str) -> list[dict] | None:
+    """Le prompt du diagnostiqueur pour cette décision, au format du fine-tuning (faits seuls)."""
+    if supervisor is None or decision_id not in supervisor.agent.cases:
+        return None     # gateway redémarrée : le dossier n'est plus en mémoire
+    from .agent import prompts
+    from .agent.context import case_facts
+    from .agent.graph import build_messages
+    case = supervisor.agent.cases[decision_id]
+    return build_messages(prompts.DIAGNOSER, case, case_facts(case))
+
+
+def rate(project_dir: Path, store, supervisor, kind: str, ref: str, rating: str, comment: str = "",
+         correct_cause: str | None = None, correct_action: str | None = None, by: str = "console") -> dict:
+    """Enregistre un avis venant de la console ou de Slack. Lève KeyError si l'élément noté n'existe pas."""
+    snapshot, example = {}, None
+    if kind == "decision":
+        d = store.decision(ref)
+        if d is None:
+            raise KeyError("décision inconnue")
+        snapshot = {k: d.get(k) for k in ("action", "status", "mode", "window_index", "signals")}
+        snapshot["diagnosis"] = d.get("diagnosis")
+        example = decision_example(d, diagnoser_messages(supervisor, ref), rating, correct_cause, correct_action)
+    elif kind == "answer":
+        snapshot = answer_snapshot(project_dir, ref) or {}
+    rec = add(project_dir, kind, ref, rating, comment, snapshot, example, correct_cause, correct_action, by)
+    return {"id": rec["id"], "training_example": bool(example), **summary(project_dir)}

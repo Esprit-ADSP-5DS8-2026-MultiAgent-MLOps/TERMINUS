@@ -23,6 +23,9 @@ prometheus-client>=0.20
 pyyaml>=6
 python-dotenv>=1.0
 
+# Slack : app en Socket Mode (boutons d'approbation, /monitoring)
+slack-bolt>=1.18
+
 # RAG : base vectorielle locale + embeddings ONNX (sans torch)
 qdrant-client[fastembed]>=1.12
 

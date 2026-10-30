@@ -117,8 +117,16 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     async def lifespan(app: FastAPI):
         app.state.client = httpx.AsyncClient(base_url=target.upstream_url, timeout=10.0, transport=transport)
         task = asyncio.create_task(monitor_loop(app.state.client)) if run_monitor else None
+        app.state.slack = None
+        if supervisor:
+            from .slack import SlackBridge
+            bridge = SlackBridge(target, store, supervisor)
+            if bridge.configured and await asyncio.to_thread(bridge.start):
+                app.state.slack = bridge
         async with mcp_server.session_manager.run():   # le cycle de vie d'une sous-app montée n'est pas lancé seul
             yield
+        if app.state.slack:
+            app.state.slack.close()
         if task:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -211,6 +219,7 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
                 "upstream_up": app.state.upstream_up, "task": m.task, "metric": m.primary_metric,
                 "min_threshold": m.min_threshold, "features": m.features, "model_uri": target.model_uri,
                 "agent": agent_info, "simulation": app.state.simulation,
+                "slack": bool(getattr(app.state, "slack", None)),
                 "last_window": last.model_dump(mode="json", include={"window", "severity", "trigger_agent", "signals"})
                 if last else None}
 
@@ -295,49 +304,18 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     @app.post("/monitoring/ratings")
     async def rate(r: Rating):
         from .. import ratings
-        snapshot, example = {}, None
-        if r.kind == "decision":
-            d = store.decision(r.ref)
-            if d is None:
-                raise HTTPException(status_code=404, detail="décision inconnue")
-            snapshot = {k: d.get(k) for k in ("action", "status", "mode", "window_index", "signals")}
-            snapshot["diagnosis"] = d.get("diagnosis")
-            example = ratings.decision_example(d, _diagnoser_messages(r.ref), r.rating, r.correct_cause,
-                                               r.correct_action)
-        elif r.kind == "answer":
-            snapshot = _answer(r.ref) or {}
         try:
-            rec = ratings.add(target.dir, r.kind, r.ref, r.rating, r.comment, snapshot, example,
-                              r.correct_cause, r.correct_action)
+            return ratings.rate(target.dir, store, supervisor, r.kind, r.ref, r.rating, r.comment,
+                                r.correct_cause, r.correct_action)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
-        return {"id": rec["id"], "training_example": bool(example), **ratings.summary(target.dir)}
 
     @app.get("/monitoring/ratings")
     async def ratings_summary():
         from .. import ratings
         return ratings.summary(target.dir)
-
-    def _diagnoser_messages(decision_id: str) -> list[dict] | None:
-        """Le prompt du diagnostiqueur pour cette décision, au format du fine-tuning (faits seuls)."""
-        if supervisor is None or decision_id not in supervisor.agent.cases:
-            return None     # gateway redémarrée : le dossier n'est plus en mémoire
-        from ..agent import prompts
-        from ..agent.context import case_facts
-        from ..agent.graph import build_messages
-        case = supervisor.agent.cases[decision_id]
-        return build_messages(prompts.DIAGNOSER, case, case_facts(case))
-
-    def _answer(answer_id: str) -> dict | None:
-        import json
-        path = target.dir / "assistant.jsonl"
-        if not path.exists():
-            return None
-        for line in reversed(path.read_text(encoding="utf-8").splitlines()):
-            rec = json.loads(line) if line.strip() else {}
-            if rec.get("id") == answer_id:
-                return {k: rec.get(k) for k in ("question", "answer", "tools", "model", "window")}
-        return None
 
     # -- décisions de l'agent ------------------------------------------------------------
 

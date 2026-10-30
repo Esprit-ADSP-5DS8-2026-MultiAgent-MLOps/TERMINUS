@@ -1,0 +1,30 @@
+# Manifest de l'app Slack de l'Agent 4 (api.slack.com/apps > Create New App > From a manifest).
+# Socket Mode : aucune URL publique n'est nécessaire, la gateway ouvre elle-même la connexion.
+display_information:
+  name: Agent 4 Monitoring
+  description: Surveille le modèle en production, prévient l'équipe et demande les validations.
+  background_color: "#2f5bd3"
+features:
+  bot_user:
+    display_name: agent4
+    always_online: true
+  slash_commands:
+    - command: /monitoring
+      description: Pose une question au monitoring du modèle
+      usage_hint: "pourquoi la fenêtre 6 est rouge ?"
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - commands
+      - app_mentions:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
