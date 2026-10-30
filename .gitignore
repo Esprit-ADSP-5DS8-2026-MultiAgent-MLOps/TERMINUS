@@ -21,3 +21,7 @@ Monitoring_Agent/.venv/
 # Configs générées par `python -m monitoring_agent provision <projet>` (propres à chaque machine)
 Monitoring_Agent/infra/grafana/dashboards/*.json
 Monitoring_Agent/infra/prometheus/rules/*.rules.yml
+# Modèle fine-tuné (fusionné, GGUF) : hébergé sur Hugging Face, jamais dans git
+Monitoring_Agent/models/
+*.gguf
+*.safetensors
