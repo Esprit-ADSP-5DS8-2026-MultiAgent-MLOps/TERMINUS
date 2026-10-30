@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1",
+  "project": {
+    "project_path": "./project",
+    "dataset_path": "./data/train.csv",
+    "training_script": "./src/train.py"
+  },
+  "task": {
+    "type": "classification",
+    "target_column": "churn",
+    "objective": "predict customer churn",
+    "primary_metric": "f1",
+    "secondary_metrics": [
+      "precision",
+      "recall"
+    ]
+  },
+  "dataset_analysis": {
+    "rows": 10000,
+    "columns": 20,
+    "missing_values": {
+      "total": 25,
+      "columns_affected": [
+        "age"
+      ]
+    },
+    "class_distribution": {
+      "negative": 8000,
+      "positive": 2000
+    },
+    "data_leakage_risks": []
+  },
+  "existing_implementation": {
+    "training_code_available": true,
+    "preprocessing_available": true,
+    "existing_models": [
+      "RandomForestClassifier"
+    ]
+  },
+  "constraints": {
+    "max_experiment_runs": 30,
+    "max_runtime_minutes": 60
+  },
+  "status": "ready_for_experimentation"
+}

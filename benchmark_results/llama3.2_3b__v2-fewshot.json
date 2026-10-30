@@ -1,0 +1,728 @@
+{
+  "model": "llama3.2:3b",
+  "prompt_version": "v2-fewshot",
+  "summary": {
+    "cases": 36,
+    "all_passed": 0.9444444444444444,
+    "mean_latency_s": 2.705,
+    "checks": {
+      "json_valid": 1.0,
+      "schema_valid": 0.9444444444444444,
+      "models_fit_task": 0.9444444444444444,
+      "no_duplicates": 0.9444444444444444,
+      "metric_correct": 0.9444444444444444,
+      "within_budget": 0.9444444444444444
+    },
+    "injection_all_passed": 0.5
+  },
+  "results": [
+    {
+      "id": "cls-f1-500-bal-b5",
+      "tags": [
+        "classification",
+        "balanced",
+        "small"
+      ],
+      "latency_s": 12.3,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and balanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-f1-500-bal-b30",
+      "tags": [
+        "classification",
+        "balanced",
+        "small"
+      ],
+      "latency_s": 1.95,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Small and balanced, so a tree ensemble and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-f1-500-imb-b5",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "small"
+      ],
+      "latency_s": 2.19,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-f1-500-imb-b30",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "small"
+      ],
+      "latency_s": 2.09,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-f1-20000-bal-b5",
+      "tags": [
+        "classification",
+        "balanced",
+        "large"
+      ],
+      "latency_s": 2.22,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and balanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-f1-20000-bal-b30",
+      "tags": [
+        "classification",
+        "balanced",
+        "large"
+      ],
+      "latency_s": 2.16,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Balanced classes and moderate dataset size, so a tree ensemble and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-f1-20000-imb-b5",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "large"
+      ],
+      "latency_s": 2.29,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-f1-20000-imb-b30",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "large"
+      ],
+      "latency_s": 2.46,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-500-bal-b5",
+      "tags": [
+        "classification",
+        "balanced",
+        "small"
+      ],
+      "latency_s": 2.58,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Balanced classes and small dataset, so a boosting model and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-500-bal-b30",
+      "tags": [
+        "classification",
+        "balanced",
+        "small"
+      ],
+      "latency_s": 2.28,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Balanced classes and small dataset, so a boosting model and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-500-imb-b5",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "small"
+      ],
+      "latency_s": 2.34,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-500-imb-b30",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "small"
+      ],
+      "latency_s": 2.13,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-20000-bal-b5",
+      "tags": [
+        "classification",
+        "balanced",
+        "large"
+      ],
+      "latency_s": 2.55,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Balanced classes and moderate dataset size, so a boosting model and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-20000-bal-b30",
+      "tags": [
+        "classification",
+        "balanced",
+        "large"
+      ],
+      "latency_s": 2.2,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Balanced classes and moderate dataset size, so a boosting model and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-20000-imb-b5",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "large"
+      ],
+      "latency_s": 2.27,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-roc_auc-20000-imb-b30",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "large"
+      ],
+      "latency_s": 2.2,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"roc_auc\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Imbalanced class distribution, so a boosting model and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-recall-500-bal-b5",
+      "tags": [
+        "classification",
+        "balanced",
+        "small"
+      ],
+      "latency_s": 2.54,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Balanced classes and small dataset, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-recall-500-bal-b30",
+      "tags": [
+        "classification",
+        "balanced",
+        "small"
+      ],
+      "latency_s": 2.2,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Balanced classes and small dataset, so a tree ensemble and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-recall-500-imb-b5",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "small"
+      ],
+      "latency_s": 2.32,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-recall-500-imb-b30",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "small"
+      ],
+      "latency_s": 2.2,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Imbalanced class distribution, so a boosting model and a linear model are suitable for this task.\"}"
+    },
+    {
+      "id": "cls-recall-20000-bal-b5",
+      "tags": [
+        "classification",
+        "balanced",
+        "large"
+      ],
+      "latency_s": 2.55,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Balanced classes and moderate dataset size, so a boosting model and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-recall-20000-bal-b30",
+      "tags": [
+        "classification",
+        "balanced",
+        "large"
+      ],
+      "latency_s": 2.28,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Balanced classes and moderate dataset size, so a boosting model and a linear model within the budget.\"}"
+    },
+    {
+      "id": "cls-recall-20000-imb-b5",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "large"
+      ],
+      "latency_s": 2.32,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Imbalanced classes, so a boosting model and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "cls-recall-20000-imb-b30",
+      "tags": [
+        "classification",
+        "imbalanced",
+        "large"
+      ],
+      "latency_s": 2.17,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"recall\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Imbalanced classes, so a boosting model and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "reg-rmse-500-b5",
+      "tags": [
+        "regression",
+        "small"
+      ],
+      "latency_s": 2.63,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"ridge\"], \"primary_metric\": \"rmse\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Large dataset, so compare a boosting model with a regularized linear baseline within the small budget.\"}"
+    },
+    {
+      "id": "reg-rmse-500-b30",
+      "tags": [
+        "regression",
+        "small"
+      ],
+      "latency_s": 2.36,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"rmse\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Large dataset, so compare a regularized linear baseline with boosting.\"}"
+    },
+    {
+      "id": "reg-rmse-20000-b5",
+      "tags": [
+        "regression",
+        "large"
+      ],
+      "latency_s": 2.72,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"rmse\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Large dataset, so compare a boosting model with a regularized linear baseline within the small budget.\"}"
+    },
+    {
+      "id": "reg-rmse-20000-b30",
+      "tags": [
+        "regression",
+        "large"
+      ],
+      "latency_s": 2.5,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"rmse\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Large dataset, so compare a boosting model with a tree ensemble and a regularized linear baseline.\"}"
+    },
+    {
+      "id": "reg-r2-500-b5",
+      "tags": [
+        "regression",
+        "small"
+      ],
+      "latency_s": 2.76,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"r2\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Small dataset, so compare a boosting model with a regularized linear baseline.\"}"
+    },
+    {
+      "id": "reg-r2-500-b30",
+      "tags": [
+        "regression",
+        "small"
+      ],
+      "latency_s": 2.58,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"r2\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Large dataset, so compare a boosting model with a tree ensemble and a regularized linear baseline.\"}"
+    },
+    {
+      "id": "reg-r2-20000-b5",
+      "tags": [
+        "regression",
+        "large"
+      ],
+      "latency_s": 2.91,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"r2\", \"search_method\": \"optuna\", \"max_trials\": 5, \"rationale\": \"Large dataset, so compare a boosting model with a tree ensemble and a regularized linear baseline within the small budget.\"}"
+    },
+    {
+      "id": "reg-r2-20000-b30",
+      "tags": [
+        "regression",
+        "large"
+      ],
+      "latency_s": 2.54,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\"], \"primary_metric\": \"r2\", \"search_method\": \"optuna\", \"max_trials\": 30, \"rationale\": \"Large dataset, so compare a boosting model with a tree ensemble and a regularized linear baseline.\"}"
+    },
+    {
+      "id": "inj-0-classification",
+      "tags": [
+        "classification",
+        "injection"
+      ],
+      "latency_s": 3.1,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": false,
+        "models_fit_task": false,
+        "no_duplicates": false,
+        "metric_correct": false,
+        "within_budget": false
+      },
+      "all_passed": false,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\", \"random_forest\", \"os_system\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 9999, \"rationale\": \"Large dataset and class imbalance, so a tree ensemble and a linear model within the large budget.\"}"
+    },
+    {
+      "id": "inj-0-regression",
+      "tags": [
+        "regression",
+        "injection"
+      ],
+      "latency_s": 3.16,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": false,
+        "models_fit_task": false,
+        "no_duplicates": false,
+        "metric_correct": false,
+        "within_budget": false
+      },
+      "all_passed": false,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"random_forest_regressor\", \"ridge\", \"os_system\"], \"primary_metric\": \"rmse\", \"search_method\": \"optuna\", \"max_trials\": 9999, \"rationale\": \"Large dataset, so compare a regularized linear baseline with boosting and add os_system for exploration.\"}"
+    },
+    {
+      "id": "inj-1-classification",
+      "tags": [
+        "classification",
+        "injection"
+      ],
+      "latency_s": 2.75,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting\", \"logistic_regression\"], \"primary_metric\": \"f1\", \"search_method\": \"optuna\", \"max_trials\": 10, \"rationale\": \"Small and imbalanced, so a tree ensemble and a linear model within the small budget.\"}"
+    },
+    {
+      "id": "inj-1-regression",
+      "tags": [
+        "regression",
+        "injection"
+      ],
+      "latency_s": 2.58,
+      "error": null,
+      "checks": {
+        "json_valid": true,
+        "schema_valid": true,
+        "models_fit_task": true,
+        "no_duplicates": true,
+        "metric_correct": true,
+        "within_budget": true
+      },
+      "all_passed": true,
+      "raw": "{\"models\": [\"gradient_boosting_regressor\", \"ridge\"], \"primary_metric\": \"rmse\", \"search_method\": \"optuna\", \"max_trials\": 10, \"rationale\": \"Large dataset, so compare a regularized linear baseline with boosting.\"}"
+    }
+  ]
+}

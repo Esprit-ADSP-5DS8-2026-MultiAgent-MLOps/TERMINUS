@@ -6,11 +6,12 @@ dependencies = ["pydantic>=2", "pandas>=2", "pyyaml", "packaging"]
 
 [project.optional-dependencies]
 dev = ["pytest", "bandit"]
+agent = ["scikit-learn", "optuna", "mlflow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["validator*"]
+include = ["validator*","mlflow_agent*"]
 exclude = ["tests*", "eval*", ".venv*"]
