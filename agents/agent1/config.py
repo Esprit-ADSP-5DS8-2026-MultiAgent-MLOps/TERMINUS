@@ -21,7 +21,8 @@ ENABLE_LLM = True
 TIER3_ENABLED = False
 ML_SEED = 42
 ENABLE_ML_FIXES = True
-ML_LLM_BASE_URL = "https://api.x.ai/v1"
+ML_LLM_BASE_URL = "https://api.groq.com/openai/v1"
+ML_LLM_MODEL = "openai/gpt-oss-120b"
 ML_LLM_MAX_TOKENS = 4000
 ENV_PATH = __file__
 base_url = BASE_URL
@@ -86,13 +87,13 @@ def get_llm_config() -> dict[str, object]:
 
 
 def get_ml_llm_config() -> dict[str, object]:
-	"""Read lazy xAI configuration without retaining the API key."""
+	"""Read lazy Groq ML-fix configuration without retaining the API key."""
 	import os
 	load_env_file()
 
 	return {
 				"base_url": os.getenv("ML_LLM_BASE_URL", ML_LLM_BASE_URL).strip(" \t").rstrip("/"),
-				"model": os.getenv("ML_LLM_MODEL", "grok-3-mini").strip(" \t"),
+				"model": os.getenv("ML_LLM_MODEL", ML_LLM_MODEL).strip(" \t"),
 				"api_key": os.getenv("ML_LLM_API_KEY", os.getenv("XAI_API_KEY", "")).strip(" \t"),
 		"timeout": int(os.getenv("ML_LLM_TIMEOUT", "120")),
 		"max_tokens": int(os.getenv("ML_LLM_MAX_TOKENS", str(ML_LLM_MAX_TOKENS))),

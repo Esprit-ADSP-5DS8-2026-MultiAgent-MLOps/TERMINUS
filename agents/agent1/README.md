@@ -88,7 +88,9 @@ Copy `.env.example` to `.env` inside `agents/agent1/` and set `GROQ_API_KEY`
 (or `AGENT1_LLM_API_KEY`) and optionally `AGENT1_LLM_MODEL` or
 `AGENT1_LLM_BASE_URL`. The file is loaded lazily from the package location;
 variables already present in the process environment always take precedence.
-The ML client uses `ML_LLM_MAX_TOKENS` (default `4000`) and optionally sends
+The docstring/type-hint client uses `openai/gpt-oss-20b`; the ML-fix client uses
+`openai/gpt-oss-120b`. Override the latter with `ML_LLM_MODEL` if needed. The
+ML client uses `ML_LLM_MAX_TOKENS` (default `4000`) and optionally sends
 `ML_LLM_REASONING_EFFORT` when set to `low`, `medium`, or `high`.
 The real `.env` is ignored by Git and secret values are never included in Agent
 1 output or logs.
