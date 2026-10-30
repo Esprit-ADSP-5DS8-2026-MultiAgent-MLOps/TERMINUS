@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class DriftConfig:
     # Au-delà de cette taille d'échantillon, un test statistique détecte des écarts minuscules
-    # (p-value ~ 0) : on passe alors à des DISTANCES, qui mesurent l'ampleur de l'écart.
+    # (p-value ~ 0) : on passe alors à des distances, qui mesurent l'ampleur de l'écart.
     # C'est la règle par défaut d'Evidently.
     large_sample: int = 1000
     wasserstein: float = 0.1      # distance de Wasserstein / écart-type de la référence
@@ -32,7 +32,7 @@ class QualityConfig:
     unseen_rate: float = 0.01          # >1 % de catégories jamais vues
     unseen_critical: float = 0.10
     out_of_range_rate: float = 0.01    # >1 % hors de [min, max] de la référence : information
-    out_of_range_warning: float = 0.30  # >=30 % hors de TOUT ce qui a été vu : changement d'unité, pas un drift
+    out_of_range_warning: float = 0.30  # >=30 % hors de tout ce qui a été vu : changement d'unité, pas un drift
     type_mismatch_rate: float = 0.0    # une seule valeur non numérique suffit
 
 
@@ -57,7 +57,7 @@ class AnalyzerConfig:
 
 @dataclass(frozen=True)
 class PolicyConfig:
-    """Ce que l'agent a le droit de faire SEUL (agent/guards.py)."""
+    """Ce que l'agent a le droit de faire seul (agent/guards.py)."""
 
     min_confidence: float = 0.6        # confiance déclarée du diagnostic
     min_agreement: float = 0.66        # au moins 2 diagnostics sur 3 d'accord (2/3 = 0.666…)
@@ -70,6 +70,6 @@ class AgentConfig:
     samples: int = 3                   # self-consistency : 3 diagnostics indépendants
     sample_temperature: float = 0.7    # diversité entre les 3 (le vote mesure l'incertitude)
     max_tool_calls: int = 6            # budget de l'enquête
-    max_revisions: int = 1             # le juge peut demander UNE révision
+    max_revisions: int = 1             # le juge peut demander une révision
     use_mcp: bool = True               # l'enquêteur découvre et appelle les outils via MCP (sinon : appel direct)
     policy: PolicyConfig = field(default_factory=PolicyConfig)

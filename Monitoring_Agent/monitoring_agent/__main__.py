@@ -150,14 +150,10 @@ def cmd_gateway(args) -> int:
 # Étape 3 : l'agent
 # ---------------------------------------------------------------------------
 
-ICONS = {"prepare": "📋", "investigate": "🔎", "diagnose": "🧠", "verify": "🧾", "judge": "⚖️ ",
-         "policy": "🛡️ ", "await_human": "🙋", "act": "⚙️ "}
-
-
 def print_run(run) -> None:
     print(f"\n── Décision {run.id} · fenêtre {run.window_index} · décideur {run.decider} · juge {run.judge or '—'}")
     for t in run.trace:
-        print(f"  {ICONS.get(t.node, '•')} {t.node:<12} {t.ms:>8.0f} ms  {t.summary}")
+        print(f"  - {t.node:<12} {t.ms:>8.0f} ms  {t.summary}")
         if t.node == "investigate" and t.detail.get("notes"):
             for line in t.detail["notes"].splitlines():
                 print(f"  {'':>26}│ {line}")
@@ -168,14 +164,14 @@ def print_run(run) -> None:
         print(f"  Pourquoi : {d.rationale}")
     if run.verification:
         for c in run.verification.checks:
-            print(f"    {'✅' if c.ok else '❌'} {c.fact} = {c.claimed:g}" + ("" if c.ok else f" (réel : {c.actual})"))
+            print(f"    {'ok' if c.ok else 'KO'} {c.fact} = {c.claimed:g}" + ("" if c.ok else f" (réel : {c.actual})"))
     if run.verdicts:
         v = run.verdicts[-1]
         print(f"  Juge : {v.verdict} {v.scores} — {v.critique}")
     if p:
         print(f"\n  Policy : {p.proposed_action} -> {p.final_action} · mode {p.mode}")
         for r in p.rules:
-            print(f"    {'✅' if r.passed else '⛔'} {r.rule} — {r.detail}")
+            print(f"    {'ok' if r.passed else 'KO'} {r.rule} — {r.detail}")
         for reason in p.reasons:
             print(f"    → {reason}")
     print(f"\n  Statut : {run.status}" + (f" · erreur : {run.error}" if run.error else ""))
@@ -329,6 +325,44 @@ def cmd_mcp(args) -> int:
     return 0
 
 
+def cmd_ask(args) -> int:
+    """Pose une question au monitoring d'un projet (même chose que le chat de la console)."""
+    from .agent.assistant import ask
+    from .agent.context import Case
+    from .agent.mcp_server import server_for_target
+    from .runtime.store import Store
+    from .runtime.target import MonitoringTarget
+    from .schemas import WindowReport
+    target = MonitoringTarget.load(args.project)
+    store = Store(target.store_path)
+    reports = [WindowReport.model_validate(r) for r in store.window_reports(70)]
+    if not reports:
+        print("Aucune fenêtre analysée pour ce projet : lance d'abord la gateway et du trafic.")
+        return 1
+    case = Case(project=target.project, mapping=target.mapping, history=reports[-20:],
+                alerts=store.firing_alerts(), decisions=store.decisions(20), model_uri=target.model_uri)
+    rec = ask(args.question, case, server_for_target(target, store), log_dir=target.dir)
+    print(f"\n{rec['answer']}\n")
+    tools = ", ".join(t["tool"] for t in rec["tools"]) or "aucun"
+    print(f"({rec['model']} · outils : {tools} · {rec['ms'] / 1000:.1f} s)")
+    return 0
+
+
+def cmd_ratings(args) -> int:
+    """Avis collectés dans la console ; --export écrit les exemples d'entraînement (format MLX)."""
+    from . import ratings
+    from .runtime.target import MonitoringTarget
+    target = MonitoringTarget.load(args.project)
+    s = ratings.summary(target.dir)
+    print(f"Avis : {s['total']} · décisions {s['decisions']['up']} haut / {s['decisions']['down']} bas · "
+          f"réponses {s['answers']['up']} haut / {s['answers']['down']} bas")
+    print(f"Exemples d'entraînement utilisables : {s['training_examples']}")
+    if args.export:
+        n = ratings.export(target.dir, Path(args.export))
+        print(f"{n} exemples écrits dans {args.export}")
+    return 0
+
+
 def cmd_memory(args) -> int:
     from .memory.cards import from_incident_data, from_scenarios
     from .memory.store import IncidentMemory, evaluate_retrieval, memory_dir
@@ -359,7 +393,7 @@ def cmd_memory(args) -> int:
                   f"· sans résultat {m['no_result']:.0%}")
         return 0
     if args.step == "search":
-        # Démo : un scénario de TEST (jamais en mémoire) -> les 3 cas retrouvés par chaque méthode
+        # Démo : un scénario de test (jamais en mémoire) -> les 3 cas retrouvés par chaque méthode
         from .memory.store import _queries
         rows = [json.loads(x) for x in scen.read_text(encoding="utf-8").splitlines() if x.strip()]
         test = [r for r in rows if r["split"] == "test"]
@@ -377,7 +411,7 @@ def cmd_memory(args) -> int:
             print(f"\n  {label}")
             for h in hits:
                 ok = "✓" if h["root_cause"] == sc["oracle"]["root_cause"] else "✗"
-                ts = f"{h['text_sim']:.2f}" if h["text_sim"] else " —  "    # — : hors des 20 meilleurs candidats
+                ts = f"{h['text_sim']:.2f}" if h["text_sim"] else " —  "    # - : hors des 20 meilleurs candidats
                 ss = f"{h['sig_sim']:.2f}" if h["sig_sim"] else " —  "
                 print(f"    {ok} {h['id']} texte {ts} · chiffres {ss} — {h['title']} "
                       f"-> {h['root_cause']} / {h['action']}")
@@ -480,7 +514,7 @@ def cmd_finetune(args) -> int:
         return 0
     if args.step == "eval":
         from .finetune.evaluate import evaluate_model, report
-        # Résultats CUMULÉS entre les lancements (« modèle=étiquette ») : on peut évaluer le Qwen de base,
+        # Résultats cumulés entre les lancements (« modèle=étiquette ») : on peut évaluer le Qwen de base,
         # redémarrer le serveur avec l'adaptateur, évaluer le fine-tuné, puis le grand LLM, et tout comparer.
         store = out / "eval_slm.json"
         results = {r["model"]: r for r in (json.loads(store.read_text(encoding="utf-8")) if store.exists() else [])}
@@ -579,6 +613,16 @@ def main(argv: list[str] | None = None) -> int:
     me.add_argument("--limit", type=int)
     me.set_defaults(func=cmd_memory)
 
+    ak = sub.add_parser("ask", help="pose une question au monitoring d'un projet (LLM + outils MCP)")
+    ak.add_argument("project")
+    ak.add_argument("question")
+    ak.set_defaults(func=cmd_ask)
+
+    rt = sub.add_parser("ratings", help="avis collectés dans la console (pouce haut / bas)")
+    rt.add_argument("project")
+    rt.add_argument("--export", help="fichier JSONL des exemples d'entraînement")
+    rt.set_defaults(func=cmd_ratings)
+
     mck = sub.add_parser("mcp-check", help="démo client MCP : liste et appelle les outils du serveur (stdio)")
     mck.add_argument("project")
     mck.set_defaults(func=cmd_mcp_check)
@@ -597,6 +641,8 @@ def main(argv: list[str] | None = None) -> int:
     ft.set_defaults(func=cmd_finetune)
 
     args = parser.parse_args(argv)
+    import logging
+    logging.getLogger("httpx").setLevel(logging.WARNING)   # sinon une ligne de log par requête HTTP
     return args.func(args)
 
 

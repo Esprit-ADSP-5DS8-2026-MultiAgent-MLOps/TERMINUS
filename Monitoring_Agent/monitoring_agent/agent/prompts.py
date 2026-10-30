@@ -2,18 +2,18 @@
 Prompts versionnés. Toute modification change PROMPT_VERSION, enregistrée avec chaque décision
 (et dans Langfuse) : on sait toujours quel prompt a produit quel diagnostic.
 
-Techniques utilisées (fiche pour la soutenance) :
-- rôle précis + périmètre (ce que le modèle fait et ne fait PAS) ;
-- vocabulaire FERMÉ (6 causes, 6 actions) : pas de réponse libre ;
-- PROCÉDURE DE DÉCISION ORDONNÉE : le modèle suit un raisonnement guidé, aligné sur la policy ;
-- ANCRAGE : chaque preuve cite une clé exacte de <faits>, recontrôlée par le vérificateur ;
-- DÉLIMITEURS : tout ce qui vient des données est entre balises et traité comme DONNÉE (anti-injection) ;
-- SORTIE STRUCTURÉE : JSON Schema imposé au décodage quand le fournisseur le permet (llm.structured) ;
-- SELF-CONSISTENCY (3 tirages, vote), RÉFLEXION guidée par la critique (vérificateur / juge),
-  LLM-AS-JUDGE avec grille, FEW-SHOT DYNAMIQUE via la mémoire d'incidents (<cas_similaires>, RAG).
+Techniques de prompting utilisées :
+- rôle précis + périmètre (ce que le modèle fait et ne fait pas) ;
+- vocabulaire fermé (6 causes, 6 actions) : pas de réponse libre ;
+- procédure de décision ordonnée : le modèle suit un raisonnement guidé, aligné sur la policy ;
+- ancrage : chaque preuve cite une clé exacte de <faits>, recontrôlée par le vérificateur ;
+- délimiteurs : tout ce qui vient des données est entre balises et traité comme donnée (anti-injection) ;
+- sortie structurée : JSON Schema imposé au décodage quand le fournisseur le permet (llm.structured) ;
+- self-consistency (3 tirages, vote), réflexion guidée par la critique (vérificateur / juge),
+  LLM-as-judge avec grille, few-shot dynamique via la mémoire d'incidents (<cas_similaires>, RAG).
 """
 
-PROMPT_VERSION = "2026-10-26.3"
+PROMPT_VERSION = "2026-10-30.1"
 
 CONTEXT_RULES = """\
 Règles absolues :
@@ -46,6 +46,8 @@ Le moteur d'analyse (déterministe) a levé des signaux sur la dernière fenêtr
 Ton rôle maintenant : ENQUÊTER avant de conclure. Appelle les outils utiles (historique d'une feature,
 de la performance, détails qualité, prédictions, santé du service, alertes, décisions passées).
 N'appelle pas deux fois le même outil avec les mêmes arguments.
+Si des <cas_similaires> sont fournis, vérifie avec les outils si la situation actuelle leur ressemble
+vraiment (mêmes signaux, même type de feature touchée) et dis-le dans ta note.
 Quand tu as assez d'éléments, réponds SANS appeler d'outil, par une note d'enquête de 5 lignes maximum :
 ce que tu as vérifié, et ce que cela suggère.
 
@@ -80,6 +82,9 @@ Grille (note de 1 à 5) :
 - causality       : la cause retenue est-elle celle que donne la procédure ?
 - proportionality : l'action est-elle proportionnée (ni excessive, ni insuffisante) ?
 - safety          : l'action respecte-t-elle les règles (pas de réentraînement sans baisse de perf ni sur données cassées) ?
+
+Si des <cas_similaires> sont fournis, compare la proposition à ce qui a été décidé dans ces cas passés :
+une action différente n'est pas forcément fausse, mais elle doit être justifiée par les faits.
 
 verdict : "approve" si toutes les notes >= 4 ; "revise" si c'est corrigeable (dis précisément quoi) ; "reject" si c'est faux.
 

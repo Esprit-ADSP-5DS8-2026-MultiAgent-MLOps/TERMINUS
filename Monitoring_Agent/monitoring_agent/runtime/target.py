@@ -1,11 +1,11 @@
 """
-Cible de monitoring : QUOI surveiller et OÙ.
+Cible de monitoring : quoi surveiller et où.
 
 `monitoring.json` est écrit une fois (commande `init`, ou par l'agent dans le pipeline à partir
 de project_spec.json + deployment_result.json) puis relu par la gateway, le moniteur et le
 générateur de configuration Prometheus / Grafana.
 
-La référence est construite en faisant passer les données d'entraînement par l'API DÉPLOYÉE :
+La référence est construite en faisant passer les données d'entraînement par l'API déployée :
 on obtient les prédictions et probabilités du vrai modèle servi, sans exécuter le code du projet
 dans notre processus (il reste isolé dans son conteneur).
 """

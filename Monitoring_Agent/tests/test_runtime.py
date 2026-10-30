@@ -1,4 +1,4 @@
-"""Gateway, moniteur et génération des configs, avec une FAUSSE API de modèle (aucun réseau)."""
+"""Gateway, moniteur et génération des configs, avec une fausse API de modèle (aucun réseau)."""
 
 from __future__ import annotations
 
@@ -259,3 +259,44 @@ def test_gateway_exposes_mcp_server(client):
         headers={"Accept": "application/json, text/event-stream", "Host": "localhost:8100"})
     assert r.status_code == 200, r.text
     assert "agent4-monitoring" in r.text
+
+
+def test_ask_and_ratings_feed_a_training_set(client, target, tmp_path):
+    """Le chat répond (sans LLM : résumé du moteur), les avis sont gardés, une correction devient un exemple."""
+    from monitoring_agent import ratings
+    _drift_traffic(client)
+    client.app.state.monitor.step()
+    client.app.state.supervisor.running.result(timeout=30)
+
+    rec = client.post("/monitoring/ask", json={"question": "Le modèle va bien ?"}).json()
+    assert rec["model"] == "aucun" and "Fenêtre courante" in rec["answer"]
+    assert (target.dir / "assistant.jsonl").exists()
+
+    d = client.get("/monitoring/decisions").json()[0]
+    r = client.post("/monitoring/ratings", json={"kind": "decision", "ref": d["id"], "rating": "down",
+                                                 "correct_action": "open_incident", "comment": "trop tôt"}).json()
+    assert r["training_example"] and r["decisions"]["down"] == 1
+    assert client.post("/monitoring/ratings", json={"kind": "decision", "ref": d["id"], "rating": "down",
+                                                    "correct_action": "réparer"}).status_code == 422
+    out = tmp_path / "sft.jsonl"
+    assert ratings.export(target.dir, out) == 1
+    ex = json.loads(out.read_text(encoding="utf-8"))
+    assert [m["role"] for m in ex["messages"]] == ["system", "user", "assistant"]
+    assert json.loads(ex["messages"][-1]["content"])["action"] == "open_incident"
+    assert "<note_enquete>" not in ex["messages"][1]["content"]          # même format que le fine-tuning
+
+
+def test_service_health_never_returns_nan(monkeypatch):
+    from monitoring_agent.agent import mcp_server
+
+    class R:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": {"result": [{"value": [0, "NaN"]}]}}
+
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda *a, **k: R())
+    out = mcp_server.service_health("demo", "http://prom")
+    assert out["latency_p95_s"] is None
+    json.dumps(out, allow_nan=False)

@@ -38,7 +38,7 @@ const STAGE = {
 };
 const DETERMINISTIC = new Set(["prepare", "verify", "policy", "act"]);
 
-const state = { status: null, windows: [], decisions: [], alerts: [], selected: null, follow: true, openId: null, seen: new Set(), first: true };
+const state = { status: null, windows: [], decisions: [], alerts: [], selected: null, follow: true, openId: null, seen: new Set(), first: true, ratings: {} };
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const fmt = (v, d = 3) => (v === null || v === undefined || Number.isNaN(v) ? "—" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: Math.min(d, 2) }));
@@ -82,9 +82,11 @@ function svg(tag, attrs = {}, text) {
 
 async function refresh() {
   try {
-    const [status, windows, decisions, alerts] = await Promise.all([
+    const [status, windows, decisions, alerts, ratings] = await Promise.all([
       api("/status"), api("/windows?limit=60"), api("/decisions?limit=60"), api("/alerts?firing=true"),
+      api("/ratings").catch(() => ({ by_ref: {} })),
     ]);
+    state.ratings = ratings.by_ref || {};
     const changedDecisions = JSON.stringify(decisions) !== JSON.stringify(state.decisions);
     Object.assign(state, { status, windows, decisions, alerts });
     // On suit la dernière fenêtre, sauf si l'utilisateur en a choisi une plus ancienne.
@@ -441,6 +443,7 @@ async function openDecision(id, silent = false) {
       $("recorder-body").insertAdjacentHTML("beforeend", `<section class="report">${markdown(md)}</section>`);
     } catch { /* pas de rapport */ }
   }
+  bindRating(id);
   const form = $("recorder-body").querySelector(".human-form");
   if (form) {
     form.addEventListener("click", (e) => {
@@ -535,7 +538,66 @@ function recorderHTML(run) {
       <label for="human-comment" class="hint">Commentaire (facultatif)</label><textarea id="human-comment"></textarea>
       <div class="row"><button class="btn btn-approve" data-answer="approve" type="button">Approuver</button><button class="btn btn-reject" data-answer="reject" type="button">Rejeter</button></div></div></li>`);
   }
-  return head + `<ol class="rail">${stages.join("")}</ol>`;
+  return head + (d && run.status !== "awaiting_human" ? ratingHTML(run) : "") + `<ol class="rail">${stages.join("")}</ol>`;
+}
+
+// ---------------------------------------------------------------------------
+// Avis sur une décision (gardés pour un futur fine-tuning)
+// ---------------------------------------------------------------------------
+
+const THUMB = (down) => `<svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"${down ? ' style="transform:rotate(180deg)"' : ""}><path d="M6 9v8H3V9zm2 8h6.6a2 2 0 0 0 2-1.6l1-5A2 2 0 0 0 15.6 8H12V4.8A1.8 1.8 0 0 0 10.2 3L8 9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+
+function ratingHTML(run) {
+  const current = state.ratings[`decision:${run.id}`];
+  const opt = (obj, sel) => Object.entries(obj).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
+  return `<section class="rate" data-rate="${esc(run.id)}">
+    <p class="rate-q">Cette décision te semble juste ?</p>
+    <div class="rate-buttons">
+      <button type="button" class="rate-btn" data-rating="up" aria-pressed="${current === "up"}">${THUMB(false)}Bonne décision</button>
+      <button type="button" class="rate-btn" data-rating="down" aria-pressed="${current === "down"}">${THUMB(true)}À corriger</button>
+    </div>
+    <div class="rate-fix" hidden>
+      <label>Bonne cause<select name="cause"><option value="">(inchangée)</option>${opt(CAUSE, "")}</select></label>
+      <label>Bonne action<select name="action"><option value="">(inchangée)</option>${opt(ACTION_PROPOSED, "")}</select></label>
+      <label class="wide">Pourquoi (facultatif)<textarea name="comment" rows="2"></textarea></label>
+      <button type="button" class="btn" data-rate-send>Enregistrer la correction</button>
+    </div>
+    <p class="rate-done hint" ${current ? "" : "hidden"}>${current ? "Avis déjà enregistré. Tu peux le changer." : ""}</p>
+  </section>`;
+}
+
+async function sendRating(body) {
+  const res = await api("/ratings", { method: "POST", body: JSON.stringify(body) });
+  state.ratings[`${body.kind}:${body.ref}`] = body.rating;
+  return res;
+}
+
+function bindRating(id) {
+  const box = $("recorder-body").querySelector("[data-rate]");
+  if (!box) return;
+  const fix = box.querySelector(".rate-fix");
+  const done = box.querySelector(".rate-done");
+  const mark = (rating) => box.querySelectorAll("[data-rating]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rating === rating)));
+  const say = (res) => {
+    done.hidden = false;
+    done.textContent = res.training_example
+      ? `Avis enregistré : il devient un exemple d'entraînement (${res.training_examples} au total).`
+      : "Avis enregistré.";
+  };
+  box.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-rating]");
+    if (b?.dataset.rating === "down") { mark("down"); fix.hidden = false; fix.querySelector("select").focus(); return; }
+    try {
+      if (b?.dataset.rating === "up") {
+        mark("up"); fix.hidden = true;
+        say(await sendRating({ kind: "decision", ref: id, rating: "up" }));
+      } else if (e.target.closest("[data-rate-send]")) {
+        const v = (n) => fix.querySelector(`[name="${n}"]`).value;
+        say(await sendRating({ kind: "decision", ref: id, rating: "down", correct_cause: v("cause") || null, correct_action: v("action") || null, comment: v("comment") }));
+        fix.hidden = true;
+      }
+    } catch (err) { toast(`Avis non enregistré : ${err.message}`); }
+  });
 }
 
 // Markdown minimal (rapports d'incident générés par l'agent)
@@ -594,5 +656,101 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => { renderHeatmap(); renderPerf(); }, 150);
 });
 
-refresh();
+// ---------------------------------------------------------------------------
+// « Demande à ton monitoring »
+// ---------------------------------------------------------------------------
+
+const chat = { history: [], busy: false };
+const SUGGESTIONS = [
+  "Est-ce que le modèle va bien en ce moment ?",
+  "Quelle feature dérive le plus, et depuis quand ?",
+  "Pourquoi l'agent a pris sa dernière décision ?",
+  "Les données reçues ont-elles des problèmes de qualité ?",
+];
+
+function openChat() {
+  $("chat").hidden = false;
+  $("btn-ask").setAttribute("aria-expanded", "true");
+  renderChat();
+  $("chat-input").focus();
+}
+function closeChat() { $("chat").hidden = true; $("btn-ask").setAttribute("aria-expanded", "false"); $("btn-ask").focus(); }
+
+function answerHTML(text) {
+  // paragraphes et listes simples ; tout est échappé
+  return text.split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n");
+    if (lines.every((l) => /^\s*[-*] /.test(l))) return `<ul>${lines.map((l) => `<li>${esc(l.replace(/^\s*[-*] /, ""))}</li>`).join("")}</ul>`;
+    return `<p>${lines.map(esc).join("<br>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")}</p>`;
+  }).join("");
+}
+
+function renderChat() {
+  const ol = $("chat-thread");
+  if (!chat.history.length && !chat.busy) {
+    ol.innerHTML = `<li class="chat-empty"><p class="hint">Quelques idées pour commencer :</p>
+      <div class="suggest">${SUGGESTIONS.map((q) => `<button type="button" class="suggest-btn" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div></li>`;
+    return;
+  }
+  ol.innerHTML = chat.history.map((m) => {
+    const rated = state.ratings[`answer:${m.id}`];
+    const tools = m.tools?.length ? `<div class="chips">${m.tools.map((t) => `<span class="chip">${esc(t.tool)}(${esc(Object.values(t.args || {}).join(", "))})</span>`).join("")}</div>` : "";
+    return `<li class="turn">
+      <p class="q">${esc(m.question)}</p>
+      <div class="a">${answerHTML(m.answer)}${tools}
+        <div class="a-foot">
+          <span class="hint">${esc(m.model || "")} · ${fmt((m.ms || 0) / 1000, 1)} s${m.tools?.length ? ` · ${m.tools.length} outil${m.tools.length > 1 ? "s" : ""} consulté${m.tools.length > 1 ? "s" : ""}` : ""}</span>
+          ${m.id && m.model !== "aucun" ? `<span class="a-rate" data-answer-id="${esc(m.id)}">
+            <button type="button" class="icon-btn" data-arating="up" aria-pressed="${rated === "up"}" aria-label="Réponse utile" title="Réponse utile">${THUMB(false)}</button>
+            <button type="button" class="icon-btn" data-arating="down" aria-pressed="${rated === "down"}" aria-label="Réponse pas utile" title="Réponse pas utile">${THUMB(true)}</button>
+          </span>` : ""}
+        </div>
+      </div>
+    </li>`;
+  }).join("") + (chat.busy ? `<li class="turn"><p class="q">${esc(chat.pending)}</p><div class="a thinking">L'assistant consulte les outils du monitoring</div></li>` : "");
+  ol.scrollTop = ol.scrollHeight;
+}
+
+async function sendQuestion(question) {
+  if (!question.trim() || chat.busy) return;
+  chat.busy = true; chat.pending = question;
+  $("chat-input").value = ""; $("chat-send").disabled = true;
+  renderChat();
+  try {
+    const rec = await api("/ask", { method: "POST", body: JSON.stringify({ question, history: chat.history.slice(-4).map(({ question: q, answer: a }) => ({ question: q, answer: a })) }) });
+    chat.history.push(rec);
+  } catch (err) {
+    chat.history.push({ question, answer: `Pas de réponse : ${err.message}`, tools: [], model: "aucun", ms: 0 });
+  } finally {
+    chat.busy = false; $("chat-send").disabled = false;
+    renderChat(); $("chat-input").focus();
+  }
+}
+
+$("btn-ask").addEventListener("click", openChat);
+$("chat").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-chat-close]")) { closeChat(); return; }
+  const sug = e.target.closest("[data-q]");
+  if (sug) { sendQuestion(sug.dataset.q); return; }
+  const b = e.target.closest("[data-arating]");
+  if (b) {
+    const id = b.closest("[data-answer-id]").dataset.answerId;
+    try {
+      await sendRating({ kind: "answer", ref: id, rating: b.dataset.arating });
+      renderChat();
+      toast("Merci, ton avis est gardé pour améliorer l'assistant.");
+    } catch (err) { toast(`Avis non enregistré : ${err.message}`); }
+  }
+});
+$("chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendQuestion($("chat-input").value); });
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendQuestion($("chat-input").value); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("chat").hidden) closeChat(); });
+
+refresh().then(() => {
+  // lien d'une notification : /console/#D0006-9145fe ouvre directement la décision
+  const id = decodeURIComponent(location.hash.slice(1));
+  if (id.startsWith("D")) openDecision(id);
+});
 setInterval(refresh, POLL_MS);

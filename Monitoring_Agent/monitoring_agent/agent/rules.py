@@ -1,9 +1,9 @@
 """
-Décideur SANS LLM, à base de règles.
+Décideur sans LLM, à base de règles.
 
 Deux usages :
 - repli quand aucun LLM n'est configuré ou joignable (l'agent continue de fonctionner) ;
-- BASELINE de l'évaluation (spec §10) : on compare règles / LLM de base / LLM fine-tuné.
+- baseline de l'évaluation (spec §10) : on compare règles / LLM de base / LLM fine-tuné.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def claim_for(key: str) -> str:
 
 
 def procedure(case: Case) -> tuple[str, str]:
-    """La PROCÉDURE du prompt (prompts.PROCEDURE), en code : (cause, action).
+    """La procédure du prompt (prompts.PROCEDURE), en code : (cause, action).
 
     Source unique de vérité : le décideur à règles, l'oracle du dataset de fine-tuning et le prompt
     suivent le même ordre. Un changement ici doit être répercuté dans prompts.PROCEDURE."""

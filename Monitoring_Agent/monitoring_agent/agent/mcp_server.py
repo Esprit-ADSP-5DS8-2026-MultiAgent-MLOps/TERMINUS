@@ -2,11 +2,11 @@
 Serveur MCP de l'Agent 4 : les outils d'enquête, les ressources et les prompts, exposés en Model Context Protocol.
 
 Pourquoi MCP plutôt que des fonctions Python appelées directement :
-- le LLM DÉCOUVRE les outils (tools/list) avec leur schéma, au lieu d'une liste codée en dur dans le prompt ;
-- le même serveur sert l'investigateur de l'agent (client MCP dans le graphe) ET n'importe quel client
+- le LLM découvre les outils (tools/list) avec leur schéma, au lieu d'une liste codée en dur dans le prompt ;
+- le même serveur sert l'investigateur de l'agent (client MCP dans le graphe) et n'importe quel client
   extérieur : Claude Desktop, MCP Inspector, l'orchestrateur ou un autre agent de l'équipe
   (`gateway` le monte sur /mcp en Streamable HTTP ; `python -m monitoring_agent mcp <projet>` en stdio) ;
-- tous les outils sont en LECTURE SEULE (annotation readOnlyHint) : enquêter ne change rien. Agir
+- tous les outils sont en lecture seule (annotation readOnlyHint) : enquêter ne change rien. Agir
   (réentraîner, notifier) reste derrière la policy et le juge, jamais en accès direct par MCP.
 
     outils     : feature_history, performance_history, quality_details, prediction_drift, active_alerts,
@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+import math
 import os
 import threading
 from collections.abc import Callable
@@ -56,7 +57,7 @@ PROMQL = {
 
 
 def service_health(project: str, prometheus_url: str | None = None) -> dict:
-    """Santé du SERVICE (pas du modèle) : disponibilité, débit, erreurs, latence p95, lus dans Prometheus."""
+    """Santé du service (pas du modèle) : disponibilité, débit, erreurs, latence p95, lus dans Prometheus."""
     url = (prometheus_url or os.environ.get("MONITORING_PROMETHEUS_URL") or "http://localhost:9090").rstrip("/")
     out: dict[str, Any] = {"source": url}
     try:
@@ -64,7 +65,9 @@ def service_health(project: str, prometheus_url: str | None = None) -> dict:
             r = httpx.get(f"{url}/api/v1/query", params={"query": q.format(p=project)}, timeout=3)
             r.raise_for_status()
             res = r.json()["data"]["result"]
-            out[key] = round(float(res[0]["value"][1]), 6) if res else None
+            value = float(res[0]["value"][1]) if res else None
+            # sans trafic, Prometheus renvoie NaN : on le remplace par null pour avoir du JSON valide
+            out[key] = round(value, 6) if value is not None and math.isfinite(value) else None
         out["available"] = True
     except (httpx.HTTPError, KeyError, ValueError) as exc:
         out.update(available=False, error=f"Prometheus injoignable : {type(exc).__name__}")
@@ -109,7 +112,7 @@ def build_server(get_case: Callable[[], Case], store=None, prometheus_url: str |
 
     @mcp.tool(annotations=READ_ONLY)
     def window_facts_at(window_index: int) -> dict:
-        """Tous les faits chiffrés (drift, qualité, performance) d'une fenêtre PASSÉE, pour comparer."""
+        """Tous les faits chiffrés (drift, qualité, performance) d'une fenêtre passée, pour comparer."""
         w = get_case().window(window_index)
         return window_facts(w) if w else {"error": f"fenêtre {window_index} absente"}
 
@@ -157,7 +160,7 @@ def _facts_text(facts: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Côté CLIENT : l'investigateur du graphe parle au serveur en MCP
+# Côté client : l'investigateur du graphe parle au serveur en MCP
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +194,7 @@ class MCPToolbox:
     """Session MCP synchrone pour le graphe (LangGraph appelle les nœuds dans des threads sans boucle asyncio).
 
     Une tâche asyncio dédiée (dans son thread) ouvre la session MCP et sert les appels un par un :
-    la session est ouverte et fermée dans la MÊME tâche, comme l'exige anyio."""
+    la session est ouverte et fermée dans la même tâche, comme l'exige anyio."""
 
     def __init__(self, server: MCPServer | str, timeout_s: float = 30):
         self.server, self.timeout_s = server, timeout_s
@@ -229,7 +232,7 @@ class MCPToolbox:
         self._loop.call_soon_threadsafe(self._queue.put_nowait, (name, arguments, fut))
         try:
             res = fut.result(self.timeout_s)
-        except Exception as exc:  # noqa: BLE001 — une erreur d'outil devient une observation, pas un crash
+        except Exception as exc:  # noqa: BLE001 - une erreur d'outil devient une observation, pas un crash
             return {"error": f"{type(exc).__name__}: {exc}"[:300]}
         if getattr(res, "is_error", False) or getattr(res, "isError", False):
             return {"error": result_dict(res)}
@@ -241,7 +244,7 @@ class MCPToolbox:
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
             if self._session is not None:
                 self._session.result(10)
-        except Exception:  # noqa: BLE001,S110 — fermeture best effort
+        except Exception:  # noqa: BLE001,S110 - fermeture best effort
             pass
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
@@ -249,7 +252,7 @@ class MCPToolbox:
 
 
 # ---------------------------------------------------------------------------
-# Serveur d'un projet DÉPLOYÉ (gateway /mcp, ou stdio pour Claude Desktop / MCP Inspector)
+# Serveur d'un projet déployé (gateway /mcp, ou stdio pour Claude Desktop / MCP Inspector)
 # ---------------------------------------------------------------------------
 
 

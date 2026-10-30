@@ -4,7 +4,7 @@ Jeux de données de monitoring (dossier data/, ignoré par git).
 Chaque jeu = une référence (données d'entraînement, avec labels) + une période de production
 (features + prédictions) + les labels de production, livrés à part comme en vrai.
 
-Les fichiers sont retrouvés par leur NOM n'importe où sous data/ (les noms de dossiers
+Les fichiers sont retrouvés par leur nom n'importe où sous data/ (les noms de dossiers
 contiennent des espaces et des accents : on ne reconstruit jamais les chemins à la main).
 Dossier : variable MONITORING_DATA_DIR, sinon Monitoring_Agent/data/.
 """
@@ -93,7 +93,7 @@ def load(name: str, with_labels: bool = True, label_delay_windows: int = 0,
          window_size: int = 5000) -> tuple[pd.DataFrame, pd.DataFrame, DatasetSpec]:
     """Renvoie (référence, production, spec).
 
-    label_delay_windows : les N dernières fenêtres n'ont PAS encore leurs labels
+    label_delay_windows : les N dernières fenêtres n'ont pas encore leurs labels
     (simule le retard de la vérité terrain ; seule la performance estimée y est disponible).
     """
     spec = DATASETS[name]

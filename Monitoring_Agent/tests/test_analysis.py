@@ -57,7 +57,7 @@ def _calibrated_sample(n: int, a: float = 2.0, b: float = 5.0):
 def test_cbpe_estimates_without_labels():
     p_ref, y_ref, _ = _calibrated_sample(20000)
     cbpe = CBPE().fit(p_ref, y_ref)
-    # production DÉPLACÉE (plus de cas incertains) : la performance réelle baisse
+    # production déplacée (plus de cas incertains) : la performance réelle baisse
     p, y, yp = _calibrated_sample(20000, a=4, b=4)
     est = cbpe.estimate(p, yp)
     real = realized_metrics("classification", y, yp, p)
@@ -131,7 +131,7 @@ def test_windows():
 
 
 def test_unseen_category_is_quality_not_drift(analyzer):
-    """Une catégorie inconnue est comptée UNE fois : en qualité, pas en drift."""
+    """Une catégorie inconnue est comptée une fois : en qualité, pas en drift."""
     w = analyzer.analyze_window(_frame(2000, new_cat=True))
     assert any(q.feature == "cat" and q.kind == "unseen_category" for q in w.data_quality)
     assert "cat" not in w.dataset_drift.drifted_features

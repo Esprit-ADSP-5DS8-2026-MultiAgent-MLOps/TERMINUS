@@ -15,7 +15,7 @@ Le graphe de décision de l'Agent 4 (LangGraph).
 - investigate : le LLM appelle des outils en lecture seule pour enquêter (ReAct borné) ;
 - diagnose    : N diagnostics indépendants, vote majoritaire = self-consistency ;
 - verify      : chaque chiffre cité est recontrôlé (déterministe) ; sinon une révision ;
-- judge       : un modèle d'une AUTRE famille note le diagnostic sur une grille ;
+- judge       : un modèle d'une autre famille note le diagnostic sur une grille ;
 - policy      : règles en code, qui substituent une action plus sûre et décident auto / humain ;
 - await_human : pause LangGraph (interrupt) ; reprise avec la décision de l'humain.
 
@@ -42,10 +42,10 @@ from langgraph.types import Command, interrupt
 from .. import observability as obs
 from ..config import AgentConfig
 from ..memory.store import format_similar
-from . import prompts
+from . import notify, prompts
 from .actions import execute
 from .context import Case, call_tool, case_facts, case_summary, compact, facts_block, tool_facts, tool_specs
-from .guards import evaluate, verify
+from .guards import evaluate, fix_claims, verify
 from .llm import ChatModel, LLMError, structured, usage_summary
 from .rules import diagnose_by_rules
 from .schemas import AgentRun, Diagnosis, JudgeVerdict, PolicyDecision, TraceStep, Verification
@@ -96,7 +96,7 @@ def _traced(name: str, fn):
 
 def build_messages(system: str, case: Case, facts: dict, notes: str | None = None, similar: str | None = None,
                    critique: str | None = None, extra: str | None = None) -> list[dict]:
-    """Messages d'un appel : MÊME format en production, en évaluation et dans le dataset de fine-tuning."""
+    """Messages d'un appel : même format en production, en évaluation et dans le dataset de fine-tuning."""
     user = prompts.user_message(case_summary(case), facts_block(facts), notes=notes, similar=similar,
                                 critique=critique, extra=extra)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -141,7 +141,7 @@ class MonitoringAgent:
             self.trace_ids[run_id] = trace_id
             try:
                 self.graph.invoke({"run_id": run_id, "revisions": 0, "observations": []}, cfg)
-            except Exception as exc:  # noqa: BLE001 — l'agent ne doit jamais faire tomber la gateway
+            except Exception as exc:  # noqa: BLE001 - l'agent ne doit jamais faire tomber la gateway
                 run = self._publish(run_id, error=f"{type(exc).__name__}: {exc}")
             else:
                 run = self._publish(run_id)
@@ -236,7 +236,9 @@ class MonitoringAgent:
         if self.investigator is None:
             return _step("investigate", t0, "aucun LLM configuré : enquête sautée")
         case, facts = self._case(state), dict(state["facts"])
-        messages = self._messages(prompts.INVESTIGATOR, case, facts)
+        # Les cas similaires (RAG) vont à l'enquêteur et au juge dans tous les cas. Seul le Qwen local
+        # ne les reçoit pas, parce qu'il a été entraîné sur les faits seuls.
+        messages = self._messages(prompts.INVESTIGATOR, case, facts, similar=state.get("similar"))
         observations, notes, meter = [], "", []
         box, transport = self._toolbox(case)
         specs = box.specs if box else tool_specs()
@@ -275,7 +277,7 @@ class MonitoringAgent:
                     **_step("diagnose", t0, f"décideur à règles : {d.root_cause} -> {d.action}")}
         context = {} if self.facts_only else {"notes": state.get("notes"), "similar": state.get("similar")}
         messages = self._messages(prompts.DIAGNOSER, case, state["facts"], critique=state.get("critique"), **context)
-        # Les N diagnostics sont INDÉPENDANTS : on les lance en parallèle (latence ÷ N).
+        # Les N diagnostics sont indépendants : on les lance en parallèle (latence ÷ N).
         meter: list = []
 
         def one(i: int):
@@ -311,11 +313,15 @@ class MonitoringAgent:
         case = self._case(state)
         signals = case.signal_kinds()
         known = set(state.get("similar_ids") or [])
-        v = verify(Diagnosis(**state["diagnosis"]), state["facts"], case.mapping.features, signals=signals,
-                   known_cases=known)
+        diag, relabeled = fix_claims(Diagnosis(**state["diagnosis"]))
+        v = verify(diag, state["facts"], case.mapping.features, signals=signals, known_cases=known)
         update: dict[str, Any] = {"verification": v.model_dump()}
+        if relabeled:
+            update["diagnosis"] = diag.model_dump()
         ok = sum(c.ok for c in v.checks)
         summary = f"{ok}/{len(v.checks)} preuves exactes" + (f" · problèmes : {'; '.join(v.problems)}" if v.problems else "")
+        if relabeled:
+            summary += f" · libellé corrigé : {', '.join(relabeled)}"
         if not v.ok and self.decider is not None:
             if state.get("revisions", 0) < self.config.max_revisions:
                 update.update(revisions=state.get("revisions", 0) + 1,
@@ -339,8 +345,8 @@ class MonitoringAgent:
                  f"<verification_automatique>\n{compact(state.get('verification'))}\n</verification_automatique>")
         meter: list = []
         try:
-            v = structured(self.judge, self._messages(prompts.JUDGE, case, state["facts"], extra=extra), JudgeVerdict,
-                           meter=meter)
+            v = structured(self.judge, self._messages(prompts.JUDGE, case, state["facts"], similar=state.get("similar"),
+                                                      extra=extra), JudgeVerdict, meter=meter)
         except LLMError as exc:
             return _step("judge", t0, f"juge indisponible : {exc}"[:200], usage=usage_summary(meter))
         update: dict[str, Any] = {"verdicts": [v.model_dump()]}
@@ -354,13 +360,17 @@ class MonitoringAgent:
         case = self._case(state)
         verdicts = state.get("verdicts") or []
         verdict = JudgeVerdict(**verdicts[-1]) if verdicts else None
-        # Second avis déterministe — seulement s'il est INDÉPENDANT : si le diagnostic vient déjà des
+        # Second avis déterministe - seulement s'il est indépendant : si le diagnostic vient déjà des
         # règles, les compter deux fois ne vaudrait pas confirmation.
         from_rules = "règles" in state.get("decider", "") or state.get("decider", "").startswith("rules")
         second = None if from_rules else diagnose_by_rules(case).action
         p = evaluate(Diagnosis(**state["diagnosis"]), case, Verification(**state["verification"]), verdict,
                      state.get("agreement", 0.0), self.config.policy, second_opinion=second)
         failed = [r.rule for r in p.rules if not r.passed]
+        if p.mode == "human":
+            # On prévient ici et pas dans await_human : LangGraph rejoue ce nœud à la reprise,
+            # on enverrait le message deux fois.
+            self._notify({**state, "policy": p.model_dump()}, "awaiting_human")
         return {"policy": p.model_dump(), **_step(
             "policy", t0, f"{p.proposed_action} -> {p.final_action} · mode {p.mode}"
             + (f" · règles non satisfaites : {', '.join(failed)}" if failed else ""), reasons=p.reasons)}
@@ -380,13 +390,23 @@ class MonitoringAgent:
     def act(self, state: AgentState) -> dict:
         t0 = time.perf_counter()
         case = self._case(state)
-        # L'état reçu par le nœud, PAS le checkpoint : LangGraph écrit ses checkpoints en asynchrone,
+        # L'état reçu par le nœud, pas le checkpoint : LangGraph écrit ses checkpoints en asynchrone,
         # relire le checkpoint ici pourrait donner une version en retard d'une étape.
         run = self._assemble(state["run_id"], dict(state))
         action = state["policy"]["final_action"]
         outputs = execute(action, run, case, self.out_dir)
+        if action in notify.NOTIFY_ACTIONS:
+            outputs["notification"] = self._notify(state, "executed")
         return {"status": "executed", "outputs": outputs,
                 **_step("act", t0, f"{action} exécuté" + (f" -> {', '.join(outputs)}" if outputs else ""))}
+
+    def _notify(self, state: dict, event: str) -> str:
+        try:
+            run = self._assemble(state["run_id"], dict(state))
+            return notify.send(run, self._case(state).project, event, self.out_dir)
+        except Exception:  # une notification ratée ne doit pas casser la décision
+            log.warning("notification impossible", exc_info=True)
+            return "échec"
 
     # -- graphe -------------------------------------------------------------------------------
 

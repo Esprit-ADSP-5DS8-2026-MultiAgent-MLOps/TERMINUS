@@ -1,5 +1,5 @@
 """
-Ce que l'agent PRODUIT : diagnostic, verdict du juge, décision de la policy, trace complète.
+Ce que l'agent produit : diagnostic, verdict du juge, décision de la policy, trace complète.
 
 Les modèles lus depuis un LLM sont tolérants (extra="ignore") : un champ en trop ne fait pas
 échouer la validation, mais un champ manquant ou une valeur hors liste, si.
@@ -16,6 +16,8 @@ RootCause = Literal["covariate_shift", "concept_drift", "data_quality", "service
                     "benign_drift", "no_issue"]
 Action = Literal["no_action", "increase_monitoring", "open_incident", "notify_data_team",
                  "request_retraining", "rollback_model"]
+CAUSES: tuple[str, ...] = RootCause.__args__
+ACTIONS: tuple[str, ...] = Action.__args__
 
 # Risque d'une action = ce qu'elle coûte si elle est fausse, et si on peut l'annuler.
 ACTION_RISK: dict[str, str] = {
@@ -23,7 +25,7 @@ ACTION_RISK: dict[str, str] = {
     "increase_monitoring": "low",  # on regarde de plus près
     "open_incident": "low",        # un rapport écrit
     "notify_data_team": "low",     # un rapport à l'équipe qui produit les données
-    "request_retraining": "medium",  # une DEMANDE : orchestrateur + quality gate de l'Agent 2 derrière
+    "request_retraining": "medium",  # une demande : orchestrateur + quality gate de l'Agent 2 derrière
     "rollback_model": "high",      # change le modèle servi : toujours un humain
 }
 
@@ -99,7 +101,7 @@ class TraceStep(BaseModel):
 
 
 class AgentRun(BaseModel):
-    """Tout ce que l'agent a fait pour UNE fenêtre : rejouable, auditable, affichable."""
+    """Tout ce que l'agent a fait pour une fenêtre : rejouable, auditable, affichable."""
 
     id: str
     project: str

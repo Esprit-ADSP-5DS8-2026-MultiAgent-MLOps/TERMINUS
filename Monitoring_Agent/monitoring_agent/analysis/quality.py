@@ -1,7 +1,7 @@
 """
 Qualité des données d'une fenêtre.
 
-Pourquoi c'est séparé du drift : un drift CAUSÉ par un bug de données (colonne vide,
+Pourquoi c'est séparé du drift : un drift causé par un bug de données (colonne vide,
 format changé, nouvelle catégorie mal encodée) ne se corrige pas en réentraînant.
 Réentraîner sur des données cassées, c'est apprendre le bug. L'agent doit donc savoir
 distinguer « le monde a changé » de « le pipeline de données est cassé ».

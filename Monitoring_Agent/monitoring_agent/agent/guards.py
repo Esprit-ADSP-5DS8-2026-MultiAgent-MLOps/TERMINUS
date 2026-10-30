@@ -1,8 +1,8 @@
 """
 Garde-fous déterministes : vérification des preuves et policy-as-code.
 
-Le LLM PROPOSE. Ce fichier DISPOSE. Rien ici n'appelle un LLM : les règles sont lisibles,
-testées, versionnées, et la prof peut les lire en 5 minutes.
+Le LLM propose. Ce fichier dispose. Rien ici n'appelle un LLM : les règles sont lisibles,
+testées et versionnées.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from .schemas import EvidenceCheck as Check
 # ---------------------------------------------------------------------------
 
 
-# Cause annoncée <-> signaux calculés : une contradiction vérifiable SANS LLM.
+# Cause annoncée <-> signaux calculés : une contradiction vérifiable sans LLM.
 CAUSE_REQUIRES = {
     "concept_drift": ({"concept_drift_suspected"}, ("concept drift sans le signal concept_drift_suspected "
                       "(la perf estimée a baissé aussi : c'est plutôt un covariate shift)")),
@@ -76,6 +76,27 @@ def verify(diag: Diagnosis, facts: dict[str, float], features: list[str], rel_to
     return Verification(ok=not problems, checks=checks, problems=problems)
 
 
+# Libellés : le LLM confond parfois « mesurée » (avec labels) et « estimée » (sans labels).
+# La valeur est déjà vérifiée au-dessus ; ici on corrige seulement le texte affiché à l'humain.
+MISLABELS = {
+    "realized": (("sans label", "sans les label", "without label"), "performance mesurée avec les vrais labels"),
+    "estimated": (("avec label", "avec les label", "avec les vrais label", "with label"), "performance estimée sans labels"),
+}
+
+
+def fix_claims(diag: Diagnosis) -> tuple[Diagnosis, list[str]]:
+    """Remplace un libellé de preuve qui contredit le fait cité (réalisée <-> estimée)."""
+    fixed, evidence = [], []
+    for ev in diag.evidence:
+        parts = ev.fact.split(".")
+        kind = next((k for k in MISLABELS if k in parts), None)
+        if kind and any(w in ev.claim.lower() for w in MISLABELS[kind][0]):
+            fixed.append(ev.fact)
+            ev = ev.model_copy(update={"claim": MISLABELS[kind][1]})
+        evidence.append(ev)
+    return (diag.model_copy(update={"evidence": evidence}) if fixed else diag), fixed
+
+
 # ---------------------------------------------------------------------------
 # 2. Policy : ce que l'agent a le droit de faire seul
 # ---------------------------------------------------------------------------
@@ -92,11 +113,11 @@ def _parse_time(v) -> datetime | None:
 
 def evaluate(diag: Diagnosis, case: Case, verification: Verification, verdict: JudgeVerdict | None,
              agreement: float, cfg: PolicyConfig | None = None, second_opinion: str | None = None) -> PolicyDecision:
-    """`second_opinion` : action du décideur à RÈGLES (déterministe) sur le même cas.
+    """`second_opinion` : action du décideur à règles (déterministe) sur le même cas.
 
-    Principe d'autonomie : l'humain n'intervient que si c'est LOGIQUEMENT nécessaire.
+    Principe d'autonomie : l'humain n'intervient que si c'est logiquement nécessaire.
     Quand un contrôle manque (juge indisponible, quota épuisé) ou hésite (juge « revise », confiance
-    faible), deux méthodes INDÉPENDANTES qui concluent la même chose (LLM + règles) suffisent pour agir.
+    faible), deux méthodes indépendantes qui concluent la même chose (LLM + règles) suffisent pour agir.
     Restent humains : le haut risque (rollback), un rejet explicite du juge, des preuves invérifiables,
     un désaccord LLM / règles sur une action à risque, et le disjoncteur."""
     cfg = cfg or PolicyConfig()

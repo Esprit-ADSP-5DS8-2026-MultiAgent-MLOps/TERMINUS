@@ -1,10 +1,10 @@
 """
-Bases du dataset de fine-tuning : des jeux SAINS sur lesquels on entraîne un modèle « déployé ».
+Bases du dataset de fine-tuning : des jeux sains sur lesquels on entraîne un modèle « déployé ».
 
 Chaque base est découpée une fois pour toutes (graine fixe) :
     40 % entraînement du modèle substitut | 30 % référence (scorée) | 30 % réservoir de production
 
-Le découpage train / valid / test se fait PAR BASE (jamais par exemple) : le modèle fine-tuné est évalué
+Le découpage train / valid / test se fait par base (jamais par exemple) : le modèle fine-tuné est évalué
 sur des jeux qu'il n'a jamais vus (car_loan, car_price), sinon on mesurerait de la mémorisation.
 
 Choix des bases (tous dans data/) :

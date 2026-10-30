@@ -1,5 +1,5 @@
 """
-Exécution des actions décidées. Chaque action produit un FICHIER : rien n'est invisible.
+Exécution des actions décidées. Chaque action produit un fichier : rien n'est invisible.
 
 - open_incident / notify_data_team : rapport d'incident Markdown (cause, preuves, règles appliquées) ;
 - increase_monitoring              : note de surveillance renforcée ;
@@ -37,13 +37,13 @@ def incident_markdown(run: AgentRun, case: Case, title: str) -> str:
              f"- **Action** : `{p.final_action}` (proposée : `{p.proposed_action}`) · **mode** : {p.mode}",
              f"- **Décideur** : {run.decider} · **juge** : {run.judge or '—'}", "",
              "## Diagnostic", "", d.summary, "", f"_Pourquoi cette action :_ {d.rationale}", "",
-             "## Preuves (vérifiées automatiquement)", "", "| fait | valeur | ✓ | ce que ça montre |", "|---|---|---|---|"]
+             "## Preuves (vérifiées automatiquement)", "", "| fait | valeur | vérifié | ce que ça montre |", "|---|---|---|---|"]
     checks = {c.fact: c for c in (run.verification.checks if run.verification else [])}
     for e in d.evidence:
-        ok = "✅" if checks.get(e.fact) and checks[e.fact].ok else "❌"
+        ok = "oui" if checks.get(e.fact) and checks[e.fact].ok else "non"
         lines.append(f"| `{e.fact}` | {e.value:g} | {ok} | {e.claim} |")
     lines += ["", "## Règles de la policy", ""]
-    lines += [f"- {'✅' if r.passed else '⛔'} **{r.rule}** — {r.detail}" for r in p.rules]
+    lines += [f"- {'[ok]' if r.passed else '[bloquée]'} **{r.rule}** — {r.detail}" for r in p.rules]
     if run.verdicts:
         v = run.verdicts[-1]
         lines += ["", "## Avis du juge", "", f"**{v.verdict}** — {v.critique}", "",

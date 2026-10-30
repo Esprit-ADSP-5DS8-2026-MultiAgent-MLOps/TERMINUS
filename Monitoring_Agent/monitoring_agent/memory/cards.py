@@ -1,11 +1,11 @@
 """
 Fiches d'incident et signature numérique d'une situation.
 
-Signature = 9 nombres dans [0, 1] calculés depuis les FAITS (jamais par un LLM) :
+Signature = 9 nombres dans [0, 1] calculés depuis les faits (jamais par un LLM) :
     0 part des features en drift        1 PSI max (plafonné à 1)
-    2 baisse de perf MESURÉE            3 baisse de perf ESTIMÉE    (0 = normale, 1 = 3× l'écart toléré)
+    2 baisse de perf mesurée            3 baisse de perf estimée    (0 = normale, 1 = 3× l'écart toléré)
     4 pire taux de problème qualité     5 labels disponibles
-    6 drift des prédictions             7 signal de qualité grave    8 incident de SERVICE (latence, erreurs)
+    6 drift des prédictions             7 signal de qualité grave    8 incident de service (latence, erreurs)
 Deux situations proches ont des signatures proches, même si leurs features portent des noms différents :
 c'est ce qui permet de rapprocher un incident « bank » d'un incident « credit_risk ».
 """
@@ -66,7 +66,7 @@ def query_text(task: str, signals, summary: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Fiches issues des scénarios ML (bases d'ENTRAÎNEMENT uniquement : pas de fuite vers le test)
+# Fiches issues des scénarios ML (bases d'entraînement uniquement : pas de fuite vers le test)
 # ---------------------------------------------------------------------------
 
 CAUSE_TXT = {"covariate_shift": "glissement des entrées qui dégrade le modèle", "concept_drift": "la relation entrées → cible a changé",
@@ -117,7 +117,7 @@ def from_scenarios(path: Path, per_group: int = 6) -> list[IncidentCard]:
 
 
 # ---------------------------------------------------------------------------
-# Fiches d'incidents de SERVICE (dossier 03_Incidents_Service)
+# Fiches d'incidents de service (dossier 03_Incidents_Service)
 # ---------------------------------------------------------------------------
 
 def _service_card(source, title, text) -> IncidentCard:

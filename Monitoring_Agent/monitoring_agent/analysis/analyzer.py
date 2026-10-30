@@ -142,7 +142,7 @@ class Analyzer:
                               message=f"{ds.n_drifted}/{ds.n_features} features en drift",
                               evidence={"share_drifted": ds.share_drifted}))
         elif top:
-            # Peu de features, mais un drift MAJEUR (PSI >= 0.25) sur l'une d'elles mérite l'agent :
+            # Peu de features, mais un drift majeur (PSI >= 0.25) sur l'une d'elles mérite l'agent :
             # sur 20 features, 3 qui explosent ne font pas 50 %, mais peuvent suffire à tromper le modèle.
             major = [d for d in top if d.psi_level == "major"]
             out.append(Signal(kind="feature_drift", severity="warning" if major else "info",

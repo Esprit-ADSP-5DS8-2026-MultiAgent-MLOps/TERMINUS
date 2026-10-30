@@ -37,7 +37,7 @@ def column_drift(ref: ColumnReference, current: pd.Series, cfg: DriftConfig, n_t
         current_summary = ({"mean": float(cur.mean()), "std": float(cur.std()), "median": float(np.median(cur))}
                            if len(cur) else {})
     else:
-        # Seules les catégories CONNUES entrent dans le drift. Une catégorie jamais vue est un
+        # Seules les catégories connues entrent dans le drift. Une catégorie jamais vue est un
         # problème de qualité (quality.py) : la compter aussi ici ferait exploser le PSI et
         # déclencherait une fausse alerte de drift. Chaque anomalie est comptée une fois.
         categories = ref.categories

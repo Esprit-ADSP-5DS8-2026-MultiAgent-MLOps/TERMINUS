@@ -2,14 +2,14 @@
 Point d'entrée de l'Agent 4 pour l'orchestrateur (contrat : common/schemas.py).
 
     from monitoring_agent.pipeline import run as agent4_run
-    AGENTS["agent4"] = agent4_run          # dans orchestrator/graph.py, à la place du stub
+    agents["agent4"] = agent4_run          # dans orchestrator/graph.py, à la place du stub
 
 À chaque appel :
-1. MISE EN PLACE (si l'Agent 3 a déployé une API : deployment_result.endpoint)
+1. mise en place (si l'Agent 3 a déployé une API : deployment_result.endpoint)
    référence notée par l'API, règles Prometheus + dashboard Grafana générés et validés ;
-2. DÉCISION (si la gateway a déjà observé de la production pour ce projet)
+2. décision (si la gateway a déjà observé de la production pour ce projet)
    l'agent enquête sur la dernière fenêtre et décide ; une demande de réentraînement produit
-   retraining_request.json, que l'orchestrateur soumet à SA gate humaine puis à l'Agent 2.
+   retraining_request.json, que l'orchestrateur soumet à sa propre validation humaine puis à l'Agent 2.
 
 L'agent n'échoue jamais pour une raison de monitoring : au pire il renvoie WARNING avec l'explication.
 """
@@ -41,7 +41,7 @@ def _setup(inp, spec, dep, outputs: dict, warnings: list) -> MonitoringTarget | 
             return None
     try:
         target, info = build_target(inp.project_dir, dep.endpoint, name=spec.project_name)
-    except Exception as exc:  # noqa: BLE001 — API injoignable, données absentes... : on explique, on ne plante pas
+    except Exception as exc:  # noqa: BLE001 - API injoignable, données absentes... : on explique, on ne plante pas
         warnings.append(f"mise en place du monitoring impossible : {type(exc).__name__}: {exc}")
         return None
     target.model_uri = dep.model_uri
@@ -91,7 +91,7 @@ def run(inp):
                 if p:
                     warnings.append(f"agent : {p.proposed_action} -> {p.final_action} ({p.mode}, {result.status})")
                     if p.final_action == "request_retraining" and "retraining_request" not in outputs:
-                        # En attente d'un humain : la gate « retraining » de l'orchestrateur EST cet humain.
+                        # En attente d'un humain : la gate « retraining » de l'orchestrateur est cet humain.
                         agent.resume(result.id, "approve", by="orchestrateur (gate humaine en aval)")
                         outputs.update(agent.result(result.id).outputs)
                 status = s.AgentStatus.WARNING

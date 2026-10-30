@@ -2,8 +2,8 @@
 Client LLM : un seul protocole (chat/completions d'OpenAI) pour Groq, Gemini et Ollama.
 
 Deux rôles, deux familles de modèles :
-- DÉCIDEUR (Groq) : enquête avec des outils, diagnostique, propose une action ;
-- JUGE (Gemini)   : relit et note. Un modèle d'une autre famille ne partage pas les mêmes biais.
+- décideur (Groq) : enquête avec des outils, diagnostique, propose une action ;
+- juge (Gemini)   : relit et note. Un modèle d'une autre famille ne partage pas les mêmes biais.
 
 Configuration : Monitoring_Agent/.env (jamais commité), voir .env.example.
 Le .env est lu dans un dict, pas injecté dans os.environ (les clés ne fuient pas vers les sous-processus).
@@ -37,7 +37,7 @@ LOCAL = ("ollama", "mlx")
 DEFAULTS = {
     "MONITORING_DECIDER": "groq:openai/gpt-oss-120b",        # raisonnement + appels d'outils
     "MONITORING_DECIDER_FALLBACK": "groq:qwen/qwen3.8-27b",  # autre famille, quota séparé
-    "MONITORING_JUDGE": "gemini:gemini-3.8-flash",           # autre fournisseur ET autre famille que le décideur
+    "MONITORING_JUDGE": "gemini:gemini-3.8-flash",           # autre fournisseur et autre famille que le décideur
 }
 
 T = TypeVar("T", bound=BaseModel)
@@ -130,7 +130,7 @@ class OpenAICompatModel:
         if tools:
             body["tools"], body["tool_choice"] = tools, "auto"
         if isinstance(json_mode, dict) and self.schema_ok:
-            # Décodage CONTRAINT : le modèle ne peut produire que des jetons conformes au schéma
+            # Décodage contraint : le modèle ne peut produire que des jetons conformes au schéma
             # (énumérations des causes / actions comprises). strict=False : « best effort » accepté par
             # Groq, Gemini et Ollama ; la validation Pydantic reste le contrôle final.
             body["response_format"] = {"type": "json_schema",
@@ -259,8 +259,9 @@ class FallbackModel:
         raise LLMUnavailable(" || ".join(errors))
 
 
-def build_model(spec: str, settings: dict[str, str]) -> OpenAICompatModel | None:
-    """« groq:llama-3.3-70b-versatile » -> client, ou None si la clé manque."""
+def build_model(spec: str, settings: dict[str, str], timeout_s: float = 90,
+                retries: int = 2) -> OpenAICompatModel | None:
+    """« groq:openai/gpt-oss-120b » -> client, ou None si la clé manque."""
     provider, _, model = spec.partition(":")
     if provider not in PROVIDERS or not model:
         raise LLMError(f"modèle mal défini : {spec!r} (attendu fournisseur:modèle, fournisseurs {list(PROVIDERS)})")
@@ -269,6 +270,7 @@ def build_model(spec: str, settings: dict[str, str]) -> OpenAICompatModel | None
     if key_env and not key:
         return None
     return OpenAICompatModel(provider, model, key, settings.get(f"MONITORING_{provider.upper()}_BASE_URL"),
+                             timeout_s=timeout_s, retries=retries,
                              reasoning_effort=settings.get(f"MONITORING_{provider.upper()}_REASONING_EFFORT")
                              or (settings.get("MONITORING_REASONING_EFFORT") if provider == "groq" else None))
 
@@ -281,7 +283,7 @@ def _chain(specs: list[str], settings: dict[str, str]) -> ChatModel | None:
 def decider_and_judge() -> tuple[ChatModel | None, ChatModel | None]:
     """Décideur (avec repli) et juge, depuis .env.
 
-    Si le décideur est LOCAL (mlx / ollama : le Qwen fine-tuné), il ne fait que DIAGNOSTIQUER, sur les faits
+    Si le décideur est local (mlx / ollama : le Qwen fine-tuné), il ne fait que diagnostiquer, sur les faits
     seuls (le format appris à l'entraînement) ; l'enquête avec outils reste à un grand modèle
     (MONITORING_INVESTIGATOR). Repli automatique sur Groq si le serveur local est arrêté."""
     s = _settings()
@@ -291,7 +293,10 @@ def decider_and_judge() -> tuple[ChatModel | None, ChatModel | None]:
     if decider is not None and spec.partition(":")[0] in LOCAL:
         decider.local = True
         decider.investigator = _chain([s.get("MONITORING_INVESTIGATOR", DEFAULTS["MONITORING_DECIDER"]), fallback], s)
-    judge = build_model(s.get("MONITORING_JUDGE", DEFAULTS["MONITORING_JUDGE"]), s)
+    # Le juge n'est qu'un avis en plus : s'il ne répond pas assez vite, la règle R7 passe au second avis
+    # des règles. Avec 90 s x 3 essais on attendait jusqu'à 4 minutes (vu en démo), d'où un délai plus court.
+    judge = build_model(s.get("MONITORING_JUDGE", DEFAULTS["MONITORING_JUDGE"]), s,
+                        timeout_s=float(s.get("MONITORING_JUDGE_TIMEOUT_S", 60)), retries=1)
     return decider, judge
 
 

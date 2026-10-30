@@ -1,5 +1,5 @@
 """
-Monitoring gateway : un proxy placé DEVANT l'API du modèle (Agent 3).
+Monitoring gateway : un proxy placé devant l'API du modèle (Agent 3).
 
     client ──► gateway :8100 ──► API du modèle :8000
                   │
@@ -7,6 +7,8 @@ Monitoring gateway : un proxy placé DEVANT l'API du modèle (Agent 3).
                   ├─ /metrics  pour Prometheus
                   ├─ /feedback pour recevoir la vérité terrain plus tard
                   ├─ /alerts   webhook d'Alertmanager (l'agent est prévenu des alertes)
+                  ├─ /monitoring/ask      « Demande à ton monitoring » (LLM + outils MCP en lecture seule)
+                  ├─ /monitoring/ratings  avis pouce haut / bas, gardés pour un futur fine-tuning
                   └─ moniteur en tâche de fond : fenêtres -> analyse -> métriques -> agent
 
 Pourquoi un proxy plutôt que modifier l'API générée : on ne touche pas au code de l'Agent 3,
@@ -54,6 +56,20 @@ class FeedbackBatch(BaseModel):
 class HumanAnswer(BaseModel):
     by: str = "humain"
     comment: str = ""
+
+
+class Question(BaseModel):
+    question: str
+    history: list[dict] = []
+
+
+class Rating(BaseModel):
+    kind: str                      # "decision" ou "answer"
+    ref: str                       # id de la décision (D...) ou de la réponse (Q...)
+    rating: str                    # "up" ou "down"
+    comment: str = ""
+    correct_cause: str | None = None
+    correct_action: str | None = None
 
 
 class SimulationRequest(BaseModel):
@@ -112,7 +128,7 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
             supervisor.close()
         store.close()
 
-    app = FastAPI(title=f"Monitoring gateway — {target.project}", version="0.2", lifespan=lifespan)
+    app = FastAPI(title=f"Monitoring gateway — {target.project}", version="0.4", lifespan=lifespan)
     app.state.store, app.state.metrics, app.state.monitor, app.state.target = store, metrics, monitor, target
     app.state.supervisor = supervisor
     app.mount("/mcp", mcp_app)
@@ -200,7 +216,7 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
 
     @app.post("/monitoring/simulate")
     async def start_simulation(req: SimulationRequest, request: Request):
-        """Lance du trafic simulé contre CETTE gateway (démo depuis la console)."""
+        """Lance du trafic simulé contre cette gateway (démo depuis la console)."""
         import pandas as pd
 
         from .simulator import SCENARIOS, simulate
@@ -253,6 +269,74 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
     @app.get("/monitoring/alerts")
     async def recent_alerts(limit: int = 50, firing: bool = False):
         return store.firing_alerts() if firing else store.recent_alerts(limit)
+
+    # -- « Demande à ton monitoring » et avis ------------------------------------------------
+
+    def current_case():
+        from ..agent.context import Case
+        from ..schemas import WindowReport
+        reports = [WindowReport.model_validate(r) for r in store.window_reports(70)]
+        if not reports:
+            raise HTTPException(status_code=409, detail="aucune fenêtre analysée pour l'instant")
+        return Case(project=target.project, mapping=target.mapping, history=reports[-20:],
+                    alerts=store.firing_alerts(), decisions=store.decisions(20), model_uri=target.model_uri)
+
+    @app.post("/monitoring/ask")
+    async def ask(q: Question):
+        from ..agent.assistant import ask as ask_llm
+        if not q.question.strip():
+            raise HTTPException(status_code=422, detail="question vide")
+        case = current_case()
+        # un serveur MCP neuf par question : la session MCP du LLM ne partage rien avec /mcp
+        server = server_for_target(target, store)
+        return await asyncio.to_thread(ask_llm, q.question, case, server, None, q.history, target.dir)
+
+    @app.post("/monitoring/ratings")
+    async def rate(r: Rating):
+        from .. import ratings
+        snapshot, example = {}, None
+        if r.kind == "decision":
+            d = store.decision(r.ref)
+            if d is None:
+                raise HTTPException(status_code=404, detail="décision inconnue")
+            snapshot = {k: d.get(k) for k in ("action", "status", "mode", "window_index", "signals")}
+            snapshot["diagnosis"] = d.get("diagnosis")
+            example = ratings.decision_example(d, _diagnoser_messages(r.ref), r.rating, r.correct_cause,
+                                               r.correct_action)
+        elif r.kind == "answer":
+            snapshot = _answer(r.ref) or {}
+        try:
+            rec = ratings.add(target.dir, r.kind, r.ref, r.rating, r.comment, snapshot, example,
+                              r.correct_cause, r.correct_action)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return {"id": rec["id"], "training_example": bool(example), **ratings.summary(target.dir)}
+
+    @app.get("/monitoring/ratings")
+    async def ratings_summary():
+        from .. import ratings
+        return ratings.summary(target.dir)
+
+    def _diagnoser_messages(decision_id: str) -> list[dict] | None:
+        """Le prompt du diagnostiqueur pour cette décision, au format du fine-tuning (faits seuls)."""
+        if supervisor is None or decision_id not in supervisor.agent.cases:
+            return None     # gateway redémarrée : le dossier n'est plus en mémoire
+        from ..agent import prompts
+        from ..agent.context import case_facts
+        from ..agent.graph import build_messages
+        case = supervisor.agent.cases[decision_id]
+        return build_messages(prompts.DIAGNOSER, case, case_facts(case))
+
+    def _answer(answer_id: str) -> dict | None:
+        import json
+        path = target.dir / "assistant.jsonl"
+        if not path.exists():
+            return None
+        for line in reversed(path.read_text(encoding="utf-8").splitlines()):
+            rec = json.loads(line) if line.strip() else {}
+            if rec.get("id") == answer_id:
+                return {k: rec.get(k) for k in ("question", "answer", "tools", "model", "window")}
+        return None
 
     # -- décisions de l'agent ------------------------------------------------------------
 

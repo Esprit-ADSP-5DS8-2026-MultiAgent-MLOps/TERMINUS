@@ -5,7 +5,7 @@ analysées et les alertes reçues d'Alertmanager.
 SQLite : un seul fichier, zéro service à lancer, transactions sûres entre threads.
 La gateway écrit, le moniteur lit ; un verrou suffit à ce volume (quelques centaines de req/s).
 
-Chaque prédiction RÉUSSIE reçoit un numéro de séquence `seq` (1, 2, 3...). La fenêtre k
+Chaque prédiction réussie reçoit un numéro de séquence `seq` (1, 2, 3...). La fenêtre k
 regroupe les seq de k*W+1 à (k+1)*W : les fenêtres sont stables même si des labels arrivent après.
 """
 

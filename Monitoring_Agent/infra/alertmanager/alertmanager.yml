@@ -1,6 +1,6 @@
 # Routage des alertes vers l'Agent 4 (webhook /alerts de la gateway).
 # Regroupement : une notification par (alerte, projet), pas une par feature ou par fenêtre.
-# Inhibition : on fait taire les CONSÉQUENCES quand la CAUSE est connue.
+# Inhibition : quand la cause est connue, on fait taire les alertes qui n'en sont que la conséquence.
 global:
   resolve_timeout: 5m
 

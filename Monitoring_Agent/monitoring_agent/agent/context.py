@@ -1,15 +1,15 @@
 """
-Dossier d'enquête : ce que l'agent SAIT d'une situation, et les outils pour en savoir plus.
+Dossier d'enquête : ce que l'agent sait d'une situation, et les outils pour en savoir plus.
 
 Deux idées :
-1. Les FAITS : tous les chiffres calculés (drift, qualité, performance...) sont mis à plat sous
-   des clés stables (`drift.age.psi`, `perf.realized.roc_auc`...). Le LLM ne peut citer QUE ces
+1. Les faits : tous les chiffres calculés (drift, qualité, performance...) sont mis à plat sous
+   des clés stables (`drift.age.psi`, `perf.realized.roc_auc`...). Le LLM ne peut citer que ces
    clés : le vérificateur contrôle ensuite que chaque chiffre cité existe et est exact.
-2. Les OUTILS : fonctions en lecture seule que le LLM peut appeler pendant l'enquête
+2. Les outils : fonctions en lecture seule que le LLM peut appeler pendant l'enquête
    (historique d'une feature, de la performance, détails qualité, alertes, décisions passées).
    Chaque résultat d'outil enrichit les faits citables.
 
-Les valeurs venant des données (noms de catégories...) sont des DONNÉES, jamais des instructions :
+Les valeurs venant des données (noms de catégories...) sont des données, jamais des instructions :
 elles passent dans les faits ou en JSON, jamais dans le texte des consignes (prompt injection).
 """
 

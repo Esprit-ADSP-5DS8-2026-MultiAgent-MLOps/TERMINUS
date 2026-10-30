@@ -1,14 +1,14 @@
 """
-Évaluation du diagnostiqueur sur les cas de TEST (bases jamais vues : car_loan, car_price).
+Évaluation du diagnostiqueur sur les cas de test (bases jamais vues : car_loan, car_price).
 
 Même prompt pour tous (faits seuls), même contrôle que l'agent :
 - JSON valide (conforme au schéma) ;
 - bonne cause, bonne action (oracle = procédure) ;
 - preuves vérifiées (guards.verify) ;
-- action DANGEREUSE : réentraîner quand il ne faut pas (le pire défaut d'un agent de monitoring) ;
+- action dangereuse : réentraîner quand il ne faut pas (le pire défaut d'un agent de monitoring) ;
 - latence et jetons.
 
-Comparaison à 4 voies : règles (100 % par construction : c'est l'oracle — sert de plafond « procédure »),
+Comparaison à 4 voies : règles (100 % par construction : c'est l'oracle - sert de plafond « procédure »),
 Qwen de base, Qwen fine-tuné, grand LLM (Groq). Le fine-tuning vaut le coup s'il rapproche le petit modèle
 local du grand, pour une fraction du coût et sans envoyer les données hors de la machine.
 """
@@ -32,7 +32,7 @@ def evaluate_model(spec: str, cases_path: Path, limit: int | None = None, progre
         raise LLMError(f"clé manquante pour {spec}")
     cases = [json.loads(x) for x in cases_path.read_text(encoding="utf-8").splitlines() if x.strip()]
     if limit and limit < len(cases):
-        # Échantillon RÉGULIER (pas les N premiers) : car_loan ET car_price, toutes les injections
+        # Échantillon régulier (pas les N premiers) : car_loan et car_price, toutes les injections
         step = len(cases) / limit
         cases = [cases[int(i * step)] for i in range(limit)]
     rows = []

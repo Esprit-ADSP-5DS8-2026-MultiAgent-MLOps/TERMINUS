@@ -1,5 +1,5 @@
 """
-Profil de référence : tout ce qu'on apprend UNE FOIS sur les données d'entraînement
+Profil de référence : tout ce qu'on apprend une fois sur les données d'entraînement
 et qui sert ensuite à juger chaque fenêtre de production.
 
 - par feature : valeurs, classes du PSI, catégories connues, min/max, taux de manquants ;

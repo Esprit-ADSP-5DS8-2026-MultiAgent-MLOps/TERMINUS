@@ -3,7 +3,7 @@ Schémas internes de l'Agent 4 (monitoring).
 
 Les objets échangés avec l'orchestrateur restent ceux de common/schemas.py
 (AgentInput, AgentResult, RetrainingRequest...). Ici on définit ce que le moteur
-d'analyse produit : des rapports CALCULÉS, jamais rédigés par un LLM.
+d'analyse produit : des rapports calculés, jamais rédigés par un LLM.
 Le LLM (étape 3) lira ces rapports ; il ne les fabrique pas.
 """
 
@@ -96,7 +96,7 @@ class PerformanceResult(Strict):
     metric: Metric
     labels_available: bool
     realized: dict[str, float] | None = None     # calculé avec les vrais labels
-    estimated: dict[str, float] | None = None    # estimé SANS labels (CBPE / DLE)
+    estimated: dict[str, float] | None = None    # estimé sans labels (CBPE / DLE)
     estimation_method: Literal["cbpe", "dle"] | None = None
     reference_mean: float | None = None          # niveau habituel sur la référence
     reference_std: float | None = None

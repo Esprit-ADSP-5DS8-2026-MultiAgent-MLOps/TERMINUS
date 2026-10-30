@@ -1,14 +1,14 @@
 """
-LLMOps avec Langfuse (v5, OpenTelemetry) — totalement optionnel : sans clés, tout est no-op.
+LLMOps avec Langfuse (v5, OpenTelemetry) - totalement optionnel : sans clés, tout est no-op.
 
 Ce qu'on envoie, et pourquoi :
-- une TRACE par décision (« agent4.decision »), avec un span par nœud du graphe (retriever, tool, evaluator,
-  guardrail…) et une GÉNÉRATION par appel LLM (modèle, prompt, réponse, jetons, latence) : on rejoue et on
+- une trace par décision (« agent4.decision »), avec un span par nœud du graphe (retriever, tool, evaluator,
+  guardrail…) et une génération par appel LLM (modèle, prompt, réponse, jetons, latence) : on rejoue et on
   compare chaque décision, et on voit où passent le temps et les jetons ;
-- des SCORES sur la trace : preuves vérifiées, notes du juge, accord du vote, autonomie, action finale,
-  et la décision HUMAINE quand il y en a une (feedback humain = meilleure étiquette pour améliorer l'agent) ;
-- les PROMPTS versionnés (prompt management) : `python -m monitoring_agent langfuse push-prompts` ;
-- un DATASET + des EXPÉRIENCES : les cas de test du fine-tuning, rejoués par n'importe quel modèle.
+- des scores sur la trace : preuves vérifiées, notes du juge, accord du vote, autonomie, action finale,
+  et la décision humaine quand il y en a une (feedback humain = meilleure étiquette pour améliorer l'agent) ;
+- les prompts versionnés (prompt management) : `python -m monitoring_agent langfuse push-prompts` ;
+- un dataset + des expériences : les cas de test du fine-tuning, rejoués par n'importe quel modèle.
 
 Les clés (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL) sont lues dans Monitoring_Agent/.env.
 """

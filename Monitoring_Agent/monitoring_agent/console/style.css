@@ -1,5 +1,5 @@
-/* Console de l'Agent 4 — relevé d'instrument.
-   Bleu « agent » réservé à ce que l'agent a fait ; ok / warning / critique ne servent qu'aux états. */
+/* Console de l'Agent 4.
+   Le bleu est réservé à ce que fait l'agent ; vert / orange / rouge servent uniquement aux états. */
 :root {
   --paper: #e9edf2;
   --sheet: #f6f8fa;
@@ -63,7 +63,7 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .sim .btn { border: 0; border-left: 1px solid var(--rule); border-radius: 0 var(--radius) var(--radius) 0; }
 .btn {
   padding: 8px 14px; border: 1px solid var(--ink); border-radius: var(--radius); background: var(--sheet);
-  font-weight: 600; cursor: pointer;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .btn:hover { background: #fff; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -239,6 +239,63 @@ table.mini td.num { text-align: right; }
 .report ul { padding-left: 18px; }
 .report code { font-size: 12px; background: #e9edf2; padding: 1px 4px; border-radius: 3px; }
 
+/* ---------- avis sur une décision ---------- */
+.rate { margin: 16px 0 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--radius); display: grid; gap: 10px; }
+.rate-q { font-weight: 650; font-size: 14px; }
+.rate-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.rate-btn, .icon-btn {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 1px solid var(--rule);
+  border-radius: var(--radius); background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-2);
+}
+.rate-btn:hover, .icon-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+.rate-btn[aria-pressed="true"][data-rating="up"], .icon-btn[aria-pressed="true"][data-arating="up"] { border-color: var(--ok); color: var(--ok); background: #e6f2ee; }
+.rate-btn[aria-pressed="true"][data-rating="down"], .icon-btn[aria-pressed="true"][data-arating="down"] { border-color: var(--crit); color: var(--crit); background: var(--crit-soft); }
+.rate-fix { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.rate-fix label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-3); }
+.rate-fix .wide { grid-column: 1 / -1; }
+.rate-fix select, .rate-fix textarea { border: 1px solid var(--rule); border-radius: 4px; padding: 6px 8px; background: #fff; font-size: 13px; color: var(--ink); }
+.rate-fix .btn { justify-self: start; }
+.rate [hidden] { display: none; }
+
+/* ---------- Demande à ton monitoring ---------- */
+.btn-ask {
+  position: fixed; right: 24px; bottom: 22px; z-index: 15; display: inline-flex; align-items: center; gap: 9px;
+  padding: 12px 18px; border: 0; border-radius: 999px; background: var(--agent); color: #fff; font-weight: 650;
+  cursor: pointer; box-shadow: 0 6px 18px rgba(21, 34, 56, .22);
+}
+.btn-ask:hover { background: #2649b0; }
+.btn-ask svg { width: 18px; height: 18px; }
+.chat { position: fixed; inset: 0; z-index: 25; }
+.chat-backdrop { position: absolute; inset: 0; background: rgba(21, 34, 56, .32); }
+.chat-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(620px, 100%); display: grid;
+  grid-template-rows: auto 1fr auto; background: var(--sheet); border-left: 1px solid var(--rule);
+  animation: slide .28s ease-out;
+}
+.chat-head { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 24px 28px 14px; border-bottom: 1px solid var(--rule); }
+.chat-head .close { position: static; }
+.chat-title { margin: 4px 0 6px; font-size: 26px; line-height: 1.1; font-weight: 800; font-variation-settings: "wdth" 112; }
+.chat-thread { list-style: none; margin: 0; padding: 18px 28px; overflow-y: auto; display: grid; align-content: start; gap: 22px; }
+.chat-empty { display: grid; gap: 10px; }
+.suggest { display: grid; gap: 8px; }
+.suggest-btn {
+  text-align: left; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--radius);
+  background: #fff; cursor: pointer; font-size: 14px;
+}
+.suggest-btn:hover { border-color: var(--agent); color: var(--agent); }
+.turn { display: grid; gap: 8px; }
+.turn .q { justify-self: end; max-width: 85%; padding: 8px 12px; background: var(--ink); color: #fff; border-radius: 10px 10px 2px 10px; font-size: 14px; white-space: pre-wrap; }
+.turn .a { padding: 2px 0 2px 14px; border-left: 3px solid var(--agent); font-size: 14px; display: grid; gap: 8px; max-width: 66ch; }
+.turn .a ul { margin: 0; padding-left: 18px; }
+.turn .a.thinking { color: var(--ink-2); }
+.turn .a.thinking::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 8px; border-radius: 50%; background: var(--agent); animation: pulse 1.2s ease-in-out infinite; vertical-align: middle; }
+.a-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.a-rate { display: flex; gap: 6px; }
+.icon-btn { padding: 5px 8px; }
+.chat-form { border-top: 1px solid var(--rule); padding: 14px 28px 20px; display: grid; gap: 8px; background: var(--paper); }
+.chat-form textarea { width: 100%; resize: vertical; min-height: 52px; border: 1px solid var(--rule); border-radius: var(--radius); padding: 9px 11px; background: #fff; font-size: 14px; }
+.chat-form-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 4px; font-size: 14px; z-index: 40; }
 
 /* ---------- petits écrans ---------- */
@@ -255,6 +312,10 @@ table.mini td.num { text-align: right; }
   .controls { flex-wrap: wrap; }
   .recorder-panel { padding: 22px 18px 40px; }
   .rec-figures { flex-wrap: wrap; gap: 16px; }
+  .chat-head, .chat-thread, .chat-form { padding-left: 16px; padding-right: 16px; }
+  .chat-form-row .hint { display: none; }
+  .rate-fix { grid-template-columns: 1fr; }
+  .btn-ask { right: 16px; bottom: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

@@ -80,7 +80,7 @@ def test_teacher_rationalizes_and_training_prompt_has_no_hint(tmp_path, monkeypa
     out = ft_build.build(scen, tmp_path / "t.jsonl", tmp_path / "data")
     ex = json.loads((tmp_path / "data" / "train.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert [m["role"] for m in ex["messages"]] == ["system", "user", "assistant"]
-    assert "<indice>" not in ex["messages"][1]["content"]                    # le SLM apprend SANS l'indice
+    assert "<indice>" not in ex["messages"][1]["content"]                    # le SLM apprend sans l'indice
     assert out["train"]["sources"] == {"teacher_rationalized": 1}
 
 
@@ -104,7 +104,7 @@ needs_car_loan = pytest.mark.skipif(not _available("synthetic_car_loan_reference
 
 @needs_car_loan
 def test_prompt_injection_through_data_cannot_drive_the_agent(tmp_path):
-    """Défense en profondeur : même un LLM qui OBÉIT à la consigne cachée dans les données ne fait rien de grave."""
+    """Défense en profondeur : même un LLM qui obéit à la consigne cachée dans les données ne fait rien de grave."""
     from test_agent import Scripted, approve
 
     from monitoring_agent.agent.graph import MonitoringAgent

@@ -1,5 +1,5 @@
 """
-Performance du modèle : mesurée quand les labels sont là, ESTIMÉE quand ils manquent.
+Performance du modèle : mesurée quand les labels sont là, estimée quand ils manquent.
 
 Pourquoi estimer ? En production, la vérité terrain arrive tard (un prêt est remboursé
 ou non des mois après la prédiction). Attendre les labels, c'est découvrir la panne trop tard.
@@ -7,9 +7,9 @@ ou non des mois après la prédiction). Attendre les labels, c'est découvrir la
 - Classification binaire : CBPE (Confidence-Based Performance Estimation).
   Si les probabilités du modèle sont bien calibrées, une prédiction « positif » avec p = 0.8
   est juste 8 fois sur 10. En sommant ces probabilités on obtient une matrice de confusion
-  ATTENDUE, donc accuracy, précision, rappel, F1 et ROC AUC attendus, sans aucun label.
+  attendue, donc accuracy, précision, rappel, F1 et ROC AUC attendus, sans aucun label.
 - Régression : DLE (Direct Loss Estimation).
-  Sur la référence, on apprend un second modèle qui prédit l'ERREUR du premier
+  Sur la référence, on apprend un second modèle qui prédit l'erreur du premier
   à partir des features. En production, il estime l'erreur moyenne (MAE, RMSE).
 
 Limite à connaître : ces estimations captent la dégradation due au déplacement des données
@@ -87,7 +87,7 @@ class CBPE:
             return {}
         p = self.calibrator.predict(score)          # probabilité calibrée que y = 1
         pos = y_pred == 1
-        tp, fp = p[pos].sum(), (1 - p[pos]).sum()   # matrice de confusion ATTENDUE
+        tp, fp = p[pos].sum(), (1 - p[pos]).sum()   # matrice de confusion attendue
         fn, tn = p[~pos].sum(), (1 - p[~pos]).sum()
         n = len(p)
         return {
@@ -100,7 +100,7 @@ class CBPE:
 
 
 def expected_roc_auc(score: np.ndarray, p: np.ndarray) -> float:
-    """ROC AUC attendue : pour chaque seuil sur le score, TPR et FPR attendus calculés
+    """ROC AUC attendue : pour chaque seuil sur le score, tpr et fpr attendus calculés
     avec les probabilités calibrées p, puis aire sous la courbe."""
     order = np.argsort(-score, kind="mergesort")
     s, p = score[order], p[order]
@@ -131,7 +131,7 @@ class DLE:
 
     def _frame(self, df: pd.DataFrame, y_pred) -> pd.DataFrame:
         # Données abîmées (colonne absente, texte dans une colonne numérique) : l'estimation doit
-        # continuer — c'est justement là que la qualité des données lève son propre signal.
+        # continuer - c'est justement là que la qualité des données lève son propre signal.
         X = pd.DataFrame(index=df.index)
         for c in self.features:
             col = df[c] if c in df.columns else pd.Series(np.nan, index=df.index)

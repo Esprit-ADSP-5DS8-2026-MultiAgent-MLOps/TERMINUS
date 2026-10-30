@@ -10,9 +10,10 @@ sys.path[:0] = [str(HERE.parent), str(HERE.parent.parent)]
 
 @pytest.fixture(autouse=True)
 def no_real_llm(monkeypatch, tmp_path):
-    """Les tests n'appellent JAMAIS un vrai LLM, même si Monitoring_Agent/.env contient des clés."""
+    """Les tests n'appellent jamais un vrai LLM, même si Monitoring_Agent/.env contient des clés."""
     monkeypatch.setenv("MONITORING_ENV_FILE", str(tmp_path / "absent.env"))
     monkeypatch.setenv("MONITORING_MEMORY", "0")          # pas la mémoire réelle de la machine
     monkeypatch.setenv("MONITORING_EMBEDDER", "hash")     # jamais de téléchargement de modèle
-    for key in ("GROQ_API_KEY", "GEMINI_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
+    for key in ("GROQ_API_KEY", "GEMINI_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY",
+                "MONITORING_NOTIFY_WEBHOOK"):
         monkeypatch.delenv(key, raising=False)

@@ -4,7 +4,7 @@ Moniteur : transforme le flux de prédictions en fenêtres analysées.
 À chaque passage (toutes les quelques secondes) :
 1. dès que W nouvelles prédictions sont arrivées -> on analyse cette fenêtre (étape 1) ;
 2. on revisite les fenêtres sans labels : si la vérité terrain est arrivée entre-temps,
-   on recalcule la performance MESURÉE (elle remplace l'estimation) ;
+   on recalcule la performance mesurée (elle remplace l'estimation) ;
 3. on met à jour les métriques Prometheus et on garde le rapport en base ;
 4. si une fenêtre doit réveiller l'agent, on appelle `on_trigger` (branché à l'étape 3).
 """
@@ -34,7 +34,7 @@ class Monitor:
         reference = pd.read_parquet(target.reference_path)
         self.analyzer = Analyzer(reference, target.mapping, AnalyzerConfig(window_size=target.window_size))
         self.last_report: WindowReport | None = None
-        self.last_labelled_idx = -1   # la perf MESURÉE affichée est celle de la fenêtre labellisée la plus récente
+        self.last_labelled_idx = -1   # la perf mesurée affichée est celle de la fenêtre labellisée la plus récente
 
     def _bounds(self, idx: int) -> tuple[int, int]:
         w = self.target.window_size
@@ -50,7 +50,7 @@ class Monitor:
         return report
 
     def step(self) -> list[WindowReport]:
-        """Un passage du moniteur. Renvoie les NOUVELLES fenêtres analysées."""
+        """Un passage du moniteur. Renvoie les nouvelles fenêtres analysées."""
         new: list[WindowReport] = []
         complete = self.store.n_ok // self.target.window_size
         for idx in range(self.store.last_window_idx() + 1, complete):
@@ -78,7 +78,7 @@ class Monitor:
                 if perf and perf.labels_available and idx > self.last_labelled_idx:
                     self.last_labelled_idx = idx
                     self.metrics.set_realized(perf)
-                # Les labels peuvent RÉVÉLER un problème invisible sans eux (baisse mesurée, concept drift) :
+                # Les labels peuvent révéler un problème invisible sans eux (baisse mesurée, concept drift) :
                 # c'est une situation nouvelle, l'agent doit être réveillé pour cette fenêtre.
                 revealed = {s.kind for s in report.signals} - before
                 if report.trigger_agent and revealed:

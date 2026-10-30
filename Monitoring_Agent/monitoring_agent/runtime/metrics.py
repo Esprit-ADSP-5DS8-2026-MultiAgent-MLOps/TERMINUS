@@ -2,8 +2,8 @@
 Métriques Prometheus exposées par la gateway sur /metrics.
 
 Deux familles :
-- SERVICE (mises à jour à chaque requête) : trafic, erreurs, latence, prédictions ;
-- MODÈLE & DONNÉES (mises à jour à chaque fenêtre analysée) : drift, qualité, performance.
+- service (mises à jour à chaque requête) : trafic, erreurs, latence, prédictions ;
+- modèle & données (mises à jour à chaque fenêtre analysée) : drift, qualité, performance.
 
 Prometheus les collecte toutes les 5 s ; les règles d'alerte et Grafana ne lisent que ça.
 Préfixe commun `mlmon_` : facile à retrouver, ne collisionne avec rien.

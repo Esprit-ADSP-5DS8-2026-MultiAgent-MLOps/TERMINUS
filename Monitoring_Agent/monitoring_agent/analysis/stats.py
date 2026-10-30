@@ -2,9 +2,9 @@
 Mesures de drift : fonctions pures, sans état, testables une par une.
 
 Deux familles :
-- TESTS statistiques (KS, chi²) : « les deux échantillons viennent-ils de la même loi ? ».
+- tests statistiques (KS, chi²) : « les deux échantillons viennent-ils de la même loi ? ».
   Sur 5 000 lignes, la p-value devient quasi nulle pour des écarts sans importance.
-- DISTANCES (Wasserstein normalisée, Jensen-Shannon, PSI) : mesurent l'AMPLEUR de l'écart.
+- distances (Wasserstein normalisée, Jensen-Shannon, PSI) : mesurent l'ampleur de l'écart.
   En production, c'est ce qui compte.
 
 Règle (celle d'Evidently) : petits échantillons -> tests ; gros échantillons -> distances.
@@ -32,7 +32,7 @@ def clean_numeric(values) -> np.ndarray:
 
 
 def quantile_edges(reference: np.ndarray, bins: int = 10) -> np.ndarray:
-    """Bornes des classes pour le PSI : quantiles de la RÉFÉRENCE (classes de même effectif).
+    """Bornes des classes pour le PSI : quantiles de la référence (classes de même effectif).
     Les bornes extrêmes sont ouvertes (-inf, +inf) : une valeur nouvelle tombe dans une classe."""
     if len(reference) == 0:
         return np.array([-np.inf, np.inf])

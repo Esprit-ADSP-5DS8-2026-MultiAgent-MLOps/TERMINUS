@@ -1,21 +1,21 @@
 """
-Mémoire d'incidents : Qdrant en mode local (un dossier, aucun serveur) + recherche HYBRIDE.
+Mémoire d'incidents : Qdrant en mode local (un dossier, aucun serveur) + recherche hybride.
 
-Pourquoi pas un RAG « naïf » (un embedding, top-k) : deux incidents se ressemblent par leur DESCRIPTION
-(« catégorie inconnue sur salary_range » ≈ « nouvelle valeur dans job ») ET par leurs CHIFFRES
+Pourquoi pas un RAG « naïf » (un embedding, top-k) : deux incidents se ressemblent par leur description
+(« catégorie inconnue sur salary_range » ≈ « nouvelle valeur dans job ») et par leurs chiffres
 (perf mesurée -40 %, estimée stable). Un seul de ces deux angles se trompe souvent.
 
 Recherche, pour un dossier :
-1. FILTRE structuré : famille (ml / service) — un incident de latence ne doit pas servir d'exemple
+1. filtre structuré : famille (ml / service) - un incident de latence ne doit pas servir d'exemple
    à un problème de drift ;
 2. deux classements indépendants : sémantique (embedding multilingue du texte, cosinus) et numérique
-   (signature de 9 nombres, distance euclidienne) — 2 vecteurs nommés par fiche dans Qdrant ;
-3. FUSION par rangs (Reciprocal Rank Fusion, k = 60) : robuste, sans calibrer des scores hétérogènes ;
-4. SEUIL de pertinence : une fiche n'est gardée que si au moins un des deux angles la juge proche.
+   (signature de 9 nombres, distance euclidienne) - 2 vecteurs nommés par fiche dans Qdrant ;
+3. fusion par rangs (Reciprocal Rank Fusion, k = 60) : robuste, sans calibrer des scores hétérogènes ;
+4. seuil de pertinence : une fiche n'est gardée que si au moins un des deux angles la juge proche.
    Mieux vaut aucun exemple qu'un mauvais exemple ;
 5. les identifiants retenus sont transmis au vérificateur : citer un INC-xxxx non fourni = hallucination.
 
-Écriture : une décision de l'agent n'entre en mémoire que si elle est CONFIRMÉE (exécutée avec l'accord
+Écriture : une décision de l'agent n'entre en mémoire que si elle est confirmée (exécutée avec l'accord
 du juge, ou approuvée par un humain) ; un rejet humain est gardé comme contre-exemple.
 """
 
@@ -70,13 +70,13 @@ def make_embedder(cache_dir: Path):
         return HashEmbedder()
     try:
         return FastEmbedder(choice, cache_dir)
-    except Exception as exc:  # noqa: BLE001 — pas de réseau : la mémoire reste utilisable
+    except Exception as exc:  # noqa: BLE001 - pas de réseau : la mémoire reste utilisable
         log.warning("modèle d'embedding %s indisponible (%s) : repli sur %s", choice, exc, HashEmbedder.name)
         return HashEmbedder()
 
 
 def rrf(rankings: list[list[str]], k: int = 60, weights: list[float] | None = None) -> dict[str, float]:
-    """Reciprocal Rank Fusion, pondérée : le poids de chaque classement est CALIBRÉ sur la validation."""
+    """Reciprocal Rank Fusion, pondérée : le poids de chaque classement est calibré sur la validation."""
     scores: dict[str, float] = {}
     for ranking, w in zip(rankings, weights or [1.0] * len(rankings), strict=True):
         for rank, pid in enumerate(ranking):
@@ -207,7 +207,7 @@ class IncidentMemory:
 
 
 def format_similar(hits: list[dict]) -> str:
-    """Bloc <cas_similaires> : des EXEMPLES (few-shot dynamique), pas des ordres."""
+    """Bloc <cas_similaires> : des exemples (few-shot dynamique), pas des ordres."""
     return "\n".join(f"{h['id']} (texte {h['text_sim']:.2f}, chiffres {h['sig_sim']:.2f}) — {h['title']} -> "
                      f"cause {h['root_cause']}, action {h['action']} [{h['outcome']}]" for h in hits)
 
@@ -263,11 +263,11 @@ def _score(memory: IncidentMemory, queries: list[tuple], k: int, mode: str, text
 
 def evaluate_retrieval(memory: IncidentMemory, scenarios: list[dict], k: int = 3,
                        validation: list[dict] | None = None) -> dict:
-    """Sur des scénarios jamais mémorisés : la mémoire ramène-t-elle des cas de MÊME cause ?
-    hit@k, précision@k, MRR ; modes texte / chiffres / hybride 1:1 / hybride calibré.
+    """Sur des scénarios jamais mémorisés : la mémoire ramène-t-elle des cas de même cause ?
+    hit@k, précision@k, mrr ; modes texte / chiffres / hybride 1:1 / hybride calibré.
 
-    Calibration honnête : le poids du texte dans la fusion est choisi sur la VALIDATION (mc_prepaid),
-    puis mesuré sur le TEST (car_loan, car_price) — jamais choisi en regardant le test."""
+    Calibration honnête : le poids du texte dans la fusion est choisi sur la validation (mc_prepaid),
+    puis mesuré sur le test (car_loan, car_price) - jamais choisi en regardant le test."""
     chosen, grid = memory.text_weight, {}
     if validation:
         vq = _queries(memory, validation)

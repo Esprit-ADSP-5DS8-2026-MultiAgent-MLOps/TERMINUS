@@ -1,11 +1,11 @@
 """
-Générateur de scénarios : on CASSE la production d'une façon connue, puis le VRAI moteur d'analyse
+Générateur de scénarios : on casse la production d'une façon connue, puis le vrai moteur d'analyse
 (Analyzer, le même qu'en production) calcule les signaux. L'étiquette vient de deux sources
 indépendantes qui doivent être d'accord :
 
     ce qu'on a injecté (la vérité du « monde »)  ×  ce que la procédure conclut des signaux (l'oracle)
 
-Si elles divergent (ex. un shift trop faible pour être détecté), le scénario est JETÉ : on n'apprend
+Si elles divergent (ex. un shift trop faible pour être détecté), le scénario est jeté : on n'apprend
 au modèle que des cas où la bonne réponse est à la fois vraie et déductible des faits qu'il voit.
 
 Injections (toutes sur la fenêtre courante ; parfois en rampe sur les 2 fenêtres d'avant) :
@@ -78,7 +78,7 @@ def _numeric(p: Prepared) -> list[str]:
 
 
 def _feature_weights(pool: pd.DataFrame, p: Prepared, rng, intensity: float) -> tuple[np.ndarray, dict]:
-    """Covariate shift réaliste : on ne modifie pas les valeurs, on change leur FRÉQUENCE."""
+    """Covariate shift réaliste : on ne modifie pas les valeurs, on change leur fréquence."""
     feats = [str(f) for f in rng.choice(p.base.features, size=min(len(p.base.features), int(rng.integers(1, 4))),
                                         replace=False)]
     w = np.ones(len(pool))
@@ -283,7 +283,7 @@ def _generate_base(parts: Path, name: str, target: int, max_attempts_factor: flo
 
 def generate(out: Path, per_base: dict[str, int], max_attempts_factor: float = 3.0, workers: int | None = None,
              progress: Callable[[str], None] = print) -> Counter:
-    """Scénarios ACCEPTÉS jusqu'à `per_base[base]` par base, une base par processus, puis fusion dans `out`.
+    """Scénarios acceptés jusqu'à `per_base[base]` par base, une base par processus, puis fusion dans `out`.
     Reprenable : relancer la commande continue là où elle s'était arrêtée."""
     import os
     from concurrent.futures import ProcessPoolExecutor, as_completed

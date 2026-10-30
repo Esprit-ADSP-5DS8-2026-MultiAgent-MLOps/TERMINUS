@@ -1,12 +1,12 @@
 """
-Distillation VÉRIFIÉE : de grands modèles (Groq) rédigent les diagnostics que le petit modèle apprendra.
+Distillation vérifiée : de grands modèles (Groq) rédigent les diagnostics que le petit modèle apprendra.
 
 Pour chaque scénario (prompt identique à celui que verra le SLM : faits seuls, sans enquête ni RAG) :
-1. le professeur répond À L'AVEUGLE ;
-2. on garde sa réponse seulement si : bonne cause ET bonne action (oracle) ET toutes les preuves
+1. le professeur répond à l'aveugle ;
+2. on garde sa réponse seulement si : bonne cause, bonne action (oracle) et toutes les preuves
    vérifiées par le vérificateur de l'agent (guards.verify, le même qu'en production) ;
-3. sinon RATIONALISATION (STaR, Zelikman et al. 2022) : on lui donne la bonne réponse en indice et on lui
-   demande de la justifier ; même contrôle. L'exemple d'entraînement garde le prompt SANS l'indice :
+3. sinon rationalisation (STaR, Zelikman et al. 2022) : on lui donne la bonne réponse en indice et on lui
+   demande de la justifier ; même contrôle. L'exemple d'entraînement garde le prompt sans l'indice :
    le petit modèle apprend à trouver la réponse seul ;
 4. sinon : pas d'exemple « professeur » (build.py peut utiliser le diagnostic des règles en repli).
 
@@ -55,7 +55,7 @@ def check(d: Diagnosis, sc: dict) -> list[str]:
 
 
 def normalize(d: Diagnosis, facts: dict) -> dict:
-    """Valeurs recopiées EXACTEMENT (le vérificateur tolère 2 % ; l'exemple d'entraînement, non)."""
+    """Valeurs recopiées exactement (le vérificateur tolère 2 % ; l'exemple d'entraînement, non)."""
     out = json.loads(d.model_dump_json())
     for ev in out["evidence"]:
         ev["value"] = facts[ev["fact"]]
@@ -79,9 +79,9 @@ WAIT = re.compile(r"try again in\s+(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)(
 
 
 def quota_wait(message: str) -> tuple[float, bool]:
-    """(secondes à attendre, quota JOURNALIER ?) d'après le message 429 de Groq.
+    """(secondes à attendre, quota journalier ?) d'après le message 429 de Groq.
 
-    Les quotas gratuits sont surtout PAR MINUTE (jetons/min, requêtes/min) : il suffit d'attendre un peu.
+    Les quotas gratuits sont surtout par minute (jetons/min, requêtes/min) : il suffit d'attendre un peu.
     Un quota par jour avec une longue attente met le professeur de côté jusqu'à la prochaine session."""
     m = WAIT.search(message or "")
     wait = 60.0

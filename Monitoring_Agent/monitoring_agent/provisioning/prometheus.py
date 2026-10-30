@@ -1,9 +1,9 @@
 """
-Génération des règles d'alerte Prometheus pour UN projet.
+Génération des règles d'alerte Prometheus pour un projet.
 
 Les règles dépendent du projet : la métrique principale (roc_auc, mae...), son sens
 (plus haut = mieux, ou l'inverse), le seuil métier de mlops.yaml. On ne copie pas un fichier
-générique : on le produit à partir de la spec, puis on le VALIDE (promtool) avant de le charger.
+générique : on le produit à partir de la spec, puis on le valide (promtool) avant de le charger.
 
 Chaque alerte porte trois étiquettes utilisées partout ensuite (Alertmanager, agent, console) :
 - severity  : info | warning | critical

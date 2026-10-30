@@ -1,5 +1,5 @@
 """
-L'agent avec des LLM SCRIPTÉS (aucun réseau) : on teste le graphe et surtout les garde-fous.
+L'agent avec des LLM scriptés (aucun réseau) : on teste le graphe et surtout les garde-fous.
 Ce qui compte : même un LLM qui se trompe ou invente ne peut pas faire d'action dangereuse.
 """
 
@@ -233,3 +233,62 @@ def test_unverifiable_llm_falls_back_to_rules_not_to_a_human(analyzer, tmp_path)
     run = MonitoringAgent(Scripted("d", diagnoses=[wrong]), Scripted("j", verdicts=[approve()]),
                           out_dir=tmp_path).decide(case)
     assert "règles" in run.decider and run.verification.ok
+
+
+def test_mislabeled_evidence_is_relabeled_not_blocking():
+    from monitoring_agent.agent.guards import fix_claims
+    from monitoring_agent.agent.schemas import Diagnosis
+    d = Diagnosis(root_cause="concept_drift", summary="s", affected_features=[], action="request_retraining",
+                  rationale="r", confidence=0.9, evidence=[
+                      {"fact": "perf.realized.roc_auc", "value": 0.63, "claim": "performance mesurée sans labels"},
+                      {"fact": "perf.estimated.roc_auc", "value": 0.92, "claim": "performance estimée avec labels"},
+                      {"fact": "tool.performance_history.windows.w11.realized", "value": 0.63, "claim": "mesurée en w11"}])
+    fixed, which = fix_claims(d)
+    assert which == ["perf.realized.roc_auc", "perf.estimated.roc_auc"]
+    assert fixed.evidence[0].claim == "performance mesurée avec les vrais labels"
+    assert fixed.evidence[2].claim == "mesurée en w11"
+
+
+def test_notification_goes_to_webhook_and_outbox(analyzer, tmp_path, monkeypatch):
+    from monitoring_agent.agent import notify
+    sent = []
+
+    class R:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setenv("MONITORING_NOTIFY_WEBHOOK", "https://hooks.slack.com/services/T/B/x")
+    monkeypatch.setattr(notify.httpx, "post", lambda url, json, timeout: sent.append(json) or R())
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    agent = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), Scripted("j", verdicts=[approve()]),
+                            out_dir=tmp_path)
+    run = agent.decide(case)
+    assert run.status == "executed" and run.outputs["notification"] == "webhook"
+    assert "Réentraînement demandé" in sent[0]["text"] and f"/console/#{run.id}" in sent[0]["text"]
+    line = json.loads((tmp_path / "notifications.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert line["channel"] == "webhook" and line["event"] == "executed"
+
+
+def test_assistant_answers_with_mcp_tools(analyzer, tmp_path):
+    from monitoring_agent.agent.assistant import ask
+    from monitoring_agent.agent.mcp_server import build_server
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+
+    class Chatty:
+        name, seen = "fake:assistant", []
+
+        def chat(self, messages, tools=None, json_mode=False, temperature=0.0):
+            self.seen.append(messages)
+            if not any(m.get("role") == "tool" for m in messages):
+                assert any(t["function"]["name"] == "performance_history" for t in tools)
+                return LLMResponse(tool_calls=[ToolCall("c1", "performance_history", {"last_n": 3})],
+                                   raw_message={"role": "assistant", "content": "", "tool_calls": [
+                                       {"id": "c1", "type": "function",
+                                        "function": {"name": "performance_history", "arguments": '{"last_n": 3}'}}]})
+            tool = next(m for m in messages if m.get("role") == "tool")
+            assert "realized" in tool["content"]
+            return LLMResponse(text="La performance mesurée baisse sur la dernière fenêtre.")
+
+    rec = ask("Le modèle va bien ?", case, build_server(lambda: case), model=Chatty(), log_dir=tmp_path)
+    assert rec["answer"].startswith("La performance") and rec["tools"][0]["tool"] == "performance_history"
+    assert json.loads((tmp_path / "assistant.jsonl").read_text(encoding="utf-8"))["id"] == rec["id"]

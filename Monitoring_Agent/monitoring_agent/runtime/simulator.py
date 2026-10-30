@@ -6,10 +6,10 @@ Scénarios (après une phase normale de `warmup` requêtes) :
 - normal     : même distribution que l'entraînement            -> rien ne doit se passer
 - covariate  : les 3 features numériques les plus variées augmentent (x1.8) -> drift.
                Le label reste celui de la ligne d'origine : pour le modèle, la relation
-               features -> cible change aussi. La perf MESURÉE chute, l'ESTIMÉE beaucoup moins.
+               features -> cible change aussi. La perf mesurée chute, l'estimée beaucoup moins.
 - quality    : catégories inconnues + valeurs aberrantes        -> problème de qualité, pas de « vrai » drift
 - concept    : features inchangées, mais la relation features -> cible change
-               (labels inversés sur une partie des cas)        -> AUCUN drift, seule la perf mesurée baisse
+               (labels inversés sur une partie des cas)        -> aucun drift, seule la perf mesurée baisse
 
 Le scénario `concept` montre la limite de l'estimation sans labels (CBPE) : il faut la vérité terrain.
 """

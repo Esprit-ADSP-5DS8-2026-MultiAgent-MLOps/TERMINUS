@@ -2,9 +2,9 @@
 Superviseur : relie le moniteur (qui détecte) à l'agent (qui décide).
 
 - construit le dossier d'enquête (Case) à partir de la base : fenêtres, alertes actives, décisions passées ;
-- ANTI-RAFALE : une fenêtre de 200 prédictions arrive toutes les ~10 s. Sans garde-fou, l'agent
+- anti-rafale : une fenêtre de 200 prédictions arrive toutes les ~10 s. Sans garde-fou, l'agent
   rediagnostiquerait la même situation en boucle (coût, quotas, bruit). On ne relance l'agent que si
-  la situation CHANGE (nouveaux types de signaux) ou après `every_windows` fenêtres ;
+  la situation change (nouveaux types de signaux) ou après `every_windows` fenêtres ;
 - l'agent tourne dans un thread à part : le monitoring continue pendant que le LLM réfléchit ;
 - les décisions en attente d'un humain sont reprises via /monitoring/decisions/{id}/approve|reject.
 """
@@ -42,7 +42,7 @@ class Supervisor:
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent4")
         self.running: Future | None = None
         self.busy_window: int | None = None
-        # Réveil arrivé pendant que l'agent travaillait : on garde le PLUS RÉCENT et on le rejoue après.
+        # Réveil arrivé pendant que l'agent travaillait : on garde le plus récent et on le rejoue après.
         # (Sans ça, des labels qui révèlent un concept drift pendant une enquête étaient perdus.)
         self.pending: WindowReport | None = None
         self._lock = threading.Lock()

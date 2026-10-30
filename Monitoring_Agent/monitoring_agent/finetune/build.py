@@ -1,9 +1,9 @@
 """
 Assemblage du dataset MLX et de la configuration LoRA.
 
-- découpage PAR BASE (scenarios.py l'a déjà fixé) : train = 6 bases, valid = mc_prepaid (jamais vue
+- découpage par base (scenarios.py l'a déjà fixé) : train = 6 bases, valid = mc_prepaid (jamais vue
   à l'entraînement), test = car_loan / car_price (jamais vues, réservées à l'évaluation) ;
-- cible = diagnostic du professeur VÉRIFIÉ, sinon (option) celui des règles ;
+- cible = diagnostic du professeur vérifié, sinon (option) celui des règles ;
 - équilibrage : aucune action ne dépasse `cap_ratio` × la classe la plus rare (sinon le modèle apprend
   « notify_data_team » par défaut) ;
 - format chat MLX : {"messages": [system, user, assistant]} ; mask_prompt -> la perte ne porte que sur
@@ -89,7 +89,7 @@ def build(scenarios_path: Path, teacher_path: Path, out_dir: Path, templates: bo
         "train": True,
         "data": str(out_dir),
         "fine_tune_type": "lora",
-        "num_layers": -1,             # adaptateurs sur TOUTES les couches (pas seulement les 16 dernières)
+        "num_layers": -1,             # adaptateurs sur toutes les couches (pas seulement les 16 dernières)
         "lora_parameters": {"rank": 16, "scale": 2.0, "dropout": 0.05},   # alpha = 32 = 2 × rank ; toutes les Linear
         "batch_size": batch_size,
         "grad_accumulation_steps": grad_accum,   # batch effectif = 8 sans exploser la mémoire
