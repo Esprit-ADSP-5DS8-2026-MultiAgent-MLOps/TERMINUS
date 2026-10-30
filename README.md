@@ -1,355 +1,397 @@
-# Contract Validator — Agentic MLOps
+# MLflow Agent
 
-The **Contract Validator** is the entry point of the platform. It checks that a Machine Learning project complies with a **contract** (structure, dependencies, safe code, usable data…) before the agents take it over.
+An LLM-assisted experiment runner for validated tabular machine-learning projects. It converts a strict JSON analysis report into a bounded Optuna experiment plan, trains candidate scikit-learn models, logs trials and final results to MLflow, applies a deterministic quality gate, and registers the winning model only when it qualifies.
 
-- **No LLM**: the same project always gets the same verdict.
-- **Safe**: the project's code is only executed once it has passed all the non-executing analyses, and then only in an isolated environment.
-- **It produces a JSON report** (`compatibility_report.json`) that serves as input for the next agent.
+> **The LLM proposes; the code decides.**
+
+## What it does
+
+1. Validates the input report and execution paths.
+2. Asks an Ollama or Gemini model for an experiment plan.
+3. Parses and validates the plan against the report's task, metric, model allow-list, and experiment budget.
+4. Uses Optuna to tune up to three candidate models.
+5. Splits data reproducibly into train, validation, and test sets.
+6. Logs every trial and the final decision to MLflow.
+7. Applies a deterministic quality gate.
+8. Writes an `ExperimentResult` JSON document and optionally registers the model in the MLflow Model Registry.
+
+Existing Python training code and scripts are not executed. The agent owns its preprocessing, estimators, splits, metrics, and training loop.
+
+## Supported tasks
+
+| Task | Models | Metrics |
+|---|---|---|
+| Classification | Logistic regression, random forest, gradient boosting | `accuracy`, `precision`, `recall`, `f1`, `roc_auc`, `pr_auc` |
+| Regression | Ridge, random forest regressor, gradient boosting regressor | `rmse`, `mae`, `r2` |
+
+The positive binary-class rule is:
+
+- Label `1`, when present.
+- Otherwise, the minority class.
+
+The result and MLflow run record an alternative positive-class warning when label `1` is not present.
+
+## Architecture
 
 ```
-ML project ──► Contract Validator ──► JSON report ──► Agent 1 ──► …
-               (accepted / to confirm / rejected)     (if the handoff is allowed)
+JSON analysis report
+        │
+        ▼
+Strict schema validation ──► status and path checks
+        │
+        ▼
+LLM plan request (optional)
+        │
+        ▼
+Strict JSON + plan validation
+        │                         one invalid response or retry failure
+        └──────────────────────────────► deterministic fallback plan
+        │
+        ▼
+Data loading and 60/20/20 split
+        │
+        ▼
+Optuna tuning on the validation set
+        │
+        ▼
+MLflow experiment and trial tracking
+        │
+        ▼
+Final model training + test scoring once
+        │
+        ▼
+Deterministic quality gate
+        │
+        ├── pass ──► register model + success
+        └── fail ──► no registration + no_eligible_model
 ```
 
----
-
-## 1. Prerequisites
-
-| | |
+| Component | Responsibility |
 |---|---|
-| System | **Ubuntu 24.04 LTS** recommended · compatible with **WSL2** (Windows 10/11) · x86_64 / amd64 architecture |
-| Python | **≥ 3.12** (validated version: 3.12.3). Python 3.8 is **not** supported |
-| Tools | `git`, `python3-venv`, `python3-pip`, `build-essential` |
-| Network | Internet for installation, and on the **first** validation run (download of the tested project's dependencies) |
+| `schemas.py` | Loads and strictly validates reports and resolves safe workspace paths |
+| `prompts.py` | Builds the planner's system and user prompts |
+| `llm_client.py` | Local Ollama and cloud Gemini clients |
+| `config.py` | Resolves the selected LLM provider/model |
+| `planner.py` | Requests plans, retries once, and creates the safe fallback |
+| `plans.py` | Parses and validates plan JSON |
+| `executor.py` | Builds data splits, tuners, models, metrics, MLflow runs, and quality gates |
+| `results.py` | Defines the versioned JSON result contract |
+| `benchmark.py` / `compare.py` | Measures LLM plan-generation quality |
 
-Windows without WSL is not supported (the validator uses Linux features).
+## Installation
 
-Reference versions used during development: Ubuntu 24.04.5 LTS · Python 3.12.3 · pip 24.0+ · Git 2.43.0+
+The package supports Python 3.10 and newer; development and validation used Python 3.12.
 
----
-
-## 2. Installation
-
-**1. Install the system tools** (once only):
-
-```bash
-sudo apt update
-sudo apt install -y python3-venv python3-pip git build-essential
-```
-
-**2. Get the code**:
-
-```bash
-mkdir -p ~/projects && cd ~/projects
-git clone <REPOSITORY_URL> agentic-mlops
-cd agentic-mlops
-git checkout feature/contract-validator      # if the branch has not yet been merged into main
-```
-
-**3. Create the validator's virtual environment**:
+From the project root:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install -e ".[dev,agent]"
 ```
 
-> To be repeated in every new terminal: `source .venv/bin/activate` (the prompt shows `(.venv)`).
+The `agent` extra installs scikit-learn, Optuna, pandas, NumPy, and MLflow.
 
-**4. Install the project and its development dependencies**:
+## Input report
+
+The default example is [`examples/credit_risk_report.json`](../examples/credit_risk_report.json).
+
+The report must contain:
+
+- `schema_version` — currently `0.1`
+- `project.project_path` and `project.dataset_path`
+- `project.training_script`, if applicable
+- `task.type`, `task.target_column`, `task.primary_metric`, and optional `task.min_primary_metric`
+- Dataset size, class distribution, missing values, and leakage warnings
+- Existing implementation information
+- `constraints.max_experiment_runs` and `constraints.max_runtime_minutes`
+- `status: "ready_for_experimentation"`
+
+Unknown JSON fields, inconsistent metrics, unsupported values, excessive report sizes, and unavailable or unsafe paths are rejected.
+
+### Report example
+
+```json
+{
+  "schema_version": "0.1",
+  "project": {
+    "project_path": ".",
+    "dataset_path": "data.csv",
+    "training_script": null
+  },
+  "task": {
+    "type": "classification",
+    "target_column": "target",
+    "objective": "credit-risk",
+    "primary_metric": "roc_auc",
+    "min_primary_metric": 0.70
+  },
+  "dataset_analysis": {
+    "rows": 1000,
+    "columns": 21,
+    "missing_values": {"total": 0, "columns_affected": []},
+    "class_distribution": {"1": 700, "0": 300},
+    "data_leakage_risks": []
+  },
+  "existing_implementation": {
+    "training_code_available": true,
+    "preprocessing_available": true,
+    "existing_models": []
+  },
+  "constraints": {
+    "max_experiment_runs": 12,
+    "max_runtime_minutes": 10
+  },
+  "status": "ready_for_experimentation"
+}
+```
+
+`secondary_metrics`, `warnings`, and missing-value metadata may be included according to the schema.
+
+## Choosing an LLM
+
+Set the model in `mlflow_agent.toml`:
+
+```toml
+llm = "qwen2.5:3b"
+# llm = "gemini:gemini-3.1-flash-lite"
+# llm = "ollama:llama3.2:3b"
+```
+
+Resolution order:
+
+1. `--model`
+2. `MLFLOW_AGENT_LLM` environment variable
+3. `mlflow_agent.toml`
+4. Built-in default: `qwen2.5:3b`
+
+The selected model and source are printed at the start of each run.
+
+### Ollama
 
 ```bash
-python -m pip install -e ".[dev]"
+ollama pull qwen2.5:3b
+ollama serve
+python -m mlflow_agent examples/credit_risk_report.json --model qwen2.5:3b
 ```
 
-**5. Verify**:
+The Ollama client only accepts a localhost server.
+
+### Gemini
 
 ```bash
-python --version        # must show 3.12 or higher
-python -m pip --version
-git --version
-python -m pytest -q     # 41 tests, all must pass
+export GEMINI_API_KEY="your-key"
+python -m mlflow_agent examples/credit_risk_report.json --model gemini:gemini-3.1-flash-lite
 ```
 
-The tests take **1 to 3 minutes the first time**: the validator downloads scikit-learn, pandas, etc. for the test project, then keeps them in cache (`~/.cache/contract-validator`). Subsequent runs: about 30 seconds.
-
-> **WSL2 — TLS errors or failing downloads?** On some networks, you need to lower the MTU to 1400:
-> `sudo ip link set dev eth0 mtu 1400` (valid until WSL restarts).
-
----
-
-## 3. Usage in 3 commands
-
-Always from the repository root, with the environment activated.
+Multiple Gemini models can be supplied as a comma-separated pool:
 
 ```bash
-# 1) Validate a project
-python -m validator eval/projects/credit_risk
-
-# 2) Validate and produce the report for the next agent (+ frozen copy of the project)
-python -m validator eval/projects/credit_risk \
-    --json compatibility_report.json --snapshot-dir ~/validated
-
-# 3) Check that a report can be used (this is the next agent's check)
-python -m validator.handoff verify compatibility_report.json
+python -m mlflow_agent examples/credit_risk_report.json \
+  --model gemini:gemini-3.5-flash-lite,gemini-3.1-flash-lite
 ```
 
-The first run on a new project takes 20 to 60 seconds (creation of its isolated environment); subsequent runs take about 5 seconds.
+If one pooled model returns a quota error, it is cooled down and the next model is tried. Gemini 404s are skipped for the rest of the run.
 
-To validate **your own** project: `python -m validator /path/to/my_project` (anywhere on disk).
+## Running the agent
 
----
+The commands below assume the repository root and a valid dataset beneath the selected base directory.
 
-## 4. Reading the result
+### Generate and validate a plan only
 
-### The 4 verdicts
-
-| Verdict | Meaning | Exit code |
-|---|---|---|
-| `ACCEPTED` | Compliant | `0` |
-| `ACCEPTED_WITH_WARNINGS` | Compliant, with points to watch | `0` |
-| `NEEDS_CONFIRMATION` | A human must confirm something (e.g. `mlops.yaml` missing) | `10` |
-| `REJECTED` | Non-compliant: at least one blocker | `20` |
-
-### The 4 severity levels of a finding
-
-`✖ BLOCKER` rejects · `? CONFIRM` requests a confirmation · `! WARNING` to be watched · `i INFO` simple information.
-
-### Example output
-
-```
-Verdict: ACCEPTED   (0 blocker(s), 0 confirmation(s), 0 warning(s))   [4.1s]
-Levels: structure ✔ | manifest ✔ | static ✔ | data ✔ | dynamic ✔
-Handoff: READY (can proceed: yes)
-Observed metrics: accuracy=0.7150, ..., roc_auc=0.7773
+```bash
+python -m mlflow_agent examples/credit_risk_report.json
 ```
 
-Each finding gives a **stable code** (e.g. `C6.UNPINNED`), the file and line, a **piece of evidence** and a **suggested fix** (`hint`). Example:
+This validates the report, requests the model's plan, validates it, and prints the result. It does not train models.
 
-```
-[✖ BLOCKER] C6.UNPINNED requirements.txt:3 — Unpinned dependency: scikit-learn>=1.3
-        hint   : Pin the exact version, e.g. `scikit-learn==<tested version>`.
-```
+### Run training and tuning
 
-### The 5 control levels
-
-| # | Level | Executes the project's code? |
-|---|---|---|
-| 1 | Structure and dependencies | No |
-| 2 | `mlops.yaml` manifest | No |
-| 3 | Code analysis (AST, secrets, Bandit) | No |
-| 4 | Data (CSV) | No |
-| 5 | Control run in an isolated environment | **Yes, only if levels 1 to 4 have no blockers** |
-
----
-
-## 5. Preparing an ML project so that it is accepted
-
-### What the project folder must contain
-
-```
-my_project/
-├── main.py            # runs everything, with no argument or input
-├── train.py           # def train(data_path, output_dir) -> dict of metrics
-├── predict.py         # def load_model(model_path) and def predict(model, data)
-├── requirements.txt   # pinned versions: package==version
-├── data.csv           # data (UTF-8, with the target column)
-└── mlops.yaml         # task, target, metric
+```bash
+python -m mlflow_agent examples/credit_risk_report.json \
+  --base-dir . \
+  --execute \
+  --out result.json \
+  --experiment mlflow_agent
 ```
 
-### The contract in plain language
+For this example, `examples/credit_risk_report.json` resolves `.` + `data.csv`, so the dataset must exist at the repository root as `data.csv` or be supplied through a correctly configured base directory.
 
-| Rule | In plain language |
+### Use a deterministic plan without an LLM
+
+```bash
+python -m mlflow_agent examples/credit_risk_report.json \
+  --base-dir . \
+  --execute \
+  --no-llm
+```
+
+The fallback plan uses:
+
+- Classification: logistic regression and random forest
+- Regression: ridge and random forest regressor
+- At most 20 runs, and never more than the report budget
+
+### CLI options
+
+| Option | Description |
 |---|---|
-| C1 | The 4 files `main.py`, `train.py`, `predict.py`, `requirements.txt` are **at the root** |
-| C2 | Python + **scikit-learn** + pandas. No PyTorch, TensorFlow, XGBoost… (can be changed, see §7) |
-| C3 | `train(data_path, output_dir)` returns a **dict** containing the manifest's metric and writes `model.joblib` to `output_dir` |
-| C4 | `load_model(model_path)`; `predict(model, data)` accepts a **dict** *and* a **DataFrame**, and returns a **list** |
-| C5 | `main.py` runs with no argument, **without `input()`**, and writes to `$OUTPUT_DIR` |
-| C6 | All dependencies are pinned with `==` |
-| C7 | CSV in UTF-8, at least 50 rows, target column present, at least 2 classes |
-| C8 | `mlops.yaml` present and valid (absent = human confirmation requested) |
-| C9 | Fixed seeds (`random_state=...`): two trainings give the same result |
-| C10 | No absolute paths; **nothing is written outside `output_dir`** |
-| C11 | No `eval`/`exec`/`os.system`, no network, no secrets in the code, no committed `.pkl` |
-| C12 | Limits: 500 files, 100 MB, 50 MB of data, 300 s of execution |
+| `report` | Path to the input JSON report |
+| `--model` | Override the configured Ollama or Gemini model |
+| `--no-llm` | Skip planning calls and use the deterministic fallback |
+| `--execute` | Load the dataset and run the experiments |
+| `--base-dir` | Root used to resolve report paths |
+| `--out` | Output path for the result JSON |
+| `--experiment` | MLflow experiment name |
 
-### Example `mlops.yaml`
+## Training and data handling
 
-```yaml
-project:
-  name: credit-risk
-  task: classification          # classification | regression
-data:
-  path: data.csv
-  target: target                # name of the column to predict
-evaluation:
-  primary_metric: roc_auc       # classification: accuracy, precision, recall, f1, roc_auc
-  min_threshold: 0.70           # regression: rmse, mae, r2
-```
+- Random seed: `42`
+- Dataset limit: 50 MB and 50–200,000 rows
+- Split: 60% train, 20% validation, 20% test
+- Numerical features: median imputation and standard scaling
+- Categorical features: most-frequent imputation and one-hot encoding with an infrequent-category limit
+- Classification and regression models are trained from deterministic scikit-learn pipelines
+- Trial runs are nested under a parent MLflow run
+- The test set is scored exactly once after final training
+- The final model is fit on train plus validation before test scoring
+- Each trial uses only the validation split for model selection
 
-### Minimal example of the expected functions
+The report's runtime budget caps the experiment loop. Each model receives a bounded share of the requested trials; execution stops if the deadline is reached.
 
-```python
-# train.py
-def train(data_path, output_dir):
-    ...                                       # trains, writes output_dir/model.joblib
-    return {"roc_auc": 0.78, "f1": 0.79}      # must contain the manifest's metric
+## MLflow tracking
 
-# predict.py
-def load_model(model_path): ...
-def predict(model, data): ...                 # data: dict, list of dicts or DataFrame -> list
-```
-
-A complete, compliant project is provided: `eval/projects/credit_risk/`.
-
----
-
-## 6. The report and the handoff
-
-The `compatibility_report.json` report contains the verdict, the detailed findings, and above all a **`handoff`** section: the summary intended for the next agent.
-
-| Element | Role |
-|---|---|
-| `handoff.can_proceed` | Is the next agent allowed to start? |
-| `handoff` (task, target, metric, input columns, dependencies, observed metrics) | What the validator has already established: the agent does not need to redo it |
-| `handoff.carry_forward` | Warnings to pass on (imbalanced classes, small dataset…) |
-| `project_hash` | Fingerprint of the validated project: a single modification changes it |
-| `snapshot_path` | Read-only frozen copy of the validated project (with `--snapshot-dir`) |
-| `report_sha256` | Seal: detects any modification of the report |
-
-### The 5 handoff statuses
-
-| Status | Meaning | Can the next agent start? |
-|---|---|---|
-| `READY` / `READY_WITH_WARNINGS` | Compliant and executed | Yes |
-| `AWAITING_CONFIRMATION` | Human confirmation required | No |
-| `INCOMPLETE` | No error, but the project was **not executed** (`--no-dynamic`) | No |
-| `BLOCKED` | Rejected | No |
-
-> The orchestrator must read **`can_proceed`** (or call `verify_handoff`), **not just the verdict**: with `--no-dynamic`, the verdict can be `ACCEPTED` while the handoff is refused.
-
-### Agent / orchestrator side
-
-```python
-from validator.handoff import verify_handoff
-
-check = verify_handoff("compatibility_report.json", project_dir)   # project_dir optional if snapshot_path
-if not check.ok:
-    raise SystemExit(check.reasons)        # human-readable list of the reasons for the refusal
-```
-
-`verify_handoff` checks: the format version, the report's integrity, `can_proceed`, and that the project has not changed since validation. JSON schema of the report: `docs/compatibility_report.schema.json`.
-
----
-
-## 7. Useful options
-
-| Option | Effect |
-|---|---|
-| `--json FILE` | Writes the JSON report |
-| `--snapshot-dir FOLDER` | Frozen copy of the validated project (created only if the handoff is allowed) |
-| `--no-dynamic` | Never executes the project's code (analyses 1 to 4 only) |
-| `--allow-framework xgboost` | Extends the contract to a framework (repeatable) |
-| `--env venv` (default) / `--env current` | `venv`: isolated environment built from the project's `requirements.txt`. `current`: current Python (not recommended) |
-| `--cache-dir FOLDER` | Location of the environment cache (default `~/.cache/contract-validator`, or the `CV_CACHE_DIR` variable) |
-| `--timeout N` | Execution limit in seconds (default 300) |
-| `--no-determinism` | Skips the second control training |
-| `--no-bandit` | Disables Bandit |
-| `--confirmed-by "Name"` | Records who confirmed the manifest (simple trace: **never** changes the verdict) |
-| `-q` | Quiet mode (useful with `--json` or in CI) |
-
----
-
-## 8. Repository layout
-
-```
-agentic-mlops/
-├── README.md
-├── pyproject.toml
-├── validator/                  # the validator's code
-│   ├── __main__.py             # command line
-│   ├── engine.py               # chains the levels and computes the verdict
-│   ├── contract.py             # the C1–C12 contract (modify to change a rule)
-│   ├── models.py               # report and manifest schemas
-│   ├── check_structure.py      # level 1: files, dependencies
-│   ├── check_manifest.py       # level 2: mlops.yaml
-│   ├── check_static.py         # level 3: code analysis without executing it
-│   ├── check_data.py           # level 4: CSV
-│   ├── check_dynamic.py        # level 5: control run
-│   ├── sandbox.py              # isolated environment (venv + Docker)
-│   ├── harness.py              # script executed in the sandbox
-│   ├── handoff.py              # handoff, fingerprint, seal
-│   ├── context.py  fs.py       # shared state, safe file reading
-├── tests/                      # 41 tests
-├── eval/
-│   ├── make_variants.py        # generates the broken projects for the tests
-│   └── projects/
-│       ├── credit_risk_raw/    # original project, non-compliant (intact copy)
-│       ├── credit_risk/        # compliant version (reference)
-│       └── variants/           # 14 broken variants (generated)
-└── docs/
-    └── compatibility_report.schema.json
-```
-
----
-
-## 9. Tests and sample projects
+By default, the agent writes to `sqlite:///mlflow.db` and the experiment named `mlflow_agent`.
 
 ```bash
-python -m pytest -q                         # everything
-python -m pytest tests/test_handoff.py -q   # the handoff only
-python eval/make_variants.py                # regenerates the 14 broken variants
+mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
-The tests validate **16 projects whose verdict is known in advance**: the reference must be accepted, the raw project rejected, and each broken variant must receive exactly the expected verdict (for example `02_unpinned_deps` → `C6.UNPINNED`). They also check the sandbox: infinite loop stopped, network blocked, secret variables not passed through.
+Open `http://localhost:5000` to inspect:
 
-**After modifying `models.py`**, regenerate the schema (a test fails otherwise):
+- Trial parameters and validation metrics
+- Train, validation, test, and dummy-baseline scores
+- The quality-gate result
+- The saved `result.json`
+- The registered model, when the gate passes
 
-```bash
-python -m validator.handoff schema docs/compatibility_report.schema.json
-```
+The registration name is `<experiment-name>-model` by default, for example `mlflow_agent-model`.
 
----
+## Quality gate
 
-## 10. Common problems
+A candidate is eligible only when every applicable check passes:
 
-| Symptom | Cause and solution |
+| Check | Rule |
 |---|---|
-| `externally-managed-environment` | The virtual environment is not activated. Run `source .venv/bin/activate`. Do not use `--break-system-packages` |
-| `No module named validator` | Environment not activated, or `pip install -e ".[dev]"` not done, or command run outside the repository root |
-| `Multiple top-level packages discovered` during installation | `pyproject.toml` must contain `[tool.setuptools]` and `packages = ["validator"]` |
-| `ensurepip is not available` / venv creation impossible | `sudo apt install -y python3-venv` |
-| `C6.INSTALL_FAILED` | A pinned version does not exist for Python 3.12, or there is no network. Read the `evidence` field |
-| Very long first run | Normal: creation and filling of the cache. To start from scratch: `rm -rf ~/.cache/contract-validator` |
-| Failing downloads or TLS (WSL2) | `sudo ip link set dev eth0 mtu 1400` |
-| `Network not isolated in this sandbox` (INFO) | Ubuntu blocks `unshare`. This is not blocking, but the validator is then less watertight. Test with: `unshare -rn true` |
-| Tests failing without Internet | The first run needs the network to build the test project's environment |
-| `INCOMPLETE` while the verdict is `ACCEPTED` | You used `--no-dynamic`: the project was not executed, so there is no handoff |
+| Minimum metric | Meets `task.min_primary_metric`; skipped if not supplied |
+| Beats baseline | Outperforms a dummy prior/constant baseline |
+| Overfit control | Relative train–validation gap is no greater than 25% |
+| Test consistency | Relative validation–test drop is no greater than 25% |
 
----
+The quality gate is plain deterministic Python. The LLM does not participate in the decision.
 
-## 11. Known limitations
+When the gate passes, the final pipeline is registered in MLflow. When it fails, no model is registered and the result status is `no_eligible_model`.
 
-- **The Docker backend is written but has not been tested.** Only the `subprocess` fallback is covered by the tests.
-- This fallback is **not** a complete security barrier: network cut off and resources limited, but neither a read-only file system nor a non-root user. Use Docker in production.
-- Static analysis cannot see deliberately obfuscated code: this is why the code is only executed in the sandbox.
-- Secrets are detected using a list of patterns (no gitleaks).
-- The report's **seal** detects accidental modifications; it does not authenticate its author (no signature).
-- `--confirmed-by` does not authenticate the person: it is a declaration, recorded as a trace.
-- Linux and macOS only (on Windows: WSL2).
+## Result file
 
----
+The agent writes a versioned JSON result similar to:
 
-## 12. Working as a team
-
-```bash
-git checkout -b feature/my-change
-# ... changes ...
-python -m pytest -q                 # must stay green
-git add .
-git commit -m "feat(validator): short description"
-git push -u origin feature/my-change
+```json
+{
+  "schema_version": "0.1",
+  "status": "success",
+  "primary_metric": "roc_auc",
+  "best_model_name": "gradient_boosting",
+  "validation_score": 0.8117,
+  "test_score": 0.7706,
+  "baseline_test_score": 0.5,
+  "model_uri": "models:/mlflow_agent-model/1",
+  "quality_gate": {
+    "passed": true,
+    "checks": {
+      "meets_threshold": true,
+      "beats_baseline": true,
+      "overfit_gap_ok": true,
+      "test_consistent_with_validation": true
+    }
+  },
+  "trials_completed": {
+    "gradient_boosting": 4,
+    "logistic_regression": 4,
+    "random_forest": 4
+  }
+}
 ```
 
-Then open a Pull Request to `main`. To change a contract rule, modify `validator/contract.py` and add a broken variant in `eval/make_variants.py`: it serves as a regression test.
+Possible top-level statuses are:
+
+- `success` — quality gate passed and the model was registered
+- `no_eligible_model` — experiments ran, but the quality gate failed
+- `failed` — execution could not complete, with details in `errors`
+
+The complete result also includes the plan, parameters, train/validation/test scores, MLflow IDs, quality-gate details, warnings, errors, dataset SHA-256, split sizes, random seed, and library versions.
+
+## Security boundaries
+
+- Reports are limited to 1 MB and strict Pydantic models reject unknown fields.
+- Plans reject unknown models, duplicate models, wrong metrics, wrong search methods, and budgets above hard limits.
+- Invalid LLM plans get one retry; if still invalid, the deterministic fallback plan is used.
+- LLM project text is fenced inside an untrusted-data prompt section and cannot change planner invariants.
+- Project datasets are resolved beneath a chosen base directory; absolute paths, parent traversal, and escaping symlinks are rejected.
+- Execution reads CSV data only; project training scripts are never imported or run.
+- Gemini API keys come only from environment variables and are redacted from error output.
+- Gemini keys are sent in the API header, never in the URL.
+- Ollama hosts are restricted to localhost.
+- Dataset size, row count, runtime, trial count, report size, and plan size have hard limits.
+
+## Benchmarking the planner
+
+The benchmark suite checks raw LLM output without retries and without a fallback. It uses fixed normal and prompt-injection cases and verifies valid JSON, schema compliance, task-compatible models, uniqueness, the required metric, and the experiment budget.
+
+```bash
+python -m mlflow_agent.benchmark --model qwen2.5:3b --prompt v1-structured
+python -m mlflow_agent.compare
+python -m mlflow_agent.compare --md
+```
+
+Available prompt variants are `v0-basic`, `v1-structured`, `v2-fewshot`, and `v3-guard`.
+
+Prompt performance depends on the provider and model, so benchmarks should be rerun for deployment-specific models rather than assuming a prompt version is universally best.
+
+## Tests
+
+Run the focused planner/executor tests or the complete suite:
+
+```bash
+python -m pytest -q tests/test_mlflow_agent_input.py
+python -m pytest -q tests/test_plans.py tests/test_planner.py tests/test_executor.py
+python -m pytest -q
+```
+
+The test suite covers strict report validation, path containment, plan parsing and fallback, prompt construction, LLM clients, execution, model registration, benchmark output, and result contracts.
+
+## Example workflow
+
+```bash
+# 1. Activate the environment
+source .venv/bin/activate
+
+# 2. Configure an Ollama model
+ollama pull qwen2.5:3b
+ollama serve
+
+# 3. Optionally inspect the plan
+python -m mlflow_agent examples/credit_risk_report.json \
+  --model qwen2.5:3b
+
+# 4. Run the bounded experiment
+python -m mlflow_agent examples/credit_risk_report.json \
+  --base-dir . \
+  --execute \
+  --model qwen2.5:3b \
+  --out result.json
+
+# 5. Inspect MLflow
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
