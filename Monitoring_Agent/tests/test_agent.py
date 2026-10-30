@@ -292,3 +292,11 @@ def test_assistant_answers_with_mcp_tools(analyzer, tmp_path):
     rec = ask("Le modèle va bien ?", case, build_server(lambda: case), model=Chatty(), log_dir=tmp_path)
     assert rec["answer"].startswith("La performance") and rec["tools"][0]["tool"] == "performance_history"
     assert json.loads((tmp_path / "assistant.jsonl").read_text(encoding="utf-8"))["id"] == rec["id"]
+
+
+def test_assistant_sees_the_reason_of_recent_decisions(analyzer):
+    from monitoring_agent.agent.assistant import _last_decisions
+    case = make_case(analyzer, frame(1000), decisions=[{"id": "D1", "window_index": 3, "action": "request_retraining",
+                                                         "root_cause": "concept_drift", "rationale": "mesurée < limite"}])
+    block = _last_decisions(case)
+    assert "concept_drift" in block and "mesurée < limite" in block

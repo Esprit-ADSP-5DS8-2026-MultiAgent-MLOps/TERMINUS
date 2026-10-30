@@ -94,7 +94,7 @@ def ask(question: str, case: Case, server, model=None, history: list[dict] | Non
 
     messages = [{"role": "system", "content": SYSTEM}, *_history_messages(history or []),
                 {"role": "user", "content": f"<dossier>\n{case_summary(case)}\n</dossier>\n\n"
-                                            f"<question>\n{record['question']}\n</question>"}]
+                                            f"{_last_decisions(case)}<question>\n{record['question']}\n</question>"}]
     meter, answer = [], ""
     try:
         with MCPToolbox(server) as box:
@@ -120,6 +120,14 @@ def ask(question: str, case: Case, server, model=None, history: list[dict] | Non
     record.update(answer=answer or "Pas de réponse.", model=getattr(model, "last_used", "") or model.name,
                   usage=usage_summary(meter))
     return _finish(record, t0, log_dir)
+
+
+def _last_decisions(case: Case) -> str:
+    """Les 3 dernières décisions avec leur cause et leur explication, pour que le chat ne devine pas."""
+    keep = ("id", "window_index", "action", "proposed_action", "mode", "status", "root_cause", "summary",
+            "rationale", "policy_reasons")
+    rows = [{k: d.get(k) for k in keep if d.get(k) not in (None, [], "")} for d in case.decisions[-3:]]
+    return f"<decisions_recentes>\n{compact(rows)}\n</decisions_recentes>\n\n" if rows else ""
 
 
 def _finish(record: dict, t0: float, log_dir: Path | None) -> dict:
