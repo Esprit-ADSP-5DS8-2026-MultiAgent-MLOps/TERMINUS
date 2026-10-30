@@ -145,6 +145,7 @@ class MonitoringAgent:
                 run = self._publish(run_id, error=f"{type(exc).__name__}: {exc}")
             else:
                 run = self._publish(run_id)
+            obs.finish_decision(run)
         obs.score_run(trace_id, run)
         obs.flush()
         return run

@@ -13,12 +13,15 @@ Les changements notables de l'Agent 4. Format inspiré de [Keep a Changelog](htt
 
 ### Modifié
 - Les cas similaires trouvés par la mémoire RAG sont aussi donnés à l'enquêteur et au juge quand le diagnostiqueur est le modèle local (version des prompts `2026-10-30.1`).
-- Le juge attend au maximum 60 s (réglable avec `MONITORING_JUDGE_TIMEOUT_S`) au lieu de près de 4 minutes avant de passer au second avis des règles.
+- Le juge a un seul essai de 60 s maximum (réglable avec `MONITORING_JUDGE_TIMEOUT_S`) au lieu de près de 4 minutes avant de passer au second avis des règles.
+- Le chat connaît la procédure et les règles de l'agent, et `previous_decisions` donne la cause et l'explication de chaque décision : il explique les décisions sans les deviner.
 - README réécrit pour quelqu'un qui découvre le projet.
 
 ### Corrigé
 - `service_health` renvoyait `NaN` sans trafic récent, ce qui n'est pas du JSON valide. Il renvoie maintenant `null`.
 - Les libellés de preuve inversés par le LLM (« mesurée sans labels ») sont corrigés automatiquement à la vérification.
+- Dans le rapport affiché par la console, les noms d'action avec des « _ » ne sont plus transformés en italique.
+- La trace Langfuse de chaque décision a une sortie (action finale, cause, statut) au lieu de « undefined ».
 - Le panneau Grafana « Réveils de l'agent » affichait « No data » avant le premier réveil. Il affiche 0.
 - Les journaux de requêtes HTTP de `httpx` ne polluent plus la sortie des commandes.
 

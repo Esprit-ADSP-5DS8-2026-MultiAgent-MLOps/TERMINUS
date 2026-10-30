@@ -265,6 +265,7 @@ def server_for_target(target, store) -> MCPServer:
         if not reports:
             raise RuntimeError("aucune fenêtre analysée pour l'instant")
         return Case(project=target.project, mapping=target.mapping, history=reports[-20:],
-                    alerts=store.firing_alerts(), decisions=store.decisions(20), model_uri=target.model_uri)
+                    alerts=store.firing_alerts(), decisions=store.decisions(20, detailed=True),
+                    model_uri=target.model_uri)
 
     return build_server(current_case, store=store)

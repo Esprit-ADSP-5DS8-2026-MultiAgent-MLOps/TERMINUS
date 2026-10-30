@@ -273,6 +273,8 @@ def test_ask_and_ratings_feed_a_training_set(client, target, tmp_path):
     assert (target.dir / "assistant.jsonl").exists()
 
     d = client.get("/monitoring/decisions").json()[0]
+    detailed = client.app.state.store.decisions(5, detailed=True)[0]
+    assert detailed["root_cause"] and "rules_not_passed" in detailed      # le chat peut expliquer la décision
     r = client.post("/monitoring/ratings", json={"kind": "decision", "ref": d["id"], "rating": "down",
                                                  "correct_action": "open_incident", "comment": "trop tôt"}).json()
     assert r["training_example"] and r["decisions"]["down"] == 1

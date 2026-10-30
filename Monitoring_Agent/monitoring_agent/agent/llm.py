@@ -294,9 +294,9 @@ def decider_and_judge() -> tuple[ChatModel | None, ChatModel | None]:
         decider.local = True
         decider.investigator = _chain([s.get("MONITORING_INVESTIGATOR", DEFAULTS["MONITORING_DECIDER"]), fallback], s)
     # Le juge n'est qu'un avis en plus : s'il ne répond pas assez vite, la règle R7 passe au second avis
-    # des règles. Avec 90 s x 3 essais on attendait jusqu'à 4 minutes (vu en démo), d'où un délai plus court.
+    # des règles. Avec 90 s x 3 essais on attendait jusqu'à 4 minutes (vu en démo) : un seul essai de 60 s.
     judge = build_model(s.get("MONITORING_JUDGE", DEFAULTS["MONITORING_JUDGE"]), s,
-                        timeout_s=float(s.get("MONITORING_JUDGE_TIMEOUT_S", 60)), retries=1)
+                        timeout_s=float(s.get("MONITORING_JUDGE_TIMEOUT_S", 60)), retries=0)
     return decider, judge
 
 

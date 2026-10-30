@@ -340,7 +340,8 @@ def cmd_ask(args) -> int:
         print("Aucune fenêtre analysée pour ce projet : lance d'abord la gateway et du trafic.")
         return 1
     case = Case(project=target.project, mapping=target.mapping, history=reports[-20:],
-                alerts=store.firing_alerts(), decisions=store.decisions(20), model_uri=target.model_uri)
+                alerts=store.firing_alerts(), decisions=store.decisions(20, detailed=True),
+                model_uri=target.model_uri)
     rec = ask(args.question, case, server_for_target(target, store), log_dir=target.dir)
     print(f"\n{rec['answer']}\n")
     tools = ", ".join(t["tool"] for t in rec["tools"]) or "aucun"

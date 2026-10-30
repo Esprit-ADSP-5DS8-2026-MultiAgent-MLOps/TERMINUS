@@ -279,7 +279,8 @@ def create_app(target: MonitoringTarget, check_interval_s: float = 2.0,
         if not reports:
             raise HTTPException(status_code=409, detail="aucune fenêtre analysée pour l'instant")
         return Case(project=target.project, mapping=target.mapping, history=reports[-20:],
-                    alerts=store.firing_alerts(), decisions=store.decisions(20), model_uri=target.model_uri)
+                    alerts=store.firing_alerts(), decisions=store.decisions(20, detailed=True),
+                    model_uri=target.model_uri)
 
     @app.post("/monitoring/ask")
     async def ask(q: Question):

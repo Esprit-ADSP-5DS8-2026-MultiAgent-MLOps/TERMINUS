@@ -86,6 +86,19 @@ def decision_trace(run_id: str, project: str, metadata: dict):
         yield lf.get_current_trace_id() if root is not None else None
 
 
+def finish_decision(run) -> None:
+    """Sortie de la trace racine : sans ça, Langfuse affiche « undefined » dans Output."""
+    lf = client()
+    if lf is None:
+        return
+    p, d = run.policy, run.diagnosis
+    output = {"status": run.status, "final_action": p.final_action if p else None, "mode": p.mode if p else None,
+              "root_cause": d.root_cause if d else None, "summary": d.summary if d else None,
+              "outputs": run.outputs, "error": run.error}
+    with contextlib.suppress(Exception):
+        lf.update_current_span(output=output)
+
+
 def update(obs, **kw) -> None:
     if obs is not None:
         with contextlib.suppress(Exception):

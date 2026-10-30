@@ -602,7 +602,10 @@ function bindRating(id) {
 
 // Markdown minimal (rapports d'incident générés par l'agent)
 function markdown(md) {
-  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/_([^_]+)_/g, "<i>$1</i>");
+  // le code passe en premier et n'est plus touché : sinon request_retraining devient de l'italique
+  const inline = (s) => esc(s).split(/(`[^`]+`)/).map((part) => (part.startsWith("`") && part.endsWith("`") && part.length > 1
+    ? `<code>${part.slice(1, -1)}</code>`
+    : part.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|\s)_([^_]+)_(?=\s|$|[.,:;])/g, "$1<i>$2</i>"))).join("");
   const out = []; const lines = md.split("\n"); let i = 0;
   while (i < lines.length) {
     const l = lines[i];

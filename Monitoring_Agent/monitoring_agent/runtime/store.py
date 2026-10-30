@@ -186,13 +186,24 @@ class Store:
                              (run.id, run.window_index, run.created_at.isoformat(), action, mode, run.status,
                               json.dumps(sorted(signals)), run.model_dump_json()))
 
-    def decisions(self, limit: int = 50) -> list[dict]:
-        """Résumés, du plus ancien au plus récent."""
+    def decisions(self, limit: int = 50, detailed: bool = False) -> list[dict]:
+        """Résumés, du plus ancien au plus récent. `detailed` ajoute la cause et l'explication (pour le chat)."""
         with self._lock:
-            rows = self._db.execute("SELECT id, window_idx, created_at, action, mode, status, signals FROM decisions "
-                                    "ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-        return [{"id": r[0], "window_index": r[1], "created_at": r[2], "action": r[3], "mode": r[4], "status": r[5],
-                 "signals": json.loads(r[6])} for r in reversed(rows)]
+            rows = self._db.execute("SELECT id, window_idx, created_at, action, mode, status, signals, payload "
+                                    "FROM decisions ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        out = []
+        for r in reversed(rows):
+            d = {"id": r[0], "window_index": r[1], "created_at": r[2], "action": r[3], "mode": r[4], "status": r[5],
+                 "signals": json.loads(r[6])}
+            if detailed:
+                full = json.loads(r[7])
+                diag, policy = full.get("diagnosis") or {}, full.get("policy") or {}
+                d.update(root_cause=diag.get("root_cause"), summary=diag.get("summary"),
+                         rationale=diag.get("rationale"), proposed_action=policy.get("proposed_action"),
+                         policy_reasons=policy.get("reasons"),
+                         rules_not_passed=[x["rule"] for x in policy.get("rules", []) if not x.get("passed")])
+            out.append(d)
+        return out
 
     def decision(self, decision_id: str) -> dict | None:
         with self._lock:
