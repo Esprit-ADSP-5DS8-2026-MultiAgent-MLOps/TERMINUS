@@ -9,6 +9,9 @@ from __future__ import annotations
 from .gates import MAX_RETRAINS, last_decision
 from .state import PipelineState
 
+MAX_REPAIRS = 2  # tentatives de réparation automatique avant d'abandonner (projet BLOCKED)
+REPAIRABLE = {"BLOCKED", "INCOMPLETE"}
+
 
 def _result(state: PipelineState, node: str) -> dict:
     return state["results"][node]
@@ -22,7 +25,14 @@ def after_validate(state: PipelineState) -> str:
         return "propose_manifest"
     if state.get("handoff_status") == "ERROR":  # panne du validateur, pas un projet rejeté
         return "end_failed"
+    if state.get("handoff_status") in REPAIRABLE and state.get("repair_count", 0) < MAX_REPAIRS:
+        return "repair"
     return "end_blocked"
+
+
+def after_repair(state: PipelineState) -> str:
+    # Réparation jugée et acceptée : on revalide la copie corrigée ; sinon le projet reste refusé.
+    return "validate" if _result(state, "repair")["can_proceed"] else "end_blocked"
 
 
 def after_propose_manifest(state: PipelineState) -> str:

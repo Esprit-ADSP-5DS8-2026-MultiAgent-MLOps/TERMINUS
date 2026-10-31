@@ -3,8 +3,8 @@ Faux agents (stubs) en attendant les vrais.
 
 Chaque stub respecte exactement le contrat : il reçoit un AgentInput,
 écrit des fichiers valides (schémas de common/schemas.py) dans son workdir,
-et renvoie un AgentResult. Quand un binôme livre son agent, on remplace
-la fonction correspondante dans orchestrator/graph.py (dictionnaire AGENTS).
+et renvoie un AgentResult. Quand un membre livre son agent, on ajoute une ligne
+dans orchestrator/registry.py (REAL) : le vrai agent remplace le stub.
 
 Simulations pour les démos et les tests, enregistrées avec chaque run
 (fichier runs/<run_id>/simulate.json, écrit au lancement) :
@@ -58,6 +58,11 @@ def _write(path: Path, model: BaseModel) -> str:
     return str(path)
 
 
+def _python_version(project: Path) -> str | None:
+    f = project / ".python-version"
+    return f.read_text().strip() or None if f.exists() else None
+
+
 def _load_report(inp: AgentInput) -> tuple[dict, ValidatorHandoff]:
     report = json.loads(Path(inp.report_path).read_text(encoding="utf-8"))
     return report, ValidatorHandoff(**report["handoff"])
@@ -83,6 +88,9 @@ def agent1_stub(inp: AgentInput) -> AgentResult:
         data_path=h.data_path,
         entrypoints=h.entrypoints,
         pinned_dependencies=h.pinned_dependencies,
+        model_artifact=h.model_artifact,
+        interfaces=h.interfaces,
+        python_version=_python_version(Path(inp.project_dir)),
         source="declared",
         carry_forward=h.carry_forward,
     )
@@ -237,6 +245,7 @@ def agent3_stub(inp: AgentInput) -> AgentResult:
               for n in ("hadolint", "build", "trivy", "startup", "health", "inference")]
     dep = DeploymentResult(
         model_uri=meta.model_uri,
+        model_source="mlflow",
         image=f"stub/{meta.model_name}",
         tag=f"v{meta.model_version}-{inp.run_id}",
         checks=checks,
@@ -275,4 +284,25 @@ def agent4_stub(inp: AgentInput) -> AgentResult:
         can_proceed=True,
         outputs={"retraining_request": _write(Path(inp.workdir) / "retraining_request.json", req)},
         warnings=[STUB_WARNING, "drift détecté : demande de réentraînement"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Réparation (validateur v2, Sarra) : nœud réservé
+# ---------------------------------------------------------------------------
+
+
+def repair_stub(inp: AgentInput) -> AgentResult:
+    """Tant que le vrai agent n'est pas intégré : aucune réparation, le projet reste BLOCKED.
+
+    Le vrai agent lira le rapport (inp.report_path) et le projet (inp.project_dir), écrira une
+    copie corrigée dans son workdir, la fera juger, puis renverra repair_result + repaired_project
+    (voir RepairResult dans common/schemas.py).
+    """
+    return AgentResult(
+        agent="repair",
+        status=AgentStatus.WARNING,
+        can_proceed=False,
+        reasons=["réparation automatique pas encore intégrée : projet laissé tel quel"],
+        warnings=[STUB_WARNING],
     )

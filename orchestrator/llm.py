@@ -130,6 +130,15 @@ DECIDERS = {
 MODES = list(DECIDERS)
 
 
+def default_mode() -> str:
+    """Mode utilisé quand on n'en choisit pas : ORCH_SUPERVISOR, sinon gemini si une clé est
+    disponible, sinon les règles (le pipeline tourne toujours, même sans clé ni réseau)."""
+    mode = os.environ.get("ORCH_SUPERVISOR", "").strip().lower()
+    if mode:
+        return mode
+    return "gemini" if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") else "rules"
+
+
 def get_decider(mode: str) -> Decider:
     if mode not in DECIDERS:
         raise RuntimeError(f"mode de superviseur inconnu : {mode} (choix : {', '.join(MODES)})")

@@ -1,8 +1,7 @@
 """
 Point d'entrée de l'Agent 4 pour l'orchestrateur (contrat : common/schemas.py).
 
-    from monitoring_agent.pipeline import run as agent4_run
-    agents["agent4"] = agent4_run          # dans orchestrator/graph.py, à la place du stub
+    REAL["agent4"] = "monitoring_agent.pipeline:run"     # orchestrator/registry.py
 
 À chaque appel :
 1. mise en place (si l'Agent 3 a déployé une API : deployment_result.endpoint)
@@ -61,6 +60,15 @@ def _setup(inp, spec, dep, outputs: dict, warnings: list) -> MonitoringTarget | 
     return target
 
 
+def _keep_files(src: dict, outputs: dict, warnings: list) -> None:
+    """Le contrat attend des chemins dans outputs : le reste (canal de notification...) va dans warnings."""
+    for key, value in src.items():
+        if value and Path(value).exists():
+            outputs[key] = value
+        else:
+            warnings.append(f"{key} : {value}")
+
+
 def run(inp):
     s = _common_schemas()
     started = time.monotonic()
@@ -86,14 +94,14 @@ def run(inp):
                 result = agent.decide(case)
                 outputs["decision"] = str(Path(inp.workdir) / f"decision_{result.id}.json")
                 Path(outputs["decision"]).write_text(result.model_dump_json(indent=2), encoding="utf-8")
-                outputs.update(result.outputs)
+                _keep_files(result.outputs, outputs, warnings)
                 p = result.policy
                 if p:
                     warnings.append(f"agent : {p.proposed_action} -> {p.final_action} ({p.mode}, {result.status})")
                     if p.final_action == "request_retraining" and "retraining_request" not in outputs:
                         # En attente d'un humain : la gate « retraining » de l'orchestrateur est cet humain.
                         agent.resume(result.id, "approve", by="orchestrateur (gate humaine en aval)")
-                        outputs.update(agent.result(result.id).outputs)
+                        _keep_files(agent.result(result.id).outputs, outputs, warnings)
                 status = s.AgentStatus.WARNING
             else:
                 warnings.append(f"dernière fenêtre ({case.current.window.index}) sans signal : rien à décider")
