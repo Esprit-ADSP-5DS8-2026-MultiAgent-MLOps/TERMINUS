@@ -62,10 +62,17 @@ class SubprocessSandbox:
         def apply():
             if resource is None:
                 return
-            resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
-            resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
-            resource.setrlimit(resource.RLIMIT_FSIZE, (1 << 30, 1 << 30))
-            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+            # macOS refuse RLIMIT_AS (et parfois une limite au-dessus de la limite dure) :
+            # une exception ici fait échouer tout le sous-processus, donc on ignore la limite refusée.
+            for kind, value in ((resource.RLIMIT_AS, mem), (resource.RLIMIT_CPU, cpu_s),
+                                (resource.RLIMIT_FSIZE, 1 << 30), (resource.RLIMIT_CORE, 0)):
+                try:
+                    _, hard = resource.getrlimit(kind)
+                    if hard != resource.RLIM_INFINITY:
+                        value = min(value, hard)
+                    resource.setrlimit(kind, (value, value))
+                except (ValueError, OSError):
+                    pass
         return apply
 
     def run(self, argv, work: Path, cwd: Path, env_extra: dict, timeout: int) -> RunResult:
