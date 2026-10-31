@@ -70,6 +70,8 @@ FINAL_LOOK = {
     "FAILED": ("fail", "Une étape a échoué",
                "Le pipeline s'est arrêté proprement. Le journal indique la cause."),
     "REJECTED": ("fail", "Refusé par un humain", "Rien n'a été déployé."),
+    "CHAMPION_KEPT": ("ok", "Champion conservé",
+                      "Le nouveau modèle ne fait pas mieux que celui en production : rien n'est redéployé."),
     "MANIFEST_PROPOSED": ("ok", "Manifeste validé",
                           "Ajoutez le mlops.yaml proposé au projet, puis relancez le pipeline."),
     "WAITING_HUMAN": ("wait", "En attente de votre décision",
@@ -95,6 +97,7 @@ ACTION_LABELS = {
     "gate_retraining": "demander une validation", "gate_failure": "demander à un humain",
     "retry": "réessayer", "end_done": "terminer", "end_failed": "arrêter", "end_blocked": "arrêter",
     "end_rejected": "arrêter", "end_manifest_proposed": "terminer",
+    "end_champion_kept": "garder le champion",
 }
 
 # --- style -------------------------------------------------------------------

@@ -54,6 +54,8 @@ def after_agent2(state: PipelineState) -> str:
     r = _result(state, "agent2")
     if r["status"] == "NEEDS_APPROVAL":
         return "gate_champion"
+    if r["status"] == "WARNING" and not r["can_proceed"]:
+        return "end_champion_kept"  # le candidat ne bat pas le champion : il reste en production
     return "agent3" if r["can_proceed"] else "end_failed"
 
 

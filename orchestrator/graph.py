@@ -36,7 +36,7 @@ from .stubs.agents import (  # noqa: F401 - réexportés pour les tests (graph.a
 # Vrais agents intégrés, stubs pour les autres (ORCH_AGENTS : real | stub | liste)
 AGENTS, AGENT_ORIGIN = resolve()
 
-END_STATUSES = ["DONE", "BLOCKED", "FAILED", "REJECTED", "MANIFEST_PROPOSED"]
+END_STATUSES = ["DONE", "BLOCKED", "FAILED", "REJECTED", "MANIFEST_PROPOSED", "CHAMPION_KEPT"]
 
 # Vrais agents utilisés par un run, notés au lancement : un run repris (resume, approve) garde les
 # mêmes agents, même si ORCH_AGENTS a changé entre-temps dans le terminal.

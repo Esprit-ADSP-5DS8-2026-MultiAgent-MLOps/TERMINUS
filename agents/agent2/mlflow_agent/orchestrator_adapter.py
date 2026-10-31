@@ -191,11 +191,13 @@ def run(inp: AgentInput) -> AgentResult:
     sign = -1 if metric in MINIMIZE else 1
     reasons = [CHECK_LABELS.get(k, k) for k, ok in (result.quality_gate.checks.items()
                                                        if result.quality_gate else []) if not ok]
-    if champion is not None and sign * test <= sign * champion:
+    gate_ok = bool(result.quality_gate and result.quality_gate.passed) and not reasons
+    champion_kept = gate_ok and champion is not None and sign * test <= sign * champion
+    if champion_kept:
         reasons.append(f"ne bat pas le champion actuel ({metric} {test:.4f} contre {champion:.4f})")
-    passed = bool(result.quality_gate and result.quality_gate.passed) and not reasons
+    passed = gate_ok and not champion_kept
 
-    if result.model_version:
+    if result.model_version and passed:  # une version refusée reste dans le registre, sans alias
         client.set_registered_model_alias(name, "candidate", result.model_version)
     diff = workdir / "instrumentation.md"
     diff.write_text("Aucune instrumentation du code du projet : l'Agent 2 ne l'exécute pas. Il entraîne ses "
@@ -223,6 +225,12 @@ def run(inp: AgentInput) -> AgentResult:
     if current is not None and sign * test < sign * current:
         note = f" ; attention : moins bon que le modèle actuel du projet ({metric} {current:.4f})"
         result.warnings.append(note.removeprefix(" ; "))
+    if champion_kept:
+        # Pas un échec : le modèle en production reste le meilleur, rien à promouvoir ni à redéployer.
+        return AgentResult(agent="agent2", status=AgentStatus.WARNING, can_proceed=False, outputs=outputs,
+                           reasons=[f"le champion actuel reste en production : nouveau candidat {metric} "
+                                    f"{test:.4f}, champion {champion:.4f}"],
+                           warnings=result.warnings, duration_s=elapsed)
     if not passed:
         return AgentResult(agent="agent2", status=AgentStatus.FAILED, can_proceed=False, outputs=outputs,
                            reasons=[f"quality gate raté ({metric}={test:.4f}) : " + " ; ".join(reasons)],

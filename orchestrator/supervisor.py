@@ -77,6 +77,7 @@ DESCRIPTIONS = {
     "end_failed": "Arrêter le run en échec",
     "end_rejected": "Arrêter : refusé par un humain",
     "end_manifest_proposed": "Terminer : le manifeste est validé, le projet doit être relancé avec",
+    "end_champion_kept": "Terminer : le nouveau modèle ne bat pas le champion, qui reste en production",
 }
 
 

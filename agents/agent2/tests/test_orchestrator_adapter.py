@@ -46,6 +46,10 @@ def test_same_model_does_not_replace_the_champion(tmp_path):
     gate = _meta(tmp_path / "run2").quality_gate
     assert gate.champion_value is not None and not gate.passed
     assert any("champion" in r for r in gate.reasons)
+    assert "AgentResult valide (statut WARNING, can_proceed=False)" in rep.checks[0][1]
+    from mlflow_agent.orchestrator_adapter import _client
+    candidate = _client().get_model_version_by_alias("credit_risk", "candidate").version
+    assert str(candidate) == _meta(tmp_path / "run1").model_version  # l'alias reste sur le candidat accepté
 
 
 def test_candidate_worse_than_the_project_model_is_flagged(tmp_path, monkeypatch):
