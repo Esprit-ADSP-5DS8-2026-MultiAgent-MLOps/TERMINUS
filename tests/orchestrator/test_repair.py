@@ -100,3 +100,20 @@ def test_repair_written_outside_its_workdir_is_refused(tmp_path, monkeypatch):
     s = run_pipeline(str(UNPINNED), approve, runs_dir=str(tmp_path / "runs"), simulate={})
     assert s["final_status"] == "BLOCKED"
     assert "workdir" in s["results"]["repair"]["reasons"][-1]
+
+
+def test_llm_cannot_skip_the_repair(tmp_path, monkeypatch):
+    from orchestrator import llm
+    from orchestrator.llm import LLMDecision
+
+    class StubbornLLM:
+        name = "gemini"
+
+        def decide(self, context, options, rule_choice):
+            return LLMDecision(action="end_blocked", explanation="blocage définitif")
+
+    monkeypatch.setitem(llm.DECIDERS, "gemini", StubbornLLM)
+    monkeypatch.setitem(graph.AGENTS, "repair", fake_repair())
+    s = run_pipeline(str(UNPINNED), approve, runs_dir=str(tmp_path), supervisor="gemini", simulate={})
+    assert steps(s)[:2] == ["validator", "repair"]  # action non autorisée : la règle (réparer) s'applique
+    assert "non autorisée" in s["supervision"][0]["fallback"]

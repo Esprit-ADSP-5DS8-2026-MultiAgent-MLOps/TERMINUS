@@ -42,6 +42,12 @@ def ask_human(question: dict) -> dict:
     print(question["question"])
     if question.get("file_to_review"):
         print(f"Fichier à relire : {question['file_to_review']}")
+    if question.get("failed_step"):
+        print(f"Étape en échec : {question['failed_step']}")
+        for reason in question.get("reasons", [])[:3]:
+            print(f"  → {reason}")
+    if question.get("supervisor_explanation"):
+        print(f"Avis du superviseur : {question['supervisor_explanation']}")
     while True:
         answer = input("Approuver ? [o/n] ").strip().lower()
         if answer in {"o", "oui", "y", "yes", "n", "non", "no"}:
@@ -87,6 +93,11 @@ def cmd_run(args) -> Run:
                                    if name != "propose_manifest"))
     from .llm import default_mode
     print(f"Superviseur : {args.supervisor or default_mode()}")
+    if args.simulate_drift and AGENT_ORIGIN.get("agent4") == "réel":
+        print("Note : --simulate-drift ne concerne que le stub de l'Agent 4 ; le vrai agent décide sur le "
+              "trafic observé. Pour la démo du drift : ORCH_AGENTS=stub python -m orchestrator run ...")
+    if args.simulate_failure and AGENT_ORIGIN.get("agent3") == "réel":
+        print("Note : --simulate-failure ne concerne que le stub de l'Agent 3.")
     simulate = None
     if args.simulate_failure or args.simulate_drift:
         simulate = {"failure": args.simulate_failure, "drift": args.simulate_drift}
