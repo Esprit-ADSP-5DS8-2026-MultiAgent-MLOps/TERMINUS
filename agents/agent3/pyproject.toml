@@ -25,3 +25,6 @@ include = ["agent_api_docker*"]
 
 [tool.setuptools.package-data]
 agent_api_docker = ["templates/*.j2", "prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]          # pas les tests internes des projets d'exemple (eval/projects/*/tests)

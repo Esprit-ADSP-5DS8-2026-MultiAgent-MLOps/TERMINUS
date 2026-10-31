@@ -81,3 +81,25 @@ def test_original_labels_are_restored():
             return np.array([0, 1] * (len(df) // 2 or 1))[: len(df)]
 
     assert ns["predict"](Model(), [{"a": 1}, {"a": 2}]) == [1, 2]
+
+
+def test_push_needs_the_flag_and_docker_hub_settings(monkeypatch):
+    """Pas de publication sans AGENT3_PUSH=1, ni sans identifiants (vérifié avant le build)."""
+    from agent_api_docker import config
+    from agent_api_docker.orchestrator_adapter import _push_wanted
+
+    warnings: list[str] = []
+    monkeypatch.delenv("AGENT3_PUSH", raising=False)
+    monkeypatch.setattr(config, "_DOTENV", {})
+    assert not _push_wanted(warnings) and not warnings
+
+    monkeypatch.setenv("AGENT3_PUSH", "1")
+    monkeypatch.setattr(config, "DOCKERHUB_USERNAME", "")
+    monkeypatch.setattr(config, "DOCKERHUB_TOKEN", "")
+    monkeypatch.setattr(config, "DOCKER_IMAGE_NAMESPACE", "")
+    assert not _push_wanted(warnings) and "DOCKERHUB_TOKEN" in warnings[0]
+
+    monkeypatch.setattr(config, "DOCKERHUB_USERNAME", "moi")
+    monkeypatch.setattr(config, "DOCKERHUB_TOKEN", "jeton")
+    monkeypatch.setattr(config, "DOCKER_IMAGE_NAMESPACE", "moi")
+    assert _push_wanted([])

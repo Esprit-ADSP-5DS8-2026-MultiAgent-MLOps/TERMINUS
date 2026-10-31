@@ -147,10 +147,11 @@ Fait (branche `integ/agent3`) :
 - sans Docker : API testée en local, `endpoint` vide, statut WARNING.
 
 À voir avec Syrine :
-- deux tests échouaient déjà sur sa branche : `test_low_confidence_stops` (dossier `eval/expected_reports/`
+- deux tests échouaient déjà sur sa branche (Syrine : à laisser tels quels) : `test_low_confidence_stops` (dossier `eval/expected_reports/`
   absent) et `test_push_requires_approval` (`docker_push` a un argument `source_ref` en plus) ;
 - `api.py.j2` renvoie `prediction: int` : la régression n'est pas servie (l'adaptateur s'arrête avec la raison) ;
-- pas de push Docker Hub dans le pipeline (identifiants interactifs) : `pushed` reste `false`.
+- publication Docker Hub : `AGENT3_PUSH=1` + `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (et `DOCKER_IMAGE_NAMESPACE`)
+  dans `agents/agent3/.env` ; l'approbation est la gate `champion_replacement`. Dépôt public par défaut sur Docker Hub.
 
 À voir avec Aziz : `executor.py` encode la cible (`LabelEncoder`) sans garder l'encodeur dans le modèle ; le modèle
 prédit l'indice de la classe. L'adaptateur de l'Agent 3 rétablit les étiquettes ; à corriger à la source.

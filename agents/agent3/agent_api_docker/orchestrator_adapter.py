@@ -16,7 +16,12 @@ Ce que fait l'adaptateur autour du pipeline de l'agent (loop.run_pipeline, incha
 5. pose l'alias « champion » sur la version MLflow déployée (mlflow_agent.orchestrator_adapter.promote).
 
 Sans Docker (démon arrêté) : l'API est validée et testée en local, mais pas déployée (endpoint vide, WARNING).
-Variables : AGENT3_DOCKER=0 (pas de Docker), AGENT3_PORT, AGENT3_NO_FIX=1 (pas de correction LLM).
+Variables : AGENT3_DOCKER=0 (pas de Docker), AGENT3_PORT, AGENT3_NO_FIX=1 (pas de correction LLM),
+AGENT3_PUSH=1 (publication sur Docker Hub, identifiants DOCKERHUB_* de agents/agent3/.env).
+
+Publication : l'agent ne pousse jamais sans approbation. Dans le pipeline, l'approbation est la gate humaine
+« champion_replacement » de l'orchestrateur (mise en production), donnée avant l'Agent 3.
+Attention : un dépôt créé par le push est PUBLIC sur Docker Hub ; le créer d'abord en privé si besoin.
 """
 
 from __future__ import annotations
@@ -228,6 +233,21 @@ def _promote(meta, warnings: list[str]) -> None:
         warnings.append(f"alias champion non posé ({type(exc).__name__}: {str(exc)[:150]})")
 
 
+def _push_wanted(warnings: list[str]) -> bool:
+    """AGENT3_PUSH=1 (environnement ou agents/agent3/.env) et identifiants Docker Hub présents."""
+    from . import config
+    from .docker_stage import missing_push_settings
+
+    if config._get("AGENT3_PUSH").lower() not in {"1", "true", "yes"}:
+        return False
+    missing = missing_push_settings()
+    if missing:
+        warnings.append("publication Docker Hub demandée mais réglages absents dans agents/agent3/.env : "
+                        + ", ".join(missing))
+        return False
+    return True
+
+
 def _checks(result) -> list[CheckResult]:
     checks = []
     if result.docker is not None:
@@ -295,12 +315,13 @@ def run(inp: AgentInput) -> AgentResult:
     use_docker = os.environ.get("AGENT3_DOCKER", "1") != "0" and DockerCLI().available()[0]
     if not use_docker:
         warnings.append("Docker indisponible (démon arrêté ou AGENT3_DOCKER=0) : API testée en local, non déployée")
+    push = use_docker and _push_wanted(warnings)
     log = workdir / "agent3.log"
     with log.open("w", encoding="utf-8") as f:
         result = run_pipeline(
             spec.project_name, report_path=str(report_path), project_dir=build, workspace=workdir / "workspace",
             python_exe=sys.executable, agent="never", fix=os.environ.get("AGENT3_NO_FIX") != "1",
-            docker=use_docker, push=False,
+            docker=use_docker, push=push, approve_push=(lambda req: True) if push else None,
             on_step=lambda m: f.write(m + "\n"), on_detail=lambda m: f.write("  " + m + "\n"))
 
     generated = workdir / "workspace" / "generated"
@@ -316,6 +337,9 @@ def run(inp: AgentInput) -> AgentResult:
                            reasons=[f"API ou image non validée : {why}"[:500]], warnings=warnings,
                            duration_s=round(time.monotonic() - started, 3))
 
+    pushed = bool(result.push and result.push.pushed)
+    if result.push is not None and not pushed:
+        warnings.append(f"publication Docker Hub non faite : {result.push.error or 'refusée'}"[:300])
     version = (meta.model_version if meta and from_mlflow else "") or "projet"
     slug, endpoint = result.project_id.lower().replace("_", "-"), None
     image, tag = f"mlops/{slug}", f"v{version}-{inp.run_id}"
@@ -333,7 +357,9 @@ def run(inp: AgentInput) -> AgentResult:
     dep = DeploymentResult(
         model_uri=meta.model_uri if from_mlflow else f"project:{report['ml']['model_file']}",
         model_source="mlflow" if from_mlflow else "project_artifact",
-        image=image, tag=tag, checks=_checks(result), pushed=False, endpoint=endpoint,
+        image=result.push.repository if pushed else image,
+        tag=result.push.tags[0] if pushed else tag,
+        checks=_checks(result), pushed=pushed, endpoint=endpoint,
         generated_files={n: str(generated / n) for n in ("api.py", "Dockerfile", "requirements.api.txt",
                                                           ".dockerignore", PREDICT_MODULE)
                          if (generated / n).exists()},
