@@ -65,10 +65,13 @@ def wanted() -> set[str]:
     return {a.strip() for a in mode.split(",") if a.strip()}
 
 
-def resolve() -> tuple[dict[str, Callable], dict[str, str]]:
-    """Renvoie (agents utilisés, origine de chacun : "réel", "stub" ou "stub (raison)")."""
+def resolve(names: set[str] | None = None) -> tuple[dict[str, Callable], dict[str, str]]:
+    """Renvoie (agents utilisés, origine de chacun : "réel", "stub" ou "stub (raison)").
+
+    names : vrais agents voulus ; par défaut ceux de ORCH_AGENTS (voir wanted()).
+    """
     agents, origin = dict(STUBS), {name: "stub" for name in STUBS}
-    for name in wanted():
+    for name in (wanted() if names is None else names):
         if name not in REAL:
             origin[name] = "stub (pas encore intégré)"
             continue
