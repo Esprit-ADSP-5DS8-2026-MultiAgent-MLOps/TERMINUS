@@ -98,3 +98,20 @@ def test_postgres_url_is_described_without_password(monkeypatch):
 def test_unreachable_postgres_gives_a_clear_error(tmp_path, monkeypatch):
     monkeypatch.setenv("ORCH_DATABASE_URL", "postgresql://mlops@localhost:1/orchestrator")
     assert main(["--runs-dir", str(tmp_path), "run", CREDIT_RISK, "--no-wait"]) == 2
+
+
+def test_resumed_run_keeps_the_agents_it_started_with(tmp_path, monkeypatch):
+    """Lancé avec les stubs, repris dans un terminal où un vrai agent est actif : il garde les stubs."""
+    run = Run.start(CREDIT_RISK, runs_dir=str(tmp_path))
+    assert run.status == "WAITING_HUMAN"
+    calls = []
+
+    def real_agent4(inp):
+        calls.append(inp.run_id)
+        raise AssertionError("le vrai agent ne doit pas tourner dans ce run")
+
+    monkeypatch.setitem(graph.AGENT_ORIGIN, "agent4", "réel")    # « nouveau terminal » : agent4 réel
+    monkeypatch.setitem(graph.AGENTS, "agent4", real_agent4)
+    reloaded = Run.load(run.run_id, runs_dir=str(tmp_path))
+    reloaded.answer(APPROVE)
+    assert reloaded.status == "DONE" and not calls

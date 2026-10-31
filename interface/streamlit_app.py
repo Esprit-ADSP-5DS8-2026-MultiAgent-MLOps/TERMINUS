@@ -26,7 +26,10 @@ sys.path.insert(0, str(ROOT))
 
 from orchestrator.checkpoint import describe_backend  # noqa: E402
 from orchestrator.graph import Run, list_runs  # noqa: E402
+from orchestrator.graph import AGENT_ORIGIN  # noqa: E402
 from orchestrator.llm import default_mode  # noqa: E402
+
+REAL_AGENTS = ", ".join(["validateur", *(n for n, o in AGENT_ORIGIN.items() if o == "réel")])
 
 PROJECTS = ROOT / "eval" / "projects"
 RUNS = ROOT / "runs"
@@ -547,7 +550,8 @@ st.set_page_config(page_title="Orchestrateur MLOps", page_icon="🚉", layout="w
 st.markdown(CSS, unsafe_allow_html=True)
 st.title("Orchestrateur MLOps")
 st.markdown(
-    '<div class="subline">Validateur réel, agents 1 à 4 simulés en attendant leur intégration, superviseur au choix. '
+    f'<div class="subline">Agents réels : <b>{esc(REAL_AGENTS)}</b> ; les autres sont simulés en attendant leur '
+    'intégration. Superviseur au choix. '
     f'Sauvegarde : <b>{esc(describe_backend(RUNS))}</b></div>',
     unsafe_allow_html=True,
 )

@@ -38,17 +38,37 @@ AGENTS, AGENT_ORIGIN = resolve()
 
 END_STATUSES = ["DONE", "BLOCKED", "FAILED", "REJECTED", "MANIFEST_PROPOSED"]
 
+# Vrais agents utilisés par un run, notés au lancement : un run repris (resume, approve) garde les
+# mêmes agents, même si ORCH_AGENTS a changé entre-temps dans le terminal.
+AGENTS_FILE = "agents.json"
+
+
+def _real(origin: dict[str, str]) -> list[str]:
+    return sorted(name for name, o in origin.items() if o == "réel")
+
+
+def agents_for(run_dir: Path) -> dict[str, Callable] | None:
+    """Les agents d'un run existant, s'ils diffèrent de ceux du processus actuel (sinon None)."""
+    f = run_dir / AGENTS_FILE
+    if not f.exists():
+        return None
+    saved = json.loads(f.read_text())["real"]
+    if saved == _real(AGENT_ORIGIN):
+        return None
+    agents, _ = resolve(set(saved))
+    return agents
+
 
 WORK_NODES = ["validate", *AGENTS, "gate_manifest", "gate_champion", "gate_retraining", "gate_failure"]
 
 
-def build_graph(checkpointer=None):
+def build_graph(checkpointer=None, agents: dict[str, Callable] | None = None):
     """Chaque étape renvoie vers le superviseur, qui choisit la suivante (supervisor.py)."""
     g = StateGraph(PipelineState)
 
     # étapes
     g.add_node("validate", validate)
-    for name, fn in AGENTS.items():
+    for name, fn in (agents or AGENTS).items():
         g.add_node(name, make_repair_node(fn) if name == "repair" else make_agent_node(name, fn))
     g.add_node("gate_manifest", make_gate("manifest_confirmation", "proposed_manifest", "gate_manifest"))
     g.add_node("gate_champion", make_gate("champion_replacement", "mlflow_metadata", "gate_champion"))
@@ -88,7 +108,7 @@ class Run:
         self.run_id = run_id
         self.runs_dir = Path(runs_dir).resolve()
         self.run_dir = self.runs_dir / run_id
-        self.graph = build_graph(checkpointer or get_checkpointer(self.runs_dir))
+        self.graph = build_graph(checkpointer or get_checkpointer(self.runs_dir), agents_for(self.run_dir))
         self.config = {"configurable": {"thread_id": run_id}}
 
     # -- création / chargement ------------------------------------------------
@@ -113,6 +133,7 @@ class Run:
                 "failure": os.environ.get("ORCH_SIMULATE_FAILURE") or None,
             }
         (run.run_dir / SIMULATE_FILE).write_text(json.dumps(simulate))
+        (run.run_dir / AGENTS_FILE).write_text(json.dumps({"real": _real(AGENT_ORIGIN)}))
         run.graph.invoke(
             initial_state(run.run_id, str(Path(project_dir).resolve()), str(run.run_dir), mode),
             run.config,
