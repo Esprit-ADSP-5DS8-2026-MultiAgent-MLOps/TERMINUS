@@ -6,7 +6,7 @@ Ligne de commande de l'Agent 4.
     python -m monitoring_agent analyze car_loan [--label-delay 3] [--out runs/report.json]
 
 Étape 2 (en ligne, devant l'API de l'Agent 3) :
-    python -m monitoring_agent init ../eval/projects/credit_risk --upstream http://127.0.0.1:8000 --name credit_risk
+    python -m monitoring_agent init ../../eval/projects/credit_risk --upstream http://127.0.0.1:8000 --name credit_risk
     python -m monitoring_agent gateway credit_risk
     python -m monitoring_agent simulate credit_risk --scenario covariate
     python -m monitoring_agent provision credit_risk
@@ -243,7 +243,7 @@ def cmd_evaluate(args) -> int:
     methods = ["rules", "llm"] if args.method == "both" else [args.method]
     decider, judge = decider_and_judge() if "llm" in methods else (None, None)
     if "llm" in methods and decider is None:
-        print("Aucun LLM configuré (Monitoring_Agent/.env) : seule la baseline à règles est évaluée.")
+        print("Aucun LLM configuré (.env (agents/agent4/.env ou racine du dépôt)) : seule la baseline à règles est évaluée.")
         methods = ["rules"]
     if args.redteam:
         from .evaluation import redteam
@@ -280,7 +280,7 @@ def cmd_llm_check(_args) -> int:
     ok = True
     for role, model in (("décideur", decider), ("juge", judge)):
         if model is None:
-            print(f"{role:<9}: non configuré (clé absente de Monitoring_Agent/.env)")
+            print(f"{role:<9}: non configuré (clé absente de .env (agents/agent4/.env ou racine du dépôt))")
             ok = False
             continue
         t0 = time.perf_counter()

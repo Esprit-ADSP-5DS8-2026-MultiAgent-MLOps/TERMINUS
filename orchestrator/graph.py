@@ -1,9 +1,8 @@
 """
 Le graphe du pipeline et la fonction qui l'exécute.
 
-Pour brancher un vrai agent, remplace la fonction dans AGENTS, par exemple :
-    from agents.agent1_analysis.agent import run as agent1_run
-    AGENTS["agent1"] = agent1_run
+Les agents utilisés (vrais ou stubs) viennent de registry.py : pour brancher un vrai agent,
+on ajoute une ligne dans registry.REAL, rien à changer ici.
 """
 
 from __future__ import annotations
@@ -24,7 +23,8 @@ from .llm import get_decider
 from .nodes import make_agent_node, make_end, validate
 from .state import PipelineState, initial_state
 from .supervisor import DESTINATIONS, supervisor
-from .stubs.agents import (
+from .registry import resolve
+from .stubs.agents import (  # noqa: F401 - réexportés pour les tests (graph.agent3_stub)
     SIMULATE_FILE,
     agent1_stub,
     agent2_stub,
@@ -33,13 +33,8 @@ from .stubs.agents import (
     propose_manifest_stub,
 )
 
-AGENTS = {
-    "propose_manifest": propose_manifest_stub,
-    "agent1": agent1_stub,
-    "agent2": agent2_stub,
-    "agent3": agent3_stub,
-    "agent4": agent4_stub,
-}
+# Vrais agents intégrés, stubs pour les autres (ORCH_AGENTS : real | stub | liste)
+AGENTS, AGENT_ORIGIN = resolve()
 
 END_STATUSES = ["DONE", "BLOCKED", "FAILED", "REJECTED", "MANIFEST_PROPOSED"]
 

@@ -79,7 +79,10 @@ def print_run(run: Run) -> None:
 
 
 def cmd_run(args) -> Run:
+    from .graph import AGENT_ORIGIN
     print(f"Pipeline sur {args.project_dir}… (le validateur peut prendre jusqu'à une minute)")
+    print("Agents : " + " · ".join(f"{name} {origin}" for name, origin in AGENT_ORIGIN.items()
+                                   if name != "propose_manifest"))
     simulate = None
     if args.simulate_failure or args.simulate_drift:
         simulate = {"failure": args.simulate_failure, "drift": args.simulate_drift}

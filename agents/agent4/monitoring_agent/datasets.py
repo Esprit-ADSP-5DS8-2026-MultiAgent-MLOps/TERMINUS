@@ -6,7 +6,7 @@ Chaque jeu = une référence (données d'entraînement, avec labels) + une péri
 
 Les fichiers sont retrouvés par leur nom n'importe où sous data/ (les noms de dossiers
 contiennent des espaces et des accents : on ne reconstruit jamais les chemins à la main).
-Dossier : variable MONITORING_DATA_DIR, sinon Monitoring_Agent/data/.
+Dossier : variable MONITORING_DATA_DIR, sinon agents/agent4/data/.
 """
 
 from __future__ import annotations
@@ -20,7 +20,15 @@ import pandas as pd
 
 from .schemas import ColumnMapping
 
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent  # Monitoring_Agent/
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent  # agents/agent4/
+
+
+def repo_root() -> Path:
+    """Racine du dépôt de la plateforme : le premier dossier parent qui contient common/schemas.py."""
+    for parent in PACKAGE_ROOT.parents:
+        if (parent / "common" / "schemas.py").exists():
+            return parent
+    return PACKAGE_ROOT.parent
 
 
 def data_dir() -> Path:

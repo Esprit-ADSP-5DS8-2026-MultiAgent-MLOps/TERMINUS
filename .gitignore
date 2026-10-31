@@ -29,6 +29,5 @@ agents/agent4/infra/grafana/dashboards/*.json
 agents/agent4/infra/prometheus/rules/*.rules.yml
 
 # Modèles fine-tunés (fusionnés, GGUF) : hébergés sur Hugging Face, jamais dans git
-models/
 *.gguf
 *.safetensors

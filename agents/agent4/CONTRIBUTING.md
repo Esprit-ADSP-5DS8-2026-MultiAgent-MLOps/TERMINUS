@@ -3,7 +3,7 @@
 ## Avant de commencer
 
 ```bash
-cd Monitoring_Agent
+cd agents/agent4
 source agent_env/bin/activate        # ou ton environnement Python 3.11
 pip install -r requirements.txt
 cp .env.example .env                 # tes clés restent dans .env, jamais ailleurs

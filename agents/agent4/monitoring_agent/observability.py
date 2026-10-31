@@ -10,7 +10,7 @@ Ce qu'on envoie, et pourquoi :
 - les prompts versionnés (prompt management) : `python -m monitoring_agent langfuse push-prompts` ;
 - un dataset + des expériences : les cas de test du fine-tuning, rejoués par n'importe quel modèle.
 
-Les clés (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL) sont lues dans Monitoring_Agent/.env.
+Les clés (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL) sont lues dans .env (agents/agent4/.env ou racine du dépôt).
 """
 
 from __future__ import annotations
@@ -157,7 +157,7 @@ def push_prompts() -> list[str]:
     from .agent import prompts
     lf = client()
     if lf is None:
-        raise RuntimeError("clés Langfuse absentes de Monitoring_Agent/.env")
+        raise RuntimeError("clés Langfuse absentes de .env (agents/agent4/.env ou racine du dépôt)")
     out = []
     for name, text in (("agent4-investigator", prompts.INVESTIGATOR), ("agent4-diagnoser", prompts.DIAGNOSER),
                        ("agent4-judge", prompts.JUDGE)):
@@ -172,7 +172,7 @@ def push_dataset(cases: list[dict], name: str = "agent4-diagnosis-test") -> int:
     """Les cas de test (bases jamais vues) deviennent un dataset Langfuse, rejouable en expérience."""
     lf = client()
     if lf is None:
-        raise RuntimeError("clés Langfuse absentes de Monitoring_Agent/.env")
+        raise RuntimeError("clés Langfuse absentes de .env (agents/agent4/.env ou racine du dépôt)")
     with contextlib.suppress(Exception):
         lf.create_dataset(name=name, description="Agent 4 : diagnostics attendus sur car_loan / car_price")
     for c in cases:

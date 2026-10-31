@@ -53,7 +53,7 @@ Si tu découvres le domaine, ces mots reviennent partout dans la suite.
 Il faut Python 3.11, Docker (pour Prometheus, Alertmanager et Grafana) et, si tu veux le modèle local, un Mac Apple Silicon.
 
 ```bash
-cd Monitoring_Agent
+cd agents/agent4
 python -m venv agent_env && source agent_env/bin/activate     # ou ton environnement habituel
 pip install -r requirements.txt
 cp .env.example .env                                         # puis colle tes clés dedans
@@ -61,18 +61,18 @@ cp .env.example .env                                         # puis colle tes cl
 
 Les clés Groq et Gemini sont gratuites (liens dans `.env.example`). Sans clé, l'agent fonctionne quand même avec son décideur à règles.
 
-Les jeux de données (environ 26 Go) ne sont pas dans git. Place-les dans `Monitoring_Agent/data/` ou indique leur dossier avec `export MONITORING_DATA_DIR=/chemin/vers/data`. Les fichiers sont retrouvés par leur nom, peu importe l'arborescence.
+Les jeux de données (environ 26 Go) ne sont pas dans git. Place-les dans `agents/agent4/data/` ou indique leur dossier avec `export MONITORING_DATA_DIR=/chemin/vers/data`. Les fichiers sont retrouvés par leur nom, peu importe l'arborescence.
 
 ## Lancer la démonstration
 
-Quatre terminaux, tous dans `Monitoring_Agent/` sauf le premier.
+Quatre terminaux, tous dans `agents/agent4/` sauf le premier.
 
 ```bash
 # 1. L'API du modèle, publiée par l'Agent 3
 docker run --rm --platform linux/amd64 -p 8000:8000 syrineboh/credit-risk:20261021-5992db83
 
 # 2. Préparer le monitoring de ce projet, puis lancer la gateway
-python -m monitoring_agent init ../eval/projects/credit_risk --upstream http://127.0.0.1:8000 --name credit_risk
+python -m monitoring_agent init ../../eval/projects/credit_risk --upstream http://127.0.0.1:8000 --name credit_risk
 python -m monitoring_agent gateway credit_risk --host 0.0.0.0
 
 # 3. Prometheus, Alertmanager et Grafana
@@ -280,7 +280,7 @@ Toutes se lancent avec `python -m monitoring_agent <commande>`. Ajoute `--help` 
 ## Organisation du code
 
 ```
-Monitoring_Agent/
+agents/agent4/
 ├── monitoring_agent/
 │   ├── analysis/       calculs de drift, qualité et performance (aucun LLM)
 │   ├── runtime/        gateway, stockage SQLite, métriques, moniteur, simulateur

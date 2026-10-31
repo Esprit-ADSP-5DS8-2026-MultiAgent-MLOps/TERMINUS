@@ -40,7 +40,7 @@ def teachers(spec: str | None = None) -> list[ChatModel]:
     models = [build_model(x.strip(), s) for x in specs if x.strip()]
     models = [m for m in models if m is not None]
     if not models:
-        raise LLMError("aucun professeur utilisable (GROQ_API_KEY dans Monitoring_Agent/.env ?)")
+        raise LLMError("aucun professeur utilisable (GROQ_API_KEY dans le .env ?)")
     return models
 
 

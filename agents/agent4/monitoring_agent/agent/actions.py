@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from ..datasets import PACKAGE_ROOT
+from ..datasets import repo_root
 from .context import Case
 from .schemas import AgentRun, Diagnosis
 
@@ -24,7 +24,7 @@ def _common_schemas():
     try:
         from common import schemas  # type: ignore[import-not-found]
     except ModuleNotFoundError:
-        sys.path.insert(0, str(PACKAGE_ROOT.parent))
+        sys.path.insert(0, str(repo_root()))
         from common import schemas  # type: ignore[import-not-found]
     return schemas
 

@@ -5,7 +5,7 @@ Deux rôles, deux familles de modèles :
 - décideur (Groq) : enquête avec des outils, diagnostique, propose une action ;
 - juge (Gemini)   : relit et note. Un modèle d'une autre famille ne partage pas les mêmes biais.
 
-Configuration : Monitoring_Agent/.env (jamais commité), voir .env.example.
+Configuration : .env (agents/agent4/.env ou racine du dépôt) (jamais commité), voir .env.example.
 Le .env est lu dans un dict, pas injecté dans os.environ (les clés ne fuient pas vers les sous-processus).
 """
 
@@ -23,7 +23,7 @@ import httpx
 from dotenv import dotenv_values
 from pydantic import BaseModel, ValidationError
 
-from ..datasets import PACKAGE_ROOT
+from ..datasets import PACKAGE_ROOT, repo_root
 
 PROVIDERS = {
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
@@ -92,8 +92,16 @@ class ChatModel(Protocol):
     # json_mode : False (texte libre), True (un objet JSON), ou un JSON Schema (sortie contrainte au décodage).
 
 
+def _env_file() -> Path:
+    """Le .env de l'agent (agents/agent4/.env) s'il existe, sinon le .env commun à la racine du dépôt."""
+    if os.environ.get("MONITORING_ENV_FILE"):
+        return Path(os.environ["MONITORING_ENV_FILE"])
+    local = PACKAGE_ROOT / ".env"
+    return local if local.exists() else repo_root() / ".env"
+
+
 def _settings() -> dict[str, str]:
-    env_file = Path(os.environ.get("MONITORING_ENV_FILE", PACKAGE_ROOT / ".env"))
+    env_file = _env_file()
     values = {k: v for k, v in dotenv_values(env_file).items() if v} if env_file.exists() else {}
     return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_", "SLACK_", "HF_"))}}
 
@@ -351,7 +359,7 @@ def list_models(provider: str) -> list[str]:
     base, key_env = PROVIDERS[provider]
     key = s.get(key_env) if key_env else None
     if key_env and not key:
-        raise LLMError(f"{key_env} absente de Monitoring_Agent/.env")
+        raise LLMError(f"{key_env} absente de .env (agents/agent4/.env ou racine du dépôt)")
     r = httpx.get(f"{base}/models", headers={"Authorization": f"Bearer {key}"} if key else {}, timeout=20)
     r.raise_for_status()
     return sorted(m["id"].removeprefix("models/") for m in r.json().get("data", []))
