@@ -1,0 +1,301 @@
+text,label
+"Hi team, my username must be deleted. Please advise.",account
+"Urgent: my password needs to be changed. Please advise.",account
+"Please help: my charge was charged twice. Can you check?",billing
+"Hello, my two-factor code is not recognized. Thanks.",account
+"Urgent: my password is not recognized. This is the second time.",account
+"Good morning, my API times out. Can you check?",technical
+"Urgent: my payment is incorrect. Can you check?",billing
+"Hi team, my email address must be deleted. This is the second time.",account
+"Urgent: my username is not recognized. Thanks.",account
+"Please help: my username is not recognized.",account
+"Hello, my two-factor code was locked.",account
+"my dashboard fails after the update. Please advise.",technical
+"Good morning, my account must be deleted. This is the second time.",account
+"Urgent: my subscription shows the wrong amount. Please advise.",billing
+"Please help: my export fails after the update. Can you check?",technical
+"Good morning, my subscription needs to be refunded. Please advise.",billing
+"Good morning, my export keeps crashing.",technical
+"my charge needs to be refunded. Can you check?",billing
+"Urgent: my app times out. Please advise.",technical
+"Hello, my charge failed to process. Thanks.",billing
+"Hi team, my billing address was declined. Please advise.",billing
+"Hi team, my email address cannot be verified.",account
+"my settings cannot be reset. Please advise.",account
+"Hi team, my receipt failed to process.",billing
+"Urgent: my login page shows a blank screen.",technical
+"Hello, my username must be deleted. Can you check?",account
+"my upload does not load. Please advise.",technical
+"my server returns an error.",technical
+"Hello, my username must be deleted. Can you check?",account
+"Please help: my credit card needs to be refunded. This is the second time.",billing
+"Hi team, my website fails after the update. Can you check?",technical
+"Hello, my export shows a blank screen.",technical
+"my username is not recognized. This is the second time.",account
+"my receipt is incorrect. Please advise.",billing
+"Hi team, my charge is incorrect. Please advise.",billing
+"Hi team, my subscription is incorrect.",billing
+"my subscription is incorrect. This is the second time.",billing
+"Please help: my export times out. Please advise.",technical
+"Urgent: my profile was locked. Can you check?",account
+"Hi team, my account is not recognized.",account
+"Urgent: my export is very slow. Thanks.",technical
+"Hello, my charge has not arrived. This is the second time.",billing
+"Good morning, my invoice shows the wrong amount. This is the second time.",billing
+"Please help: my dashboard does not load. Can you check?",technical
+"Urgent: my account cannot be verified.",account
+"Good morning, my website fails after the update. Please advise.",technical
+"Good morning, my website is very slow. Please advise.",technical
+"Hello, my profile was locked. This is the second time.",account
+"Good morning, my charge is incorrect. This is the second time.",billing
+"my API does not load. Thanks.",technical
+"Good morning, my credit card is incorrect. This is the second time.",billing
+"Good morning, my credit card is incorrect. This is the second time.",billing
+"my credit card has not arrived. Can you check?",billing
+"Please help: my dashboard is very slow. Thanks.",technical
+"Hello, my two-factor code is not recognized. Thanks.",account
+"Please help: my account cannot be reset.",account
+"Good morning, my email address is not recognized. Can you check?",account
+"Urgent: my export is very slow.",technical
+"Hello, my username needs to be changed.",account
+"Hi team, my email address must be deleted.",account
+"my server does not load. Can you check?",technical
+"Urgent: my login page returns an error. Please advise.",technical
+"Please help: my export keeps crashing. Can you check?",technical
+"Good morning, my app fails after the update. Please advise.",technical
+"Urgent: my export does not load.",technical
+"my username must be deleted. This is the second time.",account
+"Good morning, my payment was charged twice.",billing
+"Hi team, my receipt has not arrived. This is the second time.",billing
+"Hello, my account is not recognized. Thanks.",account
+"Urgent: my charge was charged twice. Thanks.",billing
+"Good morning, my subscription needs to be refunded. Can you check?",billing
+"Urgent: my payment was charged twice. Please advise.",billing
+"Hi team, my username cannot be reset.",account
+"my subscription shows the wrong amount. Please advise.",billing
+"Urgent: my refund failed to process. Can you check?",billing
+"my username is not recognized. Thanks.",account
+"Good morning, my credit card needs to be refunded. Can you check?",billing
+"Urgent: my account must be deleted. This is the second time.",account
+"Hi team, my username needs to be changed. This is the second time.",account
+"my refund has not arrived. Please advise.",billing
+"my account cannot be verified. Can you check?",account
+"Good morning, my export fails after the update.",technical
+"my two-factor code cannot be verified.",account
+"Good morning, my website does not load. Thanks.",technical
+"Hi team, my export fails after the update. This is the second time.",technical
+"Hello, my payment shows the wrong amount. Thanks.",billing
+"Please help: my invoice was charged twice.",billing
+"Hi team, my two-factor code cannot be reset. Can you check?",account
+"my password must be deleted. Thanks.",account
+"Good morning, my export fails after the update.",technical
+"Good morning, my payment needs to be refunded.",billing
+"Hi team, my invoice needs to be refunded. This is the second time.",billing
+"Good morning, my server times out. Thanks.",technical
+"Hi team, my billing address was charged twice. Thanks.",billing
+"Hello, my refund is incorrect.",billing
+"Hi team, my charge is incorrect. Thanks.",billing
+"Hello, my upload is very slow. Thanks.",technical
+"Please help: my profile cannot be verified. Please advise.",account
+"Urgent: my credit card was declined. Thanks.",billing
+"Good morning, my payment was charged twice. Can you check?",billing
+"Hi team, my credit card was declined. Thanks.",billing
+"Good morning, my receipt needs to be refunded. Thanks.",billing
+"Hello, my profile is not recognized. Please advise.",account
+"Hi team, my server returns an error.",technical
+"Good morning, my login page is very slow. Can you check?",technical
+"Hello, my export returns an error. Thanks.",technical
+"Good morning, my payment was charged twice. This is the second time.",billing
+"my refund was charged twice. Please advise.",billing
+"Good morning, my website times out. This is the second time.",technical
+"Please help: my charge shows the wrong amount. This is the second time.",billing
+"Please help: my dashboard does not load. Thanks.",technical
+"Good morning, my password needs to be changed. Can you check?",account
+"my server returns an error. Can you check?",technical
+"Urgent: my login page returns an error.",technical
+"Urgent: my email address must be deleted. Please advise.",account
+"Urgent: my API does not load. Please advise.",technical
+"Hello, my settings cannot be verified. Thanks.",account
+"Hello, my login page is very slow.",technical
+"Hi team, my app keeps crashing. Can you check?",technical
+"Urgent: my dashboard is very slow. Thanks.",technical
+"Please help: my settings cannot be verified. Please advise.",account
+"Good morning, my settings is not recognized. Thanks.",account
+"Urgent: my billing address is incorrect. This is the second time.",billing
+"Good morning, my billing address is incorrect. Can you check?",billing
+"Hello, my website times out. Can you check?",technical
+"Please help: my website shows a blank screen. Thanks.",technical
+"Please help: my dashboard is very slow. Can you check?",technical
+"Good morning, my credit card was declined. Thanks.",billing
+"Hello, my billing address needs to be refunded. Please advise.",billing
+"Urgent: my payment needs to be refunded. This is the second time.",billing
+"Good morning, my receipt is incorrect.",billing
+"Hi team, my profile must be deleted.",account
+"Urgent: my profile was locked. Please advise.",account
+"my login page does not load. Can you check?",technical
+"Hello, my account needs to be changed.",account
+"Good morning, my charge shows the wrong amount. This is the second time.",billing
+"Urgent: my profile cannot be reset. Can you check?",account
+"Please help: my account cannot be verified.",account
+"Please help: my payment was declined. Can you check?",billing
+"Hello, my subscription shows the wrong amount. Thanks.",billing
+"Urgent: my dashboard returns an error. Can you check?",technical
+"Hello, my profile was locked.",account
+"my account cannot be reset.",account
+"Hi team, my subscription was charged twice. Thanks.",billing
+"Hi team, my app does not load. Please advise.",technical
+"Good morning, my email address was locked. Please advise.",account
+"Hi team, my app times out. Can you check?",technical
+"Hello, my charge has not arrived.",billing
+"Please help: my dashboard fails after the update.",technical
+"Please help: my account cannot be verified. Thanks.",account
+"Urgent: my subscription failed to process. Please advise.",billing
+"Hi team, my account cannot be reset. Thanks.",account
+"my upload times out.",technical
+"Hi team, my settings cannot be reset.",account
+"Good morning, my profile was locked. Please advise.",account
+"my payment was declined. This is the second time.",billing
+"Hello, my upload returns an error. This is the second time.",technical
+"Hi team, my dashboard keeps crashing. Can you check?",technical
+"Hello, my password was locked. Thanks.",account
+"Urgent: my login page times out.",technical
+"Good morning, my API does not load. Thanks.",technical
+"my receipt needs to be refunded. Thanks.",billing
+"my subscription needs to be refunded. Thanks.",billing
+"Good morning, my email address was locked. Can you check?",account
+"Urgent: my billing address was declined. Thanks.",billing
+"Urgent: my subscription was charged twice. Can you check?",billing
+"Good morning, my upload shows a blank screen. Please advise.",technical
+"Please help: my dashboard times out. This is the second time.",technical
+"Urgent: my website shows a blank screen. Can you check?",technical
+"Hello, my payment failed to process. Thanks.",billing
+"Hi team, my profile must be deleted. Can you check?",account
+"Good morning, my payment shows the wrong amount. Please advise.",billing
+"Hello, my profile is not recognized. Thanks.",account
+"Please help: my login page times out. Can you check?",technical
+"Hi team, my API returns an error. Thanks.",technical
+"Hello, my refund was charged twice. Please advise.",billing
+"Please help: my account was locked.",account
+"Urgent: my export times out.",technical
+"Hello, my receipt has not arrived.",billing
+"my app keeps crashing.",technical
+"Hi team, my refund shows the wrong amount. Please advise.",billing
+"Hi team, my dashboard does not load. Please advise.",technical
+"my password is not recognized. This is the second time.",account
+"Hello, my API returns an error.",technical
+"Urgent: my API keeps crashing. This is the second time.",technical
+"my subscription was declined. Thanks.",billing
+"my website does not load. Please advise.",technical
+"Good morning, my receipt has not arrived.",billing
+"Hello, my account cannot be verified. This is the second time.",account
+"Hi team, my charge shows the wrong amount. Please advise.",billing
+"Hi team, my subscription needs to be refunded.",billing
+"Good morning, my server fails after the update.",technical
+"Good morning, my profile cannot be reset. Can you check?",account
+"Urgent: my login page is very slow.",technical
+"Please help: my username must be deleted. Please advise.",account
+"Hello, my login page times out.",technical
+"Urgent: my two-factor code must be deleted. Please advise.",account
+"Hello, my two-factor code cannot be verified. Thanks.",account
+"my charge shows the wrong amount. This is the second time.",billing
+"Urgent: my export keeps crashing. Thanks.",technical
+"Hello, my refund shows the wrong amount. Can you check?",billing
+"Urgent: my website does not load.",technical
+"Hello, my payment was declined. Can you check?",billing
+"Hello, my invoice was charged twice. Can you check?",billing
+"my account cannot be reset. Can you check?",account
+"Urgent: my settings is not recognized.",account
+"Hello, my settings cannot be verified. This is the second time.",account
+"Hello, my username needs to be changed. This is the second time.",account
+"Urgent: my app shows a blank screen. Can you check?",technical
+"my username cannot be verified. Thanks.",account
+"Good morning, my email address must be deleted.",account
+"Good morning, my app fails after the update. Thanks.",technical
+"Urgent: my website does not load. This is the second time.",technical
+"Hi team, my login page fails after the update. Thanks.",technical
+"my billing address is incorrect.",billing
+"Urgent: my export returns an error.",technical
+"Please help: my credit card was charged twice. This is the second time.",billing
+"Good morning, my payment needs to be refunded. Can you check?",billing
+"Please help: my export does not load. Please advise.",technical
+"Urgent: my receipt has not arrived. Can you check?",billing
+"Please help: my account was locked. Can you check?",account
+"Hello, my payment needs to be refunded. Can you check?",billing
+"Hello, my email address cannot be reset. Please advise.",account
+"my profile is not recognized. Thanks.",account
+"my account cannot be reset. Thanks.",account
+"Hello, my username needs to be changed. This is the second time.",account
+"Hi team, my password must be deleted.",account
+"Please help: my email address was locked. Can you check?",account
+"Please help: my billing address is incorrect. Thanks.",billing
+"Urgent: my invoice was charged twice. This is the second time.",billing
+"Please help: my password cannot be verified. Please advise.",account
+"Hi team, my receipt was charged twice. Can you check?",billing
+"my account must be deleted.",account
+"Good morning, my upload returns an error. Can you check?",technical
+"Hi team, my two-factor code is not recognized.",account
+"Hi team, my settings must be deleted.",account
+"Good morning, my login page times out.",technical
+"Please help: my username is not recognized. Please advise.",account
+"Please help: my account must be deleted. Please advise.",account
+"Hello, my credit card was charged twice. Please advise.",billing
+"my payment was charged twice.",billing
+"Urgent: my server returns an error. Can you check?",technical
+"Hello, my upload does not load. Can you check?",technical
+"Urgent: my refund shows the wrong amount. This is the second time.",billing
+"Hello, my invoice needs to be refunded.",billing
+"Urgent: my account cannot be reset. Can you check?",account
+"Hi team, my invoice was declined. This is the second time.",billing
+"Urgent: my receipt needs to be refunded.",billing
+"Urgent: my server times out. Please advise.",technical
+"Good morning, my refund has not arrived. This is the second time.",billing
+"Good morning, my upload fails after the update. Please advise.",technical
+"Hi team, my charge was declined. This is the second time.",billing
+"Please help: my two-factor code needs to be changed. This is the second time.",account
+"Good morning, my email address was locked. Please advise.",account
+"my charge needs to be refunded. Please advise.",billing
+"my charge is incorrect.",billing
+"Urgent: my credit card failed to process. Please advise.",billing
+"Urgent: my invoice failed to process. This is the second time.",billing
+"Urgent: my username cannot be verified. Can you check?",account
+"Please help: my invoice was charged twice. This is the second time.",billing
+"Please help: my upload fails after the update. Can you check?",technical
+"Hello, my login page keeps crashing. This is the second time.",technical
+"Please help: my server shows a blank screen. This is the second time.",technical
+"Urgent: my server times out.",technical
+"my username needs to be changed. Can you check?",account
+"my credit card is incorrect.",billing
+"Hi team, my username cannot be verified. This is the second time.",account
+"Good morning, my app fails after the update. Thanks.",technical
+"Please help: my profile must be deleted. Please advise.",account
+"Hello, my billing address needs to be refunded. Thanks.",billing
+"Good morning, my email address cannot be reset. This is the second time.",account
+"Please help: my export shows a blank screen. Thanks.",technical
+"Good morning, my export keeps crashing. Please advise.",technical
+"Please help: my upload shows a blank screen. This is the second time.",technical
+"Hi team, my upload keeps crashing.",technical
+"Hi team, my payment was charged twice. This is the second time.",billing
+"my password needs to be changed.",account
+"my app shows a blank screen. Can you check?",technical
+"my app fails after the update. This is the second time.",technical
+"Hello, my dashboard does not load. This is the second time.",technical
+"Please help: my username was locked.",account
+"Good morning, my dashboard times out. Can you check?",technical
+"Urgent: my profile was locked. Can you check?",account
+"Good morning, my server times out. Can you check?",technical
+"Urgent: my upload fails after the update. This is the second time.",technical
+"Urgent: my account must be deleted. Please advise.",account
+"Urgent: my refund failed to process. Thanks.",billing
+"Hello, my payment failed to process. Please advise.",billing
+"Hi team, my settings is not recognized. Thanks.",account
+"Urgent: my upload fails after the update. Can you check?",technical
+"Hello, my password needs to be changed. This is the second time.",account
+"Hi team, my invoice needs to be refunded. Can you check?",billing
+"Urgent: my email address cannot be verified. This is the second time.",account
+"Good morning, my two-factor code cannot be verified. Can you check?",account
+"Hello, my upload is very slow. Can you check?",technical
+"Urgent: my password must be deleted. Can you check?",account
+"Hello, my website shows a blank screen.",technical
+"Please help: my charge was charged twice. Please advise.",billing
+"Hello, my profile cannot be reset. This is the second time.",account
+"Hello, my export shows a blank screen. This is the second time.",technical
