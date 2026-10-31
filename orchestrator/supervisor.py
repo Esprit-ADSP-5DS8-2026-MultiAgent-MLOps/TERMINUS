@@ -98,8 +98,8 @@ def options_for(state: PipelineState) -> tuple[str, dict[str, str]]:
             options["retry"] = (f"Relancer l'étape {LABELS[last]} "
                                 f"(nouvelle tentative {done + 1} sur {MAX_STEP_RETRIES})")
         options["gate_failure"] = DESCRIPTIONS["gate_failure"]
-    if last == "validator" and rule == "repair":
-        options["end_blocked"] = "Arrêter sans réparer : le problème ne se corrige pas automatiquement"
+    # Après un refus du validateur, pas d'alternative à la réparation : c'est l'agent de réparation
+    # (et son juge) qui sait ce qu'il peut corriger, pas le superviseur.
     if last == "agent4" and rule == "gate_retraining":
         options["end_done"] = "Ne pas demander de réentraînement : continuer la surveillance et terminer"
     return rule, options
