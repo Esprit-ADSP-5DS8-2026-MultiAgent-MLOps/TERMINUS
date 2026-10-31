@@ -1,0 +1,36 @@
+# Routage des alertes vers l'Agent 4 (webhook /alerts de la gateway).
+# Regroupement : une notification par (alerte, projet), pas une par feature ou par fenêtre.
+# Inhibition : quand la cause est connue, on fait taire les alertes qui n'en sont que la conséquence.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: agent4
+  group_by: [alertname, project]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 1h
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: agent4
+      group_wait: 0s
+
+receivers:
+  - name: agent4
+    webhook_configs:
+      - url: http://host.docker.internal:8100/alerts
+        send_resolved: true
+
+inhibit_rules:
+  # API du modèle tombée : les erreurs et la latence n'en sont que la conséquence.
+  - source_matchers: ['alertname="MLUpstreamDown"']
+    target_matchers: ['alertname=~"MLHighErrorRate|MLHighLatency"']
+    equal: [project]
+  # Données cassées : le « drift » observé vient du bug, pas d'un changement du monde.
+  - source_matchers: ['alertname=~"MLDataQualityWarning|MLDataQualityCritical"']
+    target_matchers: ['alertname=~"MLDatasetDrift|MLFeatureDriftMajor|MLPredictionDrift"']
+    equal: [project]
+  # Baisse mesurée confirmée : l'estimation n'apporte plus rien.
+  - source_matchers: ['alertname="MLPerformanceDropRealized"']
+    target_matchers: ['alertname="MLPerformanceDropEstimated"']
+    equal: [project]

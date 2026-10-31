@@ -1,14 +1,34 @@
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 .venv/
 venv/
 *.egg-info/
+.DS_Store
+
+# Secrets : un seul .env à la racine (et, si besoin, un .env par agent), jamais commités
+.env
+infra/.env
+
+# Sorties d'exécution
 output/
+runs/
+eval_results/
 rapport*.json
 # générés par eval/make_variants.py (les tests les recréent)
 eval/projects/variants/
-runs/
-infra/.env
-eval_results/
-.env
+
+# Agent 4 (monitoring) : données (~26 Go), état local, environnement
+agents/agent4/data/
+agents/agent4/runs/
+agents/agent4/agent_env/
+# Configs générées par `python -m monitoring_agent provision <projet>` (propres à chaque machine)
+agents/agent4/infra/grafana/dashboards/*.json
+agents/agent4/infra/prometheus/rules/*.rules.yml
+
+# Modèles fine-tunés (fusionnés, GGUF) : hébergés sur Hugging Face, jamais dans git
+models/
+*.gguf
+*.safetensors

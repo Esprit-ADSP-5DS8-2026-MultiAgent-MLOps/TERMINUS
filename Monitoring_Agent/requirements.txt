@@ -1,0 +1,40 @@
+# Agent 4 (monitoring), Python 3.11
+
+# Même version de LangGraph que l'orchestrateur
+langgraph==1.2.14
+
+# Versions majeures fixées : leur API change d'une majeure à l'autre
+pydantic>=2.7,<3
+langfuse>=5,<6                # v5 : l'API diffère des tutoriels v2 / v3
+mcp>=2.3,<3
+
+# Analyse
+pandas>=2.2,<3
+numpy>=1.26
+scipy>=1.13
+scikit-learn>=1.5
+pyarrow>=15
+
+# Production : gateway, métriques, configs
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+prometheus-client>=0.20
+pyyaml>=6
+python-dotenv>=1.0
+
+# Slack : app en Socket Mode (boutons d'approbation, /monitoring)
+slack-bolt>=1.18
+
+# RAG : base vectorielle locale + embeddings ONNX (sans torch)
+qdrant-client[fastembed]>=1.12
+
+# Hébergement du modèle fine-tuné sur Hugging Face (finetune publish)
+huggingface-hub>=0.24
+
+# Fine-tuning : seulement sur Mac Apple Silicon
+mlx-lm>=0.30 ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Développement
+pytest>=8
+ruff>=0.6

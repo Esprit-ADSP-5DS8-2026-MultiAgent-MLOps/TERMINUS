@@ -1,0 +1,323 @@
+"""
+L'agent avec des LLM scriptés (aucun réseau) : on teste le graphe et surtout les garde-fous.
+Ce qui compte : même un LLM qui se trompe ou invente ne peut pas faire d'action dangereuse.
+"""
+
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from monitoring_agent.agent import prompts
+from monitoring_agent.agent.context import Case, call_tool, case_facts
+from monitoring_agent.agent.graph import MonitoringAgent, vote
+from monitoring_agent.agent.guards import evaluate, verify
+from monitoring_agent.agent.llm import LLMResponse, ToolCall
+from monitoring_agent.agent.schemas import Diagnosis, Evidence, JudgeVerdict
+from monitoring_agent.analysis import Analyzer
+from monitoring_agent.config import AnalyzerConfig
+from monitoring_agent.schemas import ColumnMapping
+
+RNG = np.random.default_rng(3)
+MAPPING = ColumnMapping(task="classification", features=["x", "cat"], target="y", prediction="pred",
+                        prediction_proba="proba", primary_metric="roc_auc")
+
+
+def frame(n, shift=0.0, flip=0.0, new_cat=False):
+    x = RNG.normal(shift, 1, n)
+    cat = RNG.choice(["a", "b", "c"], n).astype(object)
+    if new_cat:
+        cat[: n // 5] = "zzz"
+    p = 1 / (1 + np.exp(-2 * x))
+    y = (RNG.random(n) < p).astype(int)
+    if flip:
+        idx = RNG.random(n) < flip
+        y[idx] = 1 - y[idx]
+    return pd.DataFrame({"x": x, "cat": cat, "proba": p, "pred": (p >= 0.5).astype(int), "y": y})
+
+
+@pytest.fixture(scope="module")
+def analyzer():
+    return Analyzer(frame(10000), MAPPING, AnalyzerConfig(window_size=1000))
+
+
+def make_case(analyzer, last: pd.DataFrame, decisions=None) -> Case:
+    history = [analyzer.analyze_window(frame(1000), i) for i in range(3)]
+    history.append(analyzer.analyze_window(last, 3))
+    return Case(project="demo", mapping=MAPPING, history=history, decisions=decisions or [], model_uri="models:/demo/1")
+
+
+class Scripted:
+    """Faux LLM : répond selon le rôle (enquêteur, diagnostiqueur, juge) reconnu au prompt système."""
+
+    def __init__(self, name, diagnoses=None, verdicts=None, investigate=True):
+        self.name, self.calls = name, []
+        self.diagnoses = list(diagnoses or [])
+        self.verdicts = list(verdicts or [])
+        self.investigate = investigate
+
+    def chat(self, messages, tools=None, json_mode=False, temperature=0.0):
+        system = messages[0]["content"]
+        self.calls.append(system[:20])
+        if system == prompts.INVESTIGATOR:
+            if self.investigate and not any(m.get("role") == "tool" for m in messages):
+                return LLMResponse(tool_calls=[ToolCall("c1", "feature_history", {"feature": "x"})],
+                                   raw_message={"role": "assistant", "content": "", "tool_calls": [
+                                       {"id": "c1", "type": "function",
+                                        "function": {"name": "feature_history", "arguments": '{"feature": "x"}'}}]})
+            return LLMResponse(text="x a fortement dérivé ; la performance mesurée baisse.")
+        if system == prompts.JUDGE:
+            v = self.verdicts.pop(0) if len(self.verdicts) > 1 else self.verdicts[0]
+            return LLMResponse(text=json.dumps(v))
+        d = self.diagnoses.pop(0) if len(self.diagnoses) > 1 else self.diagnoses[0]
+        return LLMResponse(text=json.dumps(d(messages) if callable(d) else d))
+
+
+def facts_of(case):
+    return case_facts(case)
+
+
+def approve():
+    return {"verdict": "approve", "scores": {"grounding": 5, "causality": 5, "proportionality": 5, "safety": 5},
+            "critique": "Solide."}
+
+
+def retrain_from(case):
+    f = facts_of(case)
+    return {"root_cause": "covariate_shift", "summary": "x dérive, perf en baisse.", "affected_features": ["x"],
+            "evidence": [{"fact": "drift.x.psi", "value": f["drift.x.psi"], "claim": "drift majeur"},
+                         {"fact": "perf.realized.roc_auc", "value": f["perf.realized.roc_auc"], "claim": "perf basse"}],
+            "action": "request_retraining", "rationale": "Perf sous la limite.", "confidence": 0.85}
+
+
+# ---------------------------------------------------------------------------
+# Garde-fous déterministes
+# ---------------------------------------------------------------------------
+
+
+def test_verifier_catches_invented_numbers(analyzer):
+    case = make_case(analyzer, frame(1000, shift=1.5))
+    f = facts_of(case)
+    good = Diagnosis(root_cause="covariate_shift", summary="", action="open_incident", rationale="", confidence=0.9,
+                     evidence=[Evidence(fact="drift.x.psi", value=f["drift.x.psi"], claim="")])
+    assert verify(good, f, MAPPING.features).ok
+    bad = good.model_copy(update={"evidence": [Evidence(fact="drift.x.psi", value=f["drift.x.psi"] * 3, claim=""),
+                                               Evidence(fact="drift.age.psi", value=0.5, claim="")],
+                                  "affected_features": ["age"]})
+    v = verify(bad, f, MAPPING.features)
+    assert not v.ok and len(v.problems) == 3        # mauvais chiffre, fait inexistant, feature inconnue
+
+
+def test_policy_refuses_retraining_on_drift_alone(analyzer):
+    case = make_case(analyzer, frame(1000, shift=0.6))          # drift, mais perf intacte
+    assert not case.signal_kinds() & {"performance_drop_realized", "performance_drop_estimated"}
+    d = Diagnosis(root_cause="covariate_shift", summary="", action="request_retraining", rationale="",
+                  confidence=0.95, evidence=[Evidence(fact="drift.x.psi", value=facts_of(case)["drift.x.psi"], claim="")])
+    p = evaluate(d, case, verify(d, facts_of(case), MAPPING.features), JudgeVerdict(verdict="approve"), 1.0)
+    assert p.final_action == "increase_monitoring" and p.mode == "auto"
+
+
+def test_policy_refuses_retraining_on_broken_data(analyzer):
+    case = make_case(analyzer, frame(1000, flip=0.4, new_cat=True))
+    assert case.has_quality_problem()
+    d = Diagnosis(root_cause="concept_drift", summary="", action="request_retraining", rationale="", confidence=0.9,
+                  evidence=[Evidence(fact="perf.realized.roc_auc", value=facts_of(case)["perf.realized.roc_auc"], claim="")])
+    p = evaluate(d, case, verify(d, facts_of(case), MAPPING.features), JudgeVerdict(verdict="approve"), 1.0)
+    assert p.final_action == "notify_data_team"
+
+
+def test_policy_cooldown_and_rollback(analyzer):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3),
+                     decisions=[{"action": "request_retraining", "status": "executed", "mode": "auto",
+                                 "created_at": pd.Timestamp.now(tz="UTC").isoformat()}])
+    f = facts_of(case)
+    d = Diagnosis(**retrain_from(case))
+    p = evaluate(d, case, verify(d, f, MAPPING.features), JudgeVerdict(verdict="approve"), 1.0)
+    assert p.final_action == "open_incident"                    # déjà une demande en cours
+    rb = d.model_copy(update={"action": "rollback_model"})
+    assert evaluate(rb, case, verify(rb, f, MAPPING.features), JudgeVerdict(verdict="approve"), 1.0).mode == "human"
+
+
+def test_vote_measures_agreement():
+    a = Diagnosis(root_cause="covariate_shift", summary="", action="request_retraining", rationale="", confidence=0.6)
+    b = a.model_copy(update={"confidence": 0.9})
+    c = a.model_copy(update={"action": "open_incident"})
+    chosen, agreement = vote([a, b, c])
+    assert chosen.confidence == 0.9 and agreement == pytest.approx(2 / 3)
+
+
+def test_tools_are_read_only_and_robust(analyzer):
+    case = make_case(analyzer, frame(1000, shift=1.5))
+    assert "history" in call_tool(case, "feature_history", {"feature": "x"})
+    assert "error" in call_tool(case, "feature_history", {"feature": "inexistante"})
+    assert "error" in call_tool(case, "drop_table", {})
+
+
+# ---------------------------------------------------------------------------
+# Graphe complet
+# ---------------------------------------------------------------------------
+
+
+def test_full_graph_executes_retraining_request(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    assert "performance_drop_realized" in case.signal_kinds()
+    decider = Scripted("fake:decider", diagnoses=[retrain_from(case)])
+    judge = Scripted("fake:judge", verdicts=[approve()])
+    run = MonitoringAgent(decider, judge, out_dir=tmp_path).decide(case)
+    assert run.status == "executed", run.error
+    assert run.policy.final_action == "request_retraining" and run.policy.mode == "auto"
+    assert [t.node for t in run.trace] == ["prepare", "investigate", "diagnose", "verify", "judge", "policy", "act"]
+    req = json.loads((tmp_path / "retraining_request.json").read_text())
+    assert req["model_uri"] == "models:/demo/1" and req["reason"] == "performance_drop"
+    assert len(run.samples) == 3 and run.agreement == 1.0
+    inv = run.trace[1].detail
+    assert inv["transport"] == "mcp" and inv["tools_available"] >= 8      # outils découverts via MCP (tools/list)
+    assert inv["tools"] == [{"tool": "feature_history", "args": {"feature": "x"}}]
+
+
+def test_hallucination_triggers_one_revision(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    wrong = retrain_from(case)
+    wrong["evidence"][0]["value"] = 42.0                         # chiffre inventé
+    decider = Scripted("fake:decider", diagnoses=[wrong, wrong, wrong, retrain_from(case)])
+    run = MonitoringAgent(decider, Scripted("fake:judge", verdicts=[approve()]), out_dir=tmp_path).decide(case)
+    nodes = [t.node for t in run.trace]
+    assert nodes.count("diagnose") == 2 and nodes.count("verify") == 2
+    assert run.verification.ok and run.status == "executed"
+
+
+def test_judge_rejection_needs_a_human(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    reject = {"verdict": "reject", "scores": {"causality": 2}, "critique": "Cause mal établie."}
+    agent = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), Scripted("j", verdicts=[reject]), out_dir=tmp_path)
+    run = agent.decide(case)
+    assert run.status == "awaiting_human" and not (tmp_path / "retraining_request.json").exists()
+    run = agent.resume(run.id, "reject", by="prof")
+    assert run.status == "rejected_by_human" and run.human["by"] == "prof"
+    assert not (tmp_path / "retraining_request.json").exists()
+
+
+def test_without_llm_the_rules_decide(analyzer, tmp_path):
+    run = MonitoringAgent(None, None, out_dir=tmp_path).decide(make_case(analyzer, frame(1000, shift=0.6)))
+    assert run.decider == "rules" and run.policy.final_action == "increase_monitoring" and run.status == "executed"
+
+
+# ---------------------------------------------------------------------------
+# Autonomie : l'humain seulement quand c'est logiquement nécessaire
+# ---------------------------------------------------------------------------
+
+
+def test_verifier_catches_cause_contradicting_signals(analyzer):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    d = Diagnosis(**retrain_from(case)).model_copy(update={"root_cause": "benign_drift"})
+    v = verify(d, facts_of(case), MAPPING.features, signals=case.signal_kinds())
+    assert not v.ok and any("bénin" in p for p in v.problems)
+
+
+def test_judge_unavailable_but_rules_agree_acts_alone(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    run = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), None, out_dir=tmp_path).decide(case)
+    assert run.policy.final_action == "request_retraining"
+    assert run.policy.mode == "auto" and run.status == "executed"          # LLM + règles concordent
+    r7 = next(r for r in run.policy.rules if r.rule.startswith("R7"))
+    assert r7.passed and "règles conclut aussi" in r7.detail
+
+
+def test_unverifiable_llm_falls_back_to_rules_not_to_a_human(analyzer, tmp_path):
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    wrong = retrain_from(case)
+    wrong["evidence"][0]["value"] = 42.0
+    run = MonitoringAgent(Scripted("d", diagnoses=[wrong]), Scripted("j", verdicts=[approve()]),
+                          out_dir=tmp_path).decide(case)
+    assert "règles" in run.decider and run.verification.ok
+
+
+def test_mislabeled_evidence_is_relabeled_not_blocking():
+    from monitoring_agent.agent.guards import fix_claims
+    from monitoring_agent.agent.schemas import Diagnosis
+    d = Diagnosis(root_cause="concept_drift", summary="s", affected_features=[], action="request_retraining",
+                  rationale="r", confidence=0.9, evidence=[
+                      {"fact": "perf.realized.roc_auc", "value": 0.63, "claim": "performance mesurée sans labels"},
+                      {"fact": "perf.estimated.roc_auc", "value": 0.92, "claim": "performance estimée avec labels"},
+                      {"fact": "tool.performance_history.windows.w11.realized", "value": 0.63, "claim": "mesurée en w11"}])
+    fixed, which = fix_claims(d)
+    assert which == ["perf.realized.roc_auc", "perf.estimated.roc_auc"]
+    assert fixed.evidence[0].claim == "performance mesurée avec les vrais labels"
+    assert fixed.evidence[2].claim == "mesurée en w11"
+
+
+def test_notification_goes_to_webhook_and_outbox(analyzer, tmp_path, monkeypatch):
+    from monitoring_agent.agent import notify
+    sent = []
+
+    class R:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setenv("MONITORING_NOTIFY_WEBHOOK", "https://hooks.slack.com/services/T/B/x")
+    monkeypatch.setattr(notify.httpx, "post", lambda url, json, timeout: sent.append(json) or R())
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    agent = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), Scripted("j", verdicts=[approve()]),
+                            out_dir=tmp_path)
+    run = agent.decide(case)
+    assert run.status == "executed" and run.outputs["notification"] == "webhook"
+    assert "Réentraînement demandé" in sent[0]["text"] and f"/console/#{run.id}" in sent[0]["text"]
+    line = json.loads((tmp_path / "notifications.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert line["channel"] == "webhook" and line["event"] == "executed"
+
+
+def test_assistant_answers_with_mcp_tools(analyzer, tmp_path):
+    from monitoring_agent.agent.assistant import ask
+    from monitoring_agent.agent.mcp_server import build_server
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+
+    class Chatty:
+        name, seen = "fake:assistant", []
+
+        def chat(self, messages, tools=None, json_mode=False, temperature=0.0):
+            self.seen.append(messages)
+            if not any(m.get("role") == "tool" for m in messages):
+                assert any(t["function"]["name"] == "performance_history" for t in tools)
+                return LLMResponse(tool_calls=[ToolCall("c1", "performance_history", {"last_n": 3})],
+                                   raw_message={"role": "assistant", "content": "", "tool_calls": [
+                                       {"id": "c1", "type": "function",
+                                        "function": {"name": "performance_history", "arguments": '{"last_n": 3}'}}]})
+            tool = next(m for m in messages if m.get("role") == "tool")
+            assert "realized" in tool["content"]
+            return LLMResponse(text="La performance mesurée baisse sur la dernière fenêtre.")
+
+    rec = ask("Le modèle va bien ?", case, build_server(lambda: case), model=Chatty(), log_dir=tmp_path)
+    assert rec["answer"].startswith("La performance") and rec["tools"][0]["tool"] == "performance_history"
+    assert json.loads((tmp_path / "assistant.jsonl").read_text(encoding="utf-8"))["id"] == rec["id"]
+
+
+def test_assistant_sees_the_reason_of_recent_decisions(analyzer):
+    from monitoring_agent.agent.assistant import _last_decisions
+    case = make_case(analyzer, frame(1000), decisions=[{"id": "D1", "window_index": 3, "action": "request_retraining",
+                                                         "root_cause": "concept_drift", "rationale": "mesurée < limite"}])
+    block = _last_decisions(case)
+    assert "concept_drift" in block and "mesurée < limite" in block
+
+
+def test_team_can_require_a_human_for_an_action(analyzer, tmp_path, monkeypatch):
+    monkeypatch.setenv("MONITORING_ALWAYS_HUMAN", "request_retraining")
+    case = make_case(analyzer, frame(1000, shift=1.5, flip=0.3))
+    agent = MonitoringAgent(Scripted("d", diagnoses=[retrain_from(case)]), Scripted("j", verdicts=[approve()]),
+                            out_dir=tmp_path)
+    run = agent.decide(case)
+    assert run.status == "awaiting_human" and any(r.rule.startswith("R10") for r in run.policy.rules)
+    done = agent.resume(run.id, "approve", by="mohamed (Slack)")
+    assert done.status == "executed" and done.human["by"] == "mohamed (Slack)"
+    events = [json.loads(x)["event"] for x in (tmp_path / "notifications.jsonl").read_text().splitlines()]
+    assert events == ["awaiting_human", "executed"]
+    with pytest.raises(RuntimeError):
+        agent.resume(run.id, "reject")                      # la première réponse a gagné
+
+
+def test_chat_landmarks_separate_bound_and_business_threshold(analyzer):
+    from monitoring_agent.agent.assistant import _landmarks
+    block = _landmarks(make_case(analyzer, frame(1000, shift=1.5, flip=0.3)))
+    assert "limite_variabilite" in block and "psi_majeur" in block
