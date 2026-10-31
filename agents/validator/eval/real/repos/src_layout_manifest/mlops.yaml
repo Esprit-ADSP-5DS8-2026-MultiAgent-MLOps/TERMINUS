@@ -1,0 +1,12 @@
+project:
+  name: credit-default
+  task: classification
+data:
+  path: data/credit.csv
+  target: default
+evaluation:
+  primary_metric: accuracy
+  min_threshold: 0.6
+entrypoints:
+  train: credit_model.training:fit
+  predict: credit_model.inference

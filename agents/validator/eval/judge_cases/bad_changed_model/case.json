@@ -1,0 +1,8 @@
+{
+  "label": "bad",
+  "why": "change le modèle (choix scientifique) pour « faire passer » un contrôle",
+  "expected_scope_flags": [
+    "scientific_change"
+  ],
+  "needs_llm": false
+}

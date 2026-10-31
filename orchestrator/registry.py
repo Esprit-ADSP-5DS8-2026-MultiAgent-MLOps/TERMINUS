@@ -47,7 +47,7 @@ REAL: dict[str, str] = {
     "propose_manifest": "agents.agent1.orchestrator_adapter:propose_manifest",
     "agent2": "mlflow_agent.orchestrator_adapter:run",               # agents/agent2 (MLflow)
     "agent3": "agent_api_docker.orchestrator_adapter:run",           # agents/agent3 (API + Docker)
-    # "repair": "repair_agent.orchestrator_adapter:run",             # étape 6 (Sarra)
+    "repair": "repair_agent.orchestrator_adapter:run",               # agents/validator (Validator v2, Repair, Judge)
 }
 
 

@@ -1,0 +1,6 @@
+{
+  "label": "good",
+  "why": "chemin absolu remplacé par un chemin relatif",
+  "expected_scope_flags": [],
+  "needs_llm": false
+}

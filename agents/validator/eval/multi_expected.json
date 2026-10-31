@@ -1,0 +1,87 @@
+{
+  "m01_pytorch_mnist": {
+    "path": "projects/multi/m01_pytorch_mnist",
+    "profile": "sklearn-tabular",
+    "framework": "pytorch",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "note": "vision : hors périmètre V1 (déclaré, jamais exécuté)"
+  },
+  "m02_tensorflow_text": {
+    "path": "projects/multi/m02_tensorflow_text",
+    "profile": "sklearn-tabular",
+    "framework": "tensorflow",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "note": "nlp : hors périmètre V1 (déclaré, jamais exécuté)"
+  },
+  "m04_vision_torchvision": {
+    "path": "projects/multi/m04_vision_torchvision",
+    "profile": "sklearn-tabular",
+    "framework": "pytorch",
+    "expected_checks": [
+      "FRAMEWORK.SCOPE"
+    ],
+    "note": "vision : hors périmètre V1 (déclaré, jamais exécuté)"
+  },
+  "m03_nlp_tfidf_sklearn": {
+    "path": "projects/multi/m03_nlp_tfidf_sklearn",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "note": "NLP scikit-learn (TF-IDF) : conforme"
+  },
+  "m05_timeseries_sklearn": {
+    "path": "projects/multi/m05_timeseries_sklearn",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "note": "série temporelle, découpage chronologique : conforme"
+  },
+  "m06_no_requirements": {
+    "path": "projects/multi/m06_no_requirements",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "note": "aucun fichier de dépendances : EXEC.RUN attendu NOT_CHECKED"
+  },
+  "m07_pyproject_only": {
+    "path": "projects/multi/m07_pyproject_only",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "note": "dépendances dans pyproject.toml : V1 exige requirements.txt, EXEC.RUN attendu NOT_CHECKED"
+  },
+  "m08_notebook_only": {
+    "path": "projects/multi/m08_notebook_only",
+    "profile": "sklearn-tabular",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "STRUCT.REQUIRED_FILES",
+      "ML.TRAIN_INTERFACE"
+    ],
+    "note": "notebook seul, sans train.py ni requirements.txt"
+  },
+  "t01_training_only_ok": {
+    "path": "projects/multi/t01_training_only_ok",
+    "profile": "training-only",
+    "framework": "scikit-learn",
+    "expected_checks": [],
+    "note": "pas de predict.py ni main.py : conforme au profil entraînement seul"
+  },
+  "t02_training_only_unpinned": {
+    "path": "projects/multi/t02_training_only_unpinned",
+    "profile": "training-only",
+    "framework": "scikit-learn",
+    "expected_checks": [
+      "ENV.DEPENDENCIES_PINNED"
+    ],
+    "note": "dépendances non épinglées"
+  }
+}

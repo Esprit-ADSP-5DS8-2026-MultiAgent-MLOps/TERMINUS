@@ -1,0 +1,12 @@
+project:
+  name: ts-lags
+  task: regression
+data:
+  path: data.csv
+  target: y
+evaluation:
+  primary_metric: r2
+  min_threshold: -5.0
+entrypoints:
+  train: train.py
+  predict: predict.py

@@ -21,6 +21,7 @@ from typing import Any
 
 import pandas as pd
 
+from common.envscope import agent_env
 from common.schemas import (
     AgentInput,
     AgentResult,
@@ -60,7 +61,9 @@ def _python_version(project: Path) -> str | None:
 def _run_agent(inp: AgentInput, csv: Path) -> dict[str, Any]:
     """Lance l'Agent 1 ; ses artefacts (projet amélioré, patchs) vont dans le workdir."""
     artifacts = Path(inp.workdir) / "agent1"
-    out = run_agent1(inp.project_dir, str(csv), artifact_dir=str(artifacts))
+    # Sa config charge agents/agent1/.env dans os.environ : on limite ces clés (GROQ...) au temps de l'appel.
+    with agent_env(Path(__file__).resolve().parent / ".env"):
+        out = run_agent1(inp.project_dir, str(csv), artifact_dir=str(artifacts))
     (Path(inp.workdir) / "agent1_output.json").write_text(json.dumps(out, indent=2, default=str), encoding="utf-8")
     return out
 

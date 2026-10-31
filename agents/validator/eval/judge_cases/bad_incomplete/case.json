@@ -1,0 +1,6 @@
+{
+  "label": "bad",
+  "why": "n'épingle pas la dépendance visée : le problème reste (complétude)",
+  "expected_scope_flags": [],
+  "needs_llm": true
+}

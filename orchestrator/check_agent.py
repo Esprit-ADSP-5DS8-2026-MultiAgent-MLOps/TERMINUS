@@ -137,6 +137,8 @@ def check(name: str, target, project: Path, out: Path) -> Report:
         rep.check(bool(result.reasons), f"statut {result.status.value} expliqué dans reasons")
     if result.status == AgentStatus.FAILED:
         rep.check(not result.can_proceed, "FAILED implique can_proceed=False")
+    elif result.status == AgentStatus.WARNING and not result.can_proceed:
+        rep.notes.append("l'agent s'arrête sans résultat (WARNING, can_proceed=False) : sorties non exigées")
     else:
         missing = [o for o in OUTPUTS.get(name, []) if o not in result.outputs]
         rep.check(not missing, "sorties obligatoires présentes"

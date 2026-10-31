@@ -6,7 +6,7 @@ ses dépendances. Les noms des paquets Python ne changent pas : l'intégration n
 | Dossier | Agent | Paquet Python | Responsable | État |
 |---|---|---|---|---|
 | `validator/` (racine, pour l'instant) | Validateur de contrat v1 | `validator` | Sarra | intégré (nœud `validate`) |
-| `agents/validator/` | Validateur v2, réparation, juge | `validator_agent`, `repair_agent`, `agentic_core`, `policy` | Sarra | nœud `repair` réservé, à intégrer (étape 6) |
+| `agents/validator/` | Validateur v2, réparation, juge | `validator_agent`, `repair_agent`, `agentic_core`, `policy` | Sarra | intégré (nœud `repair`, `repair_agent/orchestrator_adapter.py`) |
 | `agents/agent1/` | Analyse du code et des données | `agents.agent1` | Yacine | intégré (`orchestrator_adapter.py`) |
 | `agents/agent2/` | MLflow : expériences, quality gate, registre | `mlflow_agent` | Aziz | intégré (`orchestrator_adapter.py`) |
 | `agents/agent3/` | API et image Docker | `agent_api_docker` | Syrine | intégré (`orchestrator_adapter.py`) |
@@ -67,4 +67,5 @@ uv pip install -r agents/agent1/requirements.txt          # Agent 1 (ruff, radon
 uv pip install -e agents/agent2 -r agents/agent2/requirements.txt   # Agent 2 (mlflow, optuna, scikit-learn)
 uv pip install -e agents/agent3 -r agents/agent3/requirements.txt   # Agent 3 (fastapi, jinja2, ruff ; Docker Desktop)
 uv pip install -e agents/agent4 -r agents/agent4/requirements.txt
+uv pip install -e agents/validator                          # Validateur v2, Repair, Judge (Groq)
 ```
