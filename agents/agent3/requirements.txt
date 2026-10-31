@@ -1,0 +1,13 @@
+# Agent 3 (API + Docker) : à installer dans l'environnement commun
+#   uv pip install -e agents/agent3 -r agents/agent3/requirements.txt
+# Les versions de scikit-learn / pandas / numpy servies dans l'image ne sont PAS fixées ici : elles viennent
+# du rapport d'analyse (requirements.api.txt généré), donc de l'environnement qui a entraîné le modèle.
+python-dotenv>=1.0
+pydantic>=2
+jinja2>=3.1
+fastapi>=0.110
+uvicorn>=0.29
+httpx>=0.27
+ruff>=0.5
+pytest>=8
+pyyaml>=6

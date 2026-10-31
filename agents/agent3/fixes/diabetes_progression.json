@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "project_id": "diabetes_progression",
+  "updated_at": "2026-10-24T12:22:36",
+  "project_name": "diabetes-progression",
+  "patches": [
+    {
+      "path": "api.py",
+      "old": "MODEL_PATH = os.environ.get(\"MODEL_PATH\", \"model/regressor.joblib\")",
+      "new": "MODEL_PATH = os.environ.get(\"MODEL_PATH\", \"model\")"
+    },
+    {
+      "path": "api.py",
+      "old": "class PredictResponse(BaseModel):\n    prediction: int",
+      "new": "class PredictResponse(BaseModel):\n    prediction: float"
+    },
+    {
+      "path": "api.py",
+      "old": "    out = {\"prediction\": int(pred)}",
+      "new": "    out = {\"prediction\": float(pred)}"
+    },
+    {
+      "path": "api.py",
+      "old": "    out = {\"prediction\": float(pred)}",
+      "new": "    out = {\"prediction\": round(float(pred), 1)}"
+    }
+  ]
+}
