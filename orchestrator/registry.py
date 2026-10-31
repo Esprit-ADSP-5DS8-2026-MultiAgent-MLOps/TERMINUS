@@ -43,8 +43,8 @@ STUBS: dict[str, Callable] = {
 # Avant d'ajouter la ligne : python -m orchestrator check-agent <nom> <module:fonction>
 REAL: dict[str, str] = {
     "agent4": "monitoring_agent.pipeline:run",       # agents/agent4 (monitoring)
-    # "agent1": "agents.agent1.orchestrator_adapter:run",            # étape 2 (Yacine)
-    # "propose_manifest": "agents.agent1.orchestrator_adapter:propose_manifest",
+    "agent1": "agents.agent1.orchestrator_adapter:run",              # agents/agent1 (analyse)
+    "propose_manifest": "agents.agent1.orchestrator_adapter:propose_manifest",
     # "agent2": "mlflow_agent.orchestrator_adapter:run",             # étape 3 (Aziz)
     # "agent3": "agent_api_docker.orchestrator_adapter:run",         # étape 4 (Syrine)
     # "repair": "repair_agent.orchestrator_adapter:run",             # étape 6 (Sarra)

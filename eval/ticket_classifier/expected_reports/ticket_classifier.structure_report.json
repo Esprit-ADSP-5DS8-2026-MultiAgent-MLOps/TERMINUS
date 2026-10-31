@@ -1,0 +1,197 @@
+{
+  "schema_version": "1.0",
+  "project_name": "ticket-classifier",
+  "analyzed_at": "2026-10-15T18:00:00Z",
+  "analysis_status": "complete",
+  "layout": {
+    "type": "flat",
+    "root": ".",
+    "has_package": false,
+    "has_src_dir": false,
+    "has_tests": false,
+    "has_notebooks": false
+  },
+  "summary": {
+    "total_files": 5,
+    "python_files": 2,
+    "total_size_kb": 19.8,
+    "largest_file": {
+      "path": "data/tickets.csv",
+      "size_bytes": 18396
+    }
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "kind": "doc",
+      "role": "documentation",
+      "size_bytes": 162,
+      "lines": 5,
+      "sha256_prefix": "cc93f4dbeb75"
+    },
+    {
+      "path": "classifier.py",
+      "kind": "python",
+      "role": "inference",
+      "size_bytes": 580,
+      "lines": 17,
+      "sha256_prefix": "a3e854c2fe98"
+    },
+    {
+      "path": "data/tickets.csv",
+      "kind": "data",
+      "role": "training_dataset",
+      "size_bytes": 18396,
+      "lines": 301,
+      "sha256_prefix": "0a8806af00c4"
+    },
+    {
+      "path": "requirements.txt",
+      "kind": "dependencies",
+      "role": "dependency_file",
+      "size_bytes": 61,
+      "lines": 4,
+      "sha256_prefix": "f9dfa2cbbebf"
+    },
+    {
+      "path": "train.py",
+      "kind": "python",
+      "role": "training",
+      "size_bytes": 1053,
+      "lines": 31,
+      "sha256_prefix": "3f1fd1617425"
+    }
+  ],
+  "python_modules": {
+    "classifier.py": {
+      "functions": [],
+      "classes": [
+        "TicketClassifier"
+      ],
+      "has_main_guard": false,
+      "imports": {
+        "internal": [],
+        "external": [
+          "joblib"
+        ],
+        "stdlib": [
+          "os"
+        ]
+      }
+    },
+    "train.py": {
+      "functions": [
+        "train"
+      ],
+      "classes": [],
+      "has_main_guard": true,
+      "imports": {
+        "internal": [],
+        "external": [
+          "joblib",
+          "pandas",
+          "sklearn"
+        ],
+        "stdlib": [
+          "json",
+          "pathlib"
+        ]
+      }
+    }
+  },
+  "internal_dependency_graph": {
+    "classifier.py": [],
+    "train.py": []
+  },
+  "entrypoints": {
+    "executable_scripts": [
+      "train.py"
+    ],
+    "training": {
+      "file": "train.py",
+      "function": "train",
+      "signature": "train(data_path='data/tickets.csv', output_dir='artifacts')"
+    },
+    "inference": {
+      "file": "classifier.py",
+      "class": "TicketClassifier",
+      "function": "predict",
+      "signature": "TicketClassifier.predict(text)"
+    },
+    "model_loader": {
+      "file": "classifier.py",
+      "function": "TicketClassifier.__init__"
+    },
+    "web_server": null
+  },
+  "artifacts": {
+    "present": [],
+    "produced_at_runtime": [
+      {
+        "path": "artifacts/ticket_model.joblib",
+        "produced_by": "train.py"
+      },
+      {
+        "path": "artifacts/metrics.json",
+        "produced_by": "train.py"
+      }
+    ]
+  },
+  "data_files": [
+    {
+      "path": "data/tickets.csv",
+      "format": "csv",
+      "rows": 300,
+      "columns": 2,
+      "has_header": true,
+      "target_column": "label"
+    }
+  ],
+  "config_files": [],
+  "docker_readiness": {
+    "has_dockerfile": false,
+    "has_dockerignore": false,
+    "has_compose": false,
+    "has_api": false,
+    "has_tests": false
+  },
+  "ignorable_paths": [
+    ".git",
+    "__pycache__/",
+    "*.pyc",
+    ".venv/",
+    "venv/",
+    "artifacts/",
+    "README.md",
+    ".env"
+  ],
+  "files_needed_at_runtime": [
+    "classifier.py"
+  ],
+  "files_needed_only_at_build": [
+    "data/tickets.csv",
+    "train.py"
+  ],
+  "issues": [
+    {
+      "severity": "high",
+      "code": "NO_MODEL_ARTIFACT",
+      "message": "Aucun modele dans le projet : il est genere par train.py."
+    },
+    {
+      "severity": "medium",
+      "code": "NO_WEB_SERVER",
+      "message": "Aucune API : le projet expose une classe d'inference."
+    },
+    {
+      "severity": "low",
+      "code": "NO_TESTS",
+      "message": "Aucun test dans le projet."
+    },
+    {
+      "severity": "low",
+      "code": "RELATIVE_PATHS",
+      "message": "train.py et classifier.py utilisent des chemins relatifs a la racine du projet."
+    }
+  ]
+}

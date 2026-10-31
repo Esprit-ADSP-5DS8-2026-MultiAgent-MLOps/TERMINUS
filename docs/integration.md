@@ -26,7 +26,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 |---|---|---|---|
 | 0 | Mohamed | branche `integration`, dossier `agents/`, registre des agents, Agent 4 branché | fait |
 | 1 | Ahmed | contrat v0.2, nœud `repair` réservé, superviseur Gemini par défaut, `check-agent` | fait |
-| 2 | Yacine | Agent 1 | à faire |
+| 2 | Yacine | Agent 1 : adaptateur, détection de la cible corrigée | intégré, à valider avec Yacine |
 | 3 | Aziz | Agent 2 (MLflow) | à faire |
 | 4 | Syrine | Agent 3 (API, Docker) | à faire |
 | 5 | Mohamed | Agent 4 sur le vrai `endpoint`, run complet | à faire |
@@ -65,6 +65,20 @@ Cas `AWAITING_CONFIRMATION` : une 2e fonction `propose_manifest(AgentInput)` pro
 
 Vérification : `python -m orchestrator check-agent agent1 agents.agent1.orchestrator_adapter:run`
 puis `check-agent propose_manifest agents.agent1.orchestrator_adapter:propose_manifest`.
+
+Fait (branche `integ/agent1`) :
+- `agents/agent1/` et ses projets `eval/` repris de sa branche ; `orchestrator_adapter.py` (`run`,
+  `propose_manifest`) ; les deux lignes dans `registry.py` ;
+- `run_agent1(..., artifact_dir=...)` : ses artefacts vont dans le workdir du run (avant : `agents/agent1/.workspace`) ;
+- détection de la cible : `X, y = df.drop(...), df[TARGET]` est maintenant compris (avant : la cible
+  devenait `amount_per_month`, colonne fabriquée par le prétraitement, et l'agent abandonnait).
+
+Choix à valider avec Yacine :
+- le manifeste déclaré (vérifié par le validateur) fait foi ; sa détection sert de contrôle (avertissement si désaccord) ;
+- ses améliorations de code (`code_patch`, `ml_patch`, `improved_project`) sont des propositions : la suite du
+  pipeline continue sur le projet validé, puisque le code modifié n'a pas été revalidé ;
+- `baseline.naive_metrics` : modèle naïf calculé par l'adaptateur (classe majoritaire / moyenne) ;
+- sans manifeste : métrique et seuil proposés par défaut (binaire roc_auc 0.7, multiclasse f1 0.6, régression r2 0.5).
 
 ### 3. Agent 2 (Aziz) : `mlflow_agent`
 
