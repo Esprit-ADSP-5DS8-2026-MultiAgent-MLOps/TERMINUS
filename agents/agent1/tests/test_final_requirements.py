@@ -225,6 +225,8 @@ def test_fenced_fake_llm_answer_is_cleaned(tmp_path: Path, monkeypatch: object) 
 def test_unreachable_endpoint_returns_empty_plan(monkeypatch: object) -> None:
     """An unavailable endpoint yields a safe empty plan and note."""
     monkeypatch.setattr(plan_module, "llm_available", lambda: False)
+    # no real network call: the answer of a real endpoint (403, proxy...) depends on the machine
+    monkeypatch.setattr(plan_module, "availability_details", lambda: {"note": "", "endpoint_error": None})
     result = plan_module.plan_improvements({"allowed_tiers": [1, 2], "quality_issues": []})  # type: ignore[arg-type]
     assert result["improvement_plan"] == []
     assert "unavailable" in result["llm_note"]  # type: ignore[operator]

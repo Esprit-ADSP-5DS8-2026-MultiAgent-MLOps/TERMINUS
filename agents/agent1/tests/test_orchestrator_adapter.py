@@ -1,5 +1,7 @@
 """L'adaptateur respecte le contrat de l'orchestrateur (vrai validateur, sans appel au LLM)."""
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,13 @@ from orchestrator.check_agent import check
 
 ROOT = Path(__file__).resolve().parents[3]
 PROJECTS = ROOT / "eval" / "projects"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _variants():
+    """Les variantes (dont 09_no_manifest) sont générées, pas commitées."""
+    if not (PROJECTS / "variants").exists():
+        subprocess.run([sys.executable, str(ROOT / "eval" / "make_variants.py")], check=True)
 
 
 @pytest.fixture(autouse=True)
