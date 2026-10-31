@@ -216,6 +216,13 @@ def run(inp: AgentInput) -> AgentResult:
     )
     outputs["mlflow_metadata"] = write_output(inp, "mlflow_metadata", meta)
     elapsed = round(time.monotonic() - started, 3)
+    # Le modèle actuel du projet (score vu par le validateur) : comparaison indicative, les découpages
+    # train/test diffèrent, donc on informe l'humain sans bloquer.
+    current = read_output(inp, "baseline").observed_metrics.get(metric) if "baseline" in inp.inputs else None
+    note = ""
+    if current is not None and sign * test < sign * current:
+        note = f" ; attention : moins bon que le modèle actuel du projet ({metric} {current:.4f})"
+        result.warnings.append(note.removeprefix(" ; "))
     if not passed:
         return AgentResult(agent="agent2", status=AgentStatus.FAILED, can_proceed=False, outputs=outputs,
                            reasons=[f"quality gate raté ({metric}={test:.4f}) : " + " ; ".join(reasons)],
@@ -223,5 +230,6 @@ def run(inp: AgentInput) -> AgentResult:
     return AgentResult(
         agent="agent2", status=AgentStatus.NEEDS_APPROVAL, can_proceed=False, outputs=outputs,
         reasons=[f"quality gate réussi ({result.best_model_name}, {metric}={test:.4f}, modèle naïf {base:.4f}"
-                 + (f", champion {champion:.4f}" if champion is not None else "") + ") : promotion à approuver"],
+                 + (f", champion {champion:.4f}" if champion is not None else "") + ") : promotion à approuver"
+                 + note],
         warnings=result.warnings, duration_s=elapsed)

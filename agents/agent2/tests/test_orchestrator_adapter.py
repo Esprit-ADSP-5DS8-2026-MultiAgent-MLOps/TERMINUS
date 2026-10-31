@@ -46,3 +46,20 @@ def test_same_model_does_not_replace_the_champion(tmp_path):
     gate = _meta(tmp_path / "run2").quality_gate
     assert gate.champion_value is not None and not gate.passed
     assert any("champion" in r for r in gate.reasons)
+
+
+def test_candidate_worse_than_the_project_model_is_flagged(tmp_path, monkeypatch):
+    """Le candidat reste proposé, mais l'humain voit qu'il fait moins bien que le modèle du projet."""
+    from mlflow_agent import orchestrator_adapter as adapter
+
+    from common.schemas import Baseline
+    from orchestrator.check_agent import prepare
+
+    inp = prepare("agent2", CREDIT_RISK, tmp_path / "out")
+    path = Path(inp.inputs["baseline"])
+    b = Baseline.model_validate_json(path.read_text())
+    b.observed_metrics["roc_auc"] = 0.99              # modèle du projet artificiellement excellent
+    path.write_text(b.model_dump_json())
+    result = adapter.run(inp)
+    assert result.status.value == "NEEDS_APPROVAL"
+    assert "moins bon que le modèle actuel du projet" in result.reasons[0]
