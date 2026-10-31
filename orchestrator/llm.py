@@ -13,6 +13,7 @@ est dans la liste autorisée, sinon il applique la règle (voir supervisor.py).
 
 from __future__ import annotations
 
+import html
 import json
 import os
 from typing import Protocol
@@ -114,9 +115,11 @@ class GeminiDecider:
                 response_schema=LLMDecision,
             ),
         )
-        if isinstance(response.parsed, LLMDecision):
-            return response.parsed
-        return LLMDecision.model_validate_json(response.text or "")
+        decision = response.parsed if isinstance(response.parsed, LLMDecision) \
+            else LLMDecision.model_validate_json(response.text or "")
+        # Gemini renvoie parfois du texte codé en HTML (« mod&egrave;le ») : on le décode pour l'humain.
+        decision.explanation = html.unescape(decision.explanation)
+        return decision
 
 
 # ---------------------------------------------------------------------------

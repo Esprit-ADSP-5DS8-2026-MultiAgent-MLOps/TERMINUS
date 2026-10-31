@@ -243,3 +243,9 @@ def test_gemini_without_key_gives_a_clear_error(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         GeminiDecider().decide({}, {"end_failed": "Arrêter"}, "end_failed")
+
+
+def test_gemini_html_entities_are_decoded():
+    decider, _ = fake_gemini('{"action": "agent1", "explanation": "Le mod&egrave;le n&eacute;cessite l&#39;avis"}')
+    d = decider.decide({}, {"agent1": "Lancer l'Agent 1"}, "agent1")
+    assert d.explanation == "Le modèle nécessite l'avis"
