@@ -152,6 +152,8 @@ Fait (branche `integ/agent3`) :
 - `api.py.j2` renvoie `prediction: int` : la régression n'est pas servie (l'adaptateur s'arrête avec la raison) ;
 - publication Docker Hub : `AGENT3_PUSH=1` + `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (et `DOCKER_IMAGE_NAMESPACE`)
   dans `agents/agent3/.env` ; l'approbation est la gate `champion_replacement`. Dépôt public par défaut sur Docker Hub.
+  En ligne de commande interactive, comme le CLI de Syrine : destination affichée, choix du compte (Entrée = compte
+  du `.env`, sinon un autre compte et son token), confirmation du push.
 
 À voir avec Aziz : `executor.py` encode la cible (`LabelEncoder`) sans garder l'encodeur dans le modèle ; le modèle
 prédit l'indice de la classe. L'adaptateur de l'Agent 3 rétablit les étiquettes ; à corriger à la source.

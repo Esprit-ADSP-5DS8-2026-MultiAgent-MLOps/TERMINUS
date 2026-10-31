@@ -103,3 +103,32 @@ def test_push_needs_the_flag_and_docker_hub_settings(monkeypatch):
     monkeypatch.setattr(config, "DOCKERHUB_TOKEN", "jeton")
     monkeypatch.setattr(config, "DOCKER_IMAGE_NAMESPACE", "moi")
     assert _push_wanted([])
+
+
+def test_terminal_asks_which_docker_hub_account(monkeypatch):
+    """Entrée = compte du .env (sans redemander son token) ; un autre compte = son token, saisi sans écho."""
+    from agent_api_docker import config
+    from agent_api_docker.orchestrator_adapter import _credentials_prompt
+
+    monkeypatch.setattr(config, "DOCKERHUB_USERNAME", "equipe")
+    monkeypatch.setattr(config, "DOCKERHUB_TOKEN", "jeton-env")
+    monkeypatch.setattr(config, "DOCKER_IMAGE_NAMESPACE_EXPLICIT", "")
+    shown: list[str] = []
+
+    def never(prompt):
+        raise AssertionError("le token du .env ne doit pas être redemandé")
+
+    ask = _credentials_prompt("credit_risk", input_fn=lambda p: "", secret_fn=never, out=shown.append)
+    assert ask(None) == ("equipe", "jeton-env")
+    assert any("docker.io/equipe/credit_risk" in line for line in shown)
+
+    ask = _credentials_prompt("credit_risk", input_fn=lambda p: "syrine", secret_fn=lambda p: "jeton-syrine",
+                              out=shown.append)
+    assert ask(None) == ("syrine", "jeton-syrine")
+
+
+def test_no_terminal_question_outside_the_command_line(monkeypatch):
+    from agent_api_docker.orchestrator_adapter import _interactive
+
+    monkeypatch.delenv("ORCH_INTERACTIVE", raising=False)
+    assert not _interactive()       # --auto-approve, Streamlit, tests : identifiants du .env

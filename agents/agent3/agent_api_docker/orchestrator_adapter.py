@@ -21,11 +21,15 @@ AGENT3_PUSH=1 (publication sur Docker Hub, identifiants DOCKERHUB_* de agents/ag
 
 Publication : l'agent ne pousse jamais sans approbation. Dans le pipeline, l'approbation est la gate humaine
 « champion_replacement » de l'orchestrateur (mise en production), donnée avant l'Agent 3.
+En ligne de commande interactive (ORCH_INTERACTIVE=1, posé par python -m orchestrator), comme le CLI de l'agent :
+destination affichée, choix du compte (Entrée = compte du .env, sinon un autre compte et son token, saisi sans écho
+et jamais enregistré), puis confirmation du push.
 Attention : un dépôt créé par le push est PUBLIC sur Docker Hub ; le créer d'abord en privé si besoin.
 """
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import shutil
@@ -233,13 +237,68 @@ def _promote(meta, warnings: list[str]) -> None:
         warnings.append(f"alias champion non posé ({type(exc).__name__}: {str(exc)[:150]})")
 
 
+def _interactive() -> bool:
+    """Un humain répond dans ce terminal (pas --auto-approve, ni Streamlit, ni les tests)."""
+    return os.environ.get("ORCH_INTERACTIVE") == "1" and sys.stdin.isatty()
+
+
+def _credentials_prompt(project_name: str, input_fn=input, secret_fn=getpass.getpass, out=print):
+    """Choix du compte Docker Hub avant le push, comme le CLI de l'agent (terminal.py).
+
+    Entrée = compte de agents/agent3/.env (son token) ; un autre nom = ce compte, token demandé sans écho.
+    Rien n'est écrit sur disque, ni dans la base de l'orchestrateur, ni dans les traces.
+    """
+    from . import config
+    from .docker_stage import image_slug
+    from .terminal import make_credentials_prompt
+
+    default = config.DOCKERHUB_USERNAME
+    retry = make_credentials_prompt(default, input_fn=input_fn, secret_fn=secret_fn, out=out)
+
+    def ask(reason: str | None = None):
+        if reason is not None:                     # connexion refusée : on redemande le token (logique de l'agent)
+            return retry(reason)
+        ns = config.DOCKER_IMAGE_NAMESPACE_EXPLICIT or default or "<compte>"
+        out("\n── Agent 3 : publication sur Docker Hub ──")
+        out(f"Destination par défaut : docker.io/{ns}/{image_slug(project_name)}  (dépôt PUBLIC s'il n'existe pas)")
+        try:
+            label = f"Compte Docker Hub [{default}] (Entrée = compte du .env) : " if default else "Compte Docker Hub : "
+            user = input_fn(label).strip() or default
+            if not user:
+                out("Aucun compte : push annulé.")
+                return None
+            if user == default and config.DOCKERHUB_TOKEN:
+                return user, config.DOCKERHUB_TOKEN
+            token = secret_fn(f"Token Docker Hub de {user} (droits Read & Write, non affiché) : ").strip()
+        except (EOFError, KeyboardInterrupt):
+            out("")
+            return None
+        if not token:
+            out("Aucun token : push annulé.")
+            return None
+        return user, token
+
+    return ask
+
+
+def _confirm_push(req, input_fn=input, out=print) -> bool:
+    out(f"Image testée : {req.image_id[:19]}...  ({req.size_mb} Mo)")
+    out(f"Destination  : docker.io/{req.repository}  (tags : {', '.join(req.tags)})")
+    try:
+        return input_fn("Pousser cette image sur Docker Hub ? [o/N] ").strip().lower() in ("o", "oui", "y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+
 def _push_wanted(warnings: list[str]) -> bool:
-    """AGENT3_PUSH=1 (environnement ou agents/agent3/.env) et identifiants Docker Hub présents."""
+    """AGENT3_PUSH=1 (environnement ou agents/agent3/.env) et identifiants Docker Hub disponibles."""
     from . import config
     from .docker_stage import missing_push_settings
 
     if config._get("AGENT3_PUSH").lower() not in {"1", "true", "yes"}:
         return False
+    if _interactive():                             # les identifiants seront demandés dans le terminal
+        return True
     missing = missing_push_settings()
     if missing:
         warnings.append("publication Docker Hub demandée mais réglages absents dans agents/agent3/.env : "
@@ -316,12 +375,15 @@ def run(inp: AgentInput) -> AgentResult:
     if not use_docker:
         warnings.append("Docker indisponible (démon arrêté ou AGENT3_DOCKER=0) : API testée en local, non déployée")
     push = use_docker and _push_wanted(warnings)
+    interactive = _interactive()
     log = workdir / "agent3.log"
     with log.open("w", encoding="utf-8") as f:
         result = run_pipeline(
             spec.project_name, report_path=str(report_path), project_dir=build, workspace=workdir / "workspace",
             python_exe=sys.executable, agent="never", fix=os.environ.get("AGENT3_NO_FIX") != "1",
-            docker=use_docker, push=push, approve_push=(lambda req: True) if push else None,
+            docker=use_docker, push=push,
+            approve_push=(_confirm_push if interactive else (lambda req: True)) if push else None,
+            credentials=_credentials_prompt(spec.project_name) if push and interactive else None,
             on_step=lambda m: f.write(m + "\n"), on_detail=lambda m: f.write("  " + m + "\n"))
 
     generated = workdir / "workspace" / "generated"
