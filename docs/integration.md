@@ -27,7 +27,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 | 0 | Mohamed | branche `integration`, dossier `agents/`, registre des agents, Agent 4 branché | fait |
 | 1 | Ahmed | contrat v0.2, nœud `repair` réservé, superviseur Gemini par défaut, `check-agent` | fait |
 | 2 | Yacine | Agent 1 : adaptateur, détection de la cible corrigée | intégré, à valider avec Yacine |
-| 3 | Aziz | Agent 2 (MLflow) | à faire |
+| 3 | Aziz | Agent 2 (MLflow) : adaptateur, registre, champion | intégré, à valider avec Aziz |
 | 4 | Syrine | Agent 3 (API, Docker) | à faire |
 | 5 | Mohamed | Agent 4 sur le vrai `endpoint`, run complet | à faire |
 | 6 | Sarra | validateur v2, réparation, juge | à faire |
@@ -94,6 +94,26 @@ Adaptateur : construire le rapport v0.1 depuis `project_spec` + `data_profile` +
 `run_experiment`, écrire `mlflow_metadata.json` (avec `quality_gate` et `champion_replacement_requested`).
 Statut `NEEDS_APPROVAL` quand le quality gate passe (gate humaine champion), `FAILED` sinon.
 Vérification : `python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run`.
+
+Fait (branche `integ/agent2`) :
+- `agents/agent2/` : paquet `mlflow_agent`, ses tests, benchmarks, exemples, `mlflow_agent.toml`,
+  `pyproject.toml` et `requirements.txt` (mlflow et optuna sont maintenant déclarés) ;
+- `orchestrator_adapter.py` : rapport v0.1 construit depuis `project_spec` et le CSV, plan du LLM (Gemini,
+  `mlflow_agent.toml`) ou plan par défaut, expérience MLflow, `mlflow_metadata.json` ;
+- MLflow : `MLFLOW_TRACKING_URI`, sinon SQLite dans `runs/mlflow/` (`mlflow ui --backend-store-uri
+  sqlite:///runs/mlflow/mlflow.db`) ; une expérience et un modèle enregistré par projet ;
+- le candidat reçoit l'alias `candidate` ; il doit battre le seuil, le modèle naïf ET le champion actuel
+  (alias `champion`) ; sinon `FAILED` avec la raison ;
+- réentraînement : relancé par l'orchestrateur après la gate `retraining`, sur `new_data_path` s'il existe.
+
+Choix à valider avec Aziz :
+- `mlflow_agent.toml` cherché dans `agents/agent2/` (avant : dossier courant) ;
+- budget par défaut : 12 essais, 10 minutes (`AGENT2_MAX_RUNS`, `AGENT2_MAX_MINUTES`) ;
+- `instrumentation_diff_path` : une note (l'agent n'exécute pas le code du projet, rien n'est instrumenté).
+
+À décider au meet 4 (Syrine) : qui pose l'alias `champion`. Proposition : l'adaptateur de l'Agent 3 appelle
+`mlflow_agent.orchestrator_adapter.promote(model_name, version)` une fois le déploiement réussi.
+Tant que ce n'est pas fait, il n'y a jamais de champion et chaque candidat qui passe le gate est proposé.
 Infrastructure : serveur MLflow dans `infra/docker-compose.yml` (ou SQLite local pour commencer).
 
 ### 4. Agent 3 (Syrine) : `feature/api-docker-build`

@@ -1,0 +1,9 @@
+# Agent 2 (MLflow) : à installer dans l'environnement commun
+#   uv pip install -e agents/agent2 -r agents/agent2/requirements.txt
+pydantic>=2
+pandas>=2
+numpy>=1.26
+scikit-learn>=1.5
+optuna>=3.6
+mlflow>=2.16
+pytest>=8

@@ -1,0 +1,39 @@
+{
+  "schema_version": "0.1",
+  "project": {
+    "project_path": ".",
+    "dataset_path": "data.csv",
+    "training_script": null
+  },
+  "task": {
+    "type": "classification",
+    "target_column": "target",
+    "objective": "credit-risk",
+    "primary_metric": "roc_auc",
+    "secondary_metrics": [],
+    "min_primary_metric": 0.7
+  },
+  "dataset_analysis": {
+    "rows": 1000,
+    "columns": 21,
+    "missing_values": {
+      "total": 0,
+      "columns_affected": []
+    },
+    "class_distribution": {
+      "1": 700,
+      "0": 300
+    },
+    "data_leakage_risks": []
+  },
+  "existing_implementation": {
+    "training_code_available": true,
+    "preprocessing_available": true,
+    "existing_models": []
+  },
+  "constraints": {
+    "max_experiment_runs": 12,
+    "max_runtime_minutes": 10
+  },
+  "status": "ready_for_experimentation"
+}

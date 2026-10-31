@@ -28,6 +28,11 @@ agents/agent4/agent_env/
 agents/agent4/infra/grafana/dashboards/*.json
 agents/agent4/infra/prometheus/rules/*.rules.yml
 
+# Agent 2 : MLflow (par défaut runs/mlflow/ ; ces noms si l'agent est lancé seul depuis son dossier)
+mlflow.db
+mlruns/
+mlartifacts/
+
 # Modèles fine-tunés (fusionnés, GGUF) : hébergés sur Hugging Face, jamais dans git
 *.gguf
 *.safetensors
