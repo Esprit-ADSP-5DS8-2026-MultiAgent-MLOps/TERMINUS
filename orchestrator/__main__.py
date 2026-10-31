@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Erreur : {exc}", file=sys.stderr)
         return 2
     print_run(run)
-    return 0 if run.status in ("DONE", "WAITING_HUMAN") else 1
+    return 0 if run.status in ("DONE", "WAITING_HUMAN", "CHAMPION_KEPT") else 1
 
 
 if __name__ == "__main__":

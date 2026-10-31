@@ -1,0 +1,24 @@
+[project]
+name = "mlflow-agent"
+version = "0.1.0"
+description = "Agent 2 de la plateforme Agentic MLOps : expériences Optuna, suivi MLflow, quality gate, registre"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2",
+    "pandas>=2",
+    "numpy>=1.26",
+    "scikit-learn>=1.5",
+    "optuna>=3.6",
+    "mlflow>=2.16",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mlflow_agent*"]

@@ -55,3 +55,19 @@ def test_rejected_project_stops_after_validator(tmp_path):
     # le stub de réparation ne répare rien : rien n'est lancé après lui
     assert list(s["results"]) == ["validator", "repair"]
     assert s["repair_count"] == 1
+
+
+def test_champion_kept_is_a_normal_ending(tmp_path, monkeypatch):
+    """Le candidat ne bat pas le champion : rien n'est déployé, et ce n'est pas un échec."""
+    from common.schemas import AgentResult, AgentStatus
+    from orchestrator import graph
+
+    def agent2_keeps_champion(inp):
+        return AgentResult(agent="agent2", status=AgentStatus.WARNING, can_proceed=False,
+                           reasons=["le champion actuel reste en production"])
+
+    monkeypatch.setitem(graph.AGENTS, "agent2", agent2_keeps_champion)
+    s = run_pipeline(str(PROJECTS / "credit_risk"), approve, runs_dir=str(tmp_path), simulate={})
+    assert s["final_status"] == "CHAMPION_KEPT"
+    assert "agent3" not in s["results"]
+    assert [d["action"] for d in s["supervision"]][-1] == "end_champion_kept"

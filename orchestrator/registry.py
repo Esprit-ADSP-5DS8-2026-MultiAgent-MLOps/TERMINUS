@@ -45,7 +45,7 @@ REAL: dict[str, str] = {
     "agent4": "monitoring_agent.pipeline:run",       # agents/agent4 (monitoring)
     "agent1": "agents.agent1.orchestrator_adapter:run",              # agents/agent1 (analyse)
     "propose_manifest": "agents.agent1.orchestrator_adapter:propose_manifest",
-    # "agent2": "mlflow_agent.orchestrator_adapter:run",             # étape 3 (Aziz)
+    "agent2": "mlflow_agent.orchestrator_adapter:run",               # agents/agent2 (MLflow)
     # "agent3": "agent_api_docker.orchestrator_adapter:run",         # étape 4 (Syrine)
     # "repair": "repair_agent.orchestrator_adapter:run",             # étape 6 (Sarra)
 }
