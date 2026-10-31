@@ -9,6 +9,7 @@ Ligne de commande de l'orchestrateur.
     python -m orchestrator reject  <run_id> [-m "commentaire"]
     python -m orchestrator resume  <run_id>                         # après un plantage
     python -m orchestrator export-decisions -o decisions.jsonl      # décisions du superviseur
+    python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run  # avant intégration
 
 Superviseur (qui décide de la suite après chaque étape) :
     python -m orchestrator run eval/projects/credit_risk --supervisor gemini
@@ -24,6 +25,7 @@ import argparse
 import getpass
 import json
 import sys
+from pathlib import Path
 
 from .checkpoint import describe_backend
 from .graph import Run, RunNotFound, list_runs
@@ -83,6 +85,8 @@ def cmd_run(args) -> Run:
     print(f"Pipeline sur {args.project_dir}… (le validateur peut prendre jusqu'à une minute)")
     print("Agents : " + " · ".join(f"{name} {origin}" for name, origin in AGENT_ORIGIN.items()
                                    if name != "propose_manifest"))
+    from .llm import default_mode
+    print(f"Superviseur : {args.supervisor or default_mode()}")
     simulate = None
     if args.simulate_failure or args.simulate_drift:
         simulate = {"failure": args.simulate_failure, "drift": args.simulate_drift}
@@ -150,7 +154,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("run", help="exécuter le pipeline sur un projet")
     p.add_argument("project_dir")
     p.add_argument("--supervisor", choices=["rules", "gemini"], default=None,
-                   help="qui décide de la suite : rules (défaut) ou gemini (clé dans GEMINI_API_KEY)")
+                   help="qui décide de la suite (défaut : ORCH_SUPERVISOR, sinon gemini si "
+                        "GEMINI_API_KEY est définie, sinon rules)")
     p.add_argument("--simulate-failure", choices=["transient", "permanent"], default=None,
                    help="démo : l'Agent 3 échoue (transient : une fois ; permanent : toujours)")
     p.add_argument("--simulate-drift", action="store_true", help="démo : l'Agent 4 détecte un drift")
@@ -176,7 +181,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--supervisor", choices=["rules", "gemini"], default=None,
                    help="garder seulement les décisions de ce décideur")
 
+    p = sub.add_parser("check-agent", help="vérifier qu'un agent respecte le contrat avant de l'intégrer")
+    p.add_argument("name", help="agent1, propose_manifest, agent2, agent3, agent4 ou repair")
+    p.add_argument("target", help="fonction de l'agent, ex. mlflow_agent.orchestrator_adapter:run")
+    p.add_argument("--project", default=None, help="projet de test (défaut : selon l'agent)")
+
     args = parser.parse_args(argv)
+    if args.cmd == "check-agent":
+        from .check_agent import main as check_main
+        return check_main(args.name, args.target, args.project, str(Path(args.runs_dir) / "check"))
     try:
         if args.cmd == "status":
             cmd_status(args)

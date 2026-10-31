@@ -6,7 +6,7 @@ ses dépendances. Les noms des paquets Python ne changent pas : l'intégration n
 | Dossier | Agent | Paquet Python | Responsable | État |
 |---|---|---|---|---|
 | `validator/` (racine, pour l'instant) | Validateur de contrat v1 | `validator` | Sarra | intégré (nœud `validate`) |
-| `agents/validator/` | Validateur v2, réparation, juge | `validator_agent`, `repair_agent`, `agentic_core`, `policy` | Sarra | à intégrer (étape 6) |
+| `agents/validator/` | Validateur v2, réparation, juge | `validator_agent`, `repair_agent`, `agentic_core`, `policy` | Sarra | nœud `repair` réservé, à intégrer (étape 6) |
 | `agents/agent1/` | Analyse du code et des données | `agents.agent1` | Yacine | à intégrer (étape 2) |
 | `agents/agent2/` | MLflow : expériences, quality gate, registre | `mlflow_agent` | Aziz | à intégrer (étape 3) |
 | `agents/agent3/` | API et image Docker | `agent_api_docker` | Syrine | à intégrer (étape 4) |
@@ -28,7 +28,28 @@ def run(inp: AgentInput) -> AgentResult: ...      # common/schemas.py
 
 Si l'agent a son propre format d'entrée ou de sortie, on ne le réécrit pas : on ajoute un petit adaptateur
 dans son dossier (`<paquet>/orchestrator_adapter.py`) qui traduit le contrat commun dans son format, et
-inversement.
+inversement. Point de départ : `agents/adapter_template.py`. Les fonctions `read_output` et `write_output`
+de `common/schemas.py` lisent et écrivent les fichiers du contrat en les validant.
+
+| Agent | Lit | Doit produire |
+|---|---|---|
+| agent1 | rapport du validateur, projet | `project_spec`, `data_profile`, `baseline` |
+| propose_manifest (Agent 1) | rapport du validateur, projet | `proposed_manifest` |
+| agent2 | `project_spec`, `data_profile`, `baseline` | `mlflow_metadata` |
+| agent3 | `project_spec`, `data_profile`, `mlflow_metadata`, rapport | `deployment_result` |
+| agent4 | `project_spec`, `deployment_result` | `retraining_request` si réentraînement demandé |
+| repair | rapport du validateur, projet | `repair_result`, `repaired_project` |
+
+## Vérifier son agent avant l'intégration
+
+```bash
+python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run
+```
+
+La commande lance le vrai validateur, fabrique les entrées avec les stubs des agents précédents, appelle
+l'agent comme le fera l'orchestrateur et vérifie sa réponse (schémas, sorties obligatoires, fichiers écrits
+dans le workdir, projet laissé intact). Quand elle affiche « Conforme », il reste une ligne à ajouter
+dans `orchestrator/registry.py`.
 
 ## Installer un agent dans l'environnement commun
 
