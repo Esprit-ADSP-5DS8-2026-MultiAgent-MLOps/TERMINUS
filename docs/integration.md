@@ -14,6 +14,8 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 - Un agent intégré = `python -m orchestrator check-agent <nom> <module:fonction>` qui affiche « Conforme »,
   une ligne dans `orchestrator/registry.py`, ses tests qui passent, et un run complet
   `python -m orchestrator run eval/projects/credit_risk` qui passe par lui.
+- Configuration : `.env` racine pour l'orchestrateur, `agents/<agent>/.env` pour chaque agent (voir
+  agents/README.md). Un agent ne met aucune de ses variables dans le `.env` racine.
 - Les tests de l'orchestrateur tournent avec les stubs et le superviseur à règles (`tests/conftest.py`) :
   jamais de vrai LLM dans les tests.
 - Après le meet 1, `feature/orchestrator` est gelée : chacun part d'`integration` et ouvre une PR vers elle.

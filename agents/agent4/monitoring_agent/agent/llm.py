@@ -103,7 +103,10 @@ def _env_file() -> Path:
 def _settings() -> dict[str, str]:
     env_file = _env_file()
     values = {k: v for k, v in dotenv_values(env_file).items() if v} if env_file.exists() else {}
-    return {**values, **{k: v for k, v in os.environ.items() if k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_", "SLACK_", "HF_"))}}
+    # Une variable du terminal passe avant le fichier, sauf si elle est vide : `set -a; source .env`
+    # exporte aussi les lignes vides (GROQ_API_KEY=) et ne doit pas effacer la clé de l'agent.
+    return {**values, **{k: v for k, v in os.environ.items()
+                         if v and k.startswith(("MONITORING_", "GROQ_", "GEMINI_", "LANGFUSE_", "SLACK_", "HF_"))}}
 
 
 class OpenAICompatModel:
