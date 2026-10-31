@@ -1,13 +1,22 @@
 """
-Contrat commun de la plateforme Agentic MLOps (livrable J1).
+Contrat commun de la plateforme Agentic MLOps.
 
 Tous les objets échangés entre l'orchestrateur et les agents sont définis ici.
 Règle d'équipe : on ne modifie ce fichier qu'avec l'accord du groupe,
 et on incrémente SCHEMA_VERSION à chaque changement.
 
-Principe : l'orchestrateur ne transporte que des CHEMINS et des statuts,
-jamais les données elles-mêmes. Chaque agent lit ses fichiers d'entrée
-et écrit ses fichiers de sortie dans son dossier de travail.
+Principes :
+- l'orchestrateur ne transporte que des CHEMINS et des statuts, jamais les données elles-mêmes ;
+- chaque agent lit ses fichiers d'entrée et écrit ses fichiers de sortie dans son dossier de travail ;
+- un agent ne lit que les fichiers de ce contrat (et le rapport du validateur), jamais le format
+  interne d'un autre agent. S'il a son propre format, son adaptateur fait la traduction
+  (agents/<agent>/.../orchestrator_adapter.py, voir agents/README.md).
+
+Historique :
+- 0.1 : premier contrat (orchestrateur + stubs).
+- 0.2 : boucle de réparation (RepairResult), ProjectSpec complété pour l'Agent 3
+  (model_artifact, interfaces, python_version), DeploymentResult.model_source,
+  OUTPUTS / OUTPUT_SCHEMAS (qui produit quoi), read_output / write_output.
 
 Source de vérité du rapport du validateur : validator/models.py.
 Ici, on ne reprend que la partie `handoff` dont les agents ont besoin.
@@ -21,11 +30,11 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "0.2"
 
 Task = Literal["classification", "regression"]
 Metric = Literal["accuracy", "precision", "recall", "f1", "roc_auc", "rmse", "mae", "r2"]
-AgentName = Literal["validator", "agent1", "agent2", "agent3", "agent4"]
+AgentName = Literal["validator", "repair", "agent1", "agent2", "agent3", "agent4"]
 
 
 def utcnow() -> datetime:
@@ -78,6 +87,7 @@ class ValidatorHandoff(BaseModel):
     data_path: str | None = None
     feature_columns: list[str] = []
     entrypoints: dict[str, str] = {}
+    interfaces: dict[str, str] = {}
     model_artifact: str | None = None
     pinned_dependencies: dict[str, str] = {}
     observed_metrics: dict[str, float] = {}
@@ -90,7 +100,7 @@ class ValidatorHandoff(BaseModel):
     def _null_to_empty_list(cls, v):
         return [] if v is None else v
 
-    @field_validator("entrypoints", "pinned_dependencies", "observed_metrics", mode="before")
+    @field_validator("entrypoints", "interfaces", "pinned_dependencies", "observed_metrics", mode="before")
     @classmethod
     def _null_to_empty_dict(cls, v):
         return {} if v is None else v
@@ -157,6 +167,10 @@ class ProjectSpec(Strict):
     data_path: str
     entrypoints: dict[str, str]
     pinned_dependencies: dict[str, str]
+    # v0.2 : ce dont l'Agent 3 a besoin pour servir le modèle (repris du handoff du validateur)
+    model_artifact: str | None = None            # ex. "model.joblib" (relatif au projet)
+    interfaces: dict[str, str] = {}              # ex. {"predict": "predict(model, data) -> list"}
+    python_version: str | None = None            # ex. "3.12"
     source: Literal["declared", "inferred"]  # mlops.yaml fourni, ou déduit par le LLM
     confidence: float = Field(1.0, ge=0, le=1)  # < 1 seulement si "inferred"
     carry_forward: list[CarryForward] = []
@@ -251,10 +265,15 @@ class CheckResult(Strict):
 
 
 class DeploymentResult(Strict):
-    """deployment_result.json (deployment_config.yaml reste un fichier généré)."""
+    """deployment_result.json (deployment_config.yaml reste un fichier généré).
+
+    L'Agent 3 déploie le modèle promu par l'Agent 2 (mlflow_metadata.model_uri).
+    Repli : si MLflow n'a pas fourni de modèle, il sert l'artefact du projet (model_source).
+    """
 
     schema_version: str = SCHEMA_VERSION
-    model_uri: str
+    model_uri: str                               # "models:/..." ou chemin de l'artefact en repli
+    model_source: Literal["mlflow", "project_artifact"] = "mlflow"
     image: str                 # ex. "org/credit-risk"
     tag: str                   # tag versionné, jamais "latest" seul
     checks: list[CheckResult]
@@ -289,7 +308,40 @@ class RetrainingRequest(Strict):
 
 
 # ---------------------------------------------------------------------------
-# 7. Décisions humaines (tracées par l'orchestrateur)
+# 7. Réparation (validateur v2) : boucle validateur -> réparation -> juge -> revalidation
+# ---------------------------------------------------------------------------
+
+
+class RepairChange(Strict):
+    file: str               # chemin relatif au projet
+    finding_code: str       # finding du validateur corrigé, ex. "DEPS.UNPINNED"
+    description: str
+
+
+class JudgeVerdict(Strict):
+    approved: bool          # False : la réparation est jetée, le projet reste BLOCKED
+    score: float | None = Field(None, ge=0, le=1)
+    rationale: str
+
+
+class RepairResult(Strict):
+    """repair_result.json : le projet d'origine n'est JAMAIS modifié.
+
+    L'agent de réparation écrit une copie corrigée dans son workdir (`repaired_project`),
+    puis l'orchestrateur la fait revalider. La suite du pipeline travaille sur cette copie.
+    """
+
+    schema_version: str = SCHEMA_VERSION
+    attempt: int = Field(ge=1)
+    source_report: str          # rapport du validateur qui a motivé la réparation
+    repaired_project: str       # dossier de la copie corrigée
+    patch_path: str | None = None  # diff unifié, montré à l'humain
+    changes: list[RepairChange]
+    judge: JudgeVerdict
+
+
+# ---------------------------------------------------------------------------
+# 8. Décisions humaines (tracées par l'orchestrateur)
 # ---------------------------------------------------------------------------
 
 
@@ -299,3 +351,56 @@ class HumanDecision(Strict):
     by: str
     comment: str = ""
     at: datetime = Field(default_factory=utcnow)
+
+
+# ---------------------------------------------------------------------------
+# 9. Qui produit quoi : noms des sorties et schéma de chacune
+# ---------------------------------------------------------------------------
+
+# Nom de sortie (clé de AgentResult.outputs) -> schéma du fichier JSON.
+OUTPUT_SCHEMAS: dict[str, type[BaseModel]] = {
+    "project_spec": ProjectSpec,
+    "data_profile": DataProfile,
+    "baseline": Baseline,
+    "proposed_manifest": ProposedManifest,
+    "mlflow_metadata": MlflowMetadata,
+    "deployment_result": DeploymentResult,
+    "retraining_request": RetrainingRequest,
+    "repair_result": RepairResult,
+}
+
+# Sorties obligatoires de chaque agent quand il réussit (statut OK, WARNING ou NEEDS_APPROVAL).
+# D'autres sorties sont permises (fichiers de travail, rapports), elles ne sont pas vérifiées.
+OUTPUTS: dict[str, list[str]] = {
+    "agent1": ["project_spec", "data_profile", "baseline"],
+    "propose_manifest": ["proposed_manifest"],
+    "agent2": ["mlflow_metadata"],
+    "agent3": ["deployment_result"],
+    "agent4": [],                       # retraining_request seulement si un réentraînement est demandé
+    "repair": ["repair_result", "repaired_project"],
+}
+
+
+def read_output(inp: AgentInput, name: str):
+    """Lit une sortie d'un agent précédent et la valide avec son schéma.
+
+        spec = read_output(inp, "project_spec")   # -> ProjectSpec
+    """
+    if name not in inp.inputs:
+        raise KeyError(f"entrée « {name} » absente (reçues : {', '.join(sorted(inp.inputs)) or 'aucune'})")
+    with open(inp.inputs[name], encoding="utf-8") as f:
+        return OUTPUT_SCHEMAS[name].model_validate_json(f.read())
+
+
+def write_output(inp: AgentInput, name: str, obj: BaseModel) -> str:
+    """Écrit une sortie dans le workdir de l'agent (<workdir>/<name>.json) et renvoie son chemin.
+
+        outputs["project_spec"] = write_output(inp, "project_spec", spec)
+    """
+    expected = OUTPUT_SCHEMAS.get(name)
+    if expected is not None and not isinstance(obj, expected):
+        raise TypeError(f"« {name} » doit être un {expected.__name__}, reçu {type(obj).__name__}")
+    path = f"{inp.workdir.rstrip('/')}/{name}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(obj.model_dump_json(indent=2))
+    return path

@@ -19,8 +19,8 @@ from langgraph.types import Command
 
 from .checkpoint import get_checkpointer
 from .gates import make_gate
-from .llm import get_decider
-from .nodes import make_agent_node, make_end, validate
+from .llm import default_mode, get_decider
+from .nodes import make_agent_node, make_end, make_repair_node, validate
 from .state import PipelineState, initial_state
 from .supervisor import DESTINATIONS, supervisor
 from .registry import resolve
@@ -49,7 +49,7 @@ def build_graph(checkpointer=None):
     # étapes
     g.add_node("validate", validate)
     for name, fn in AGENTS.items():
-        g.add_node(name, make_agent_node(name, fn))
+        g.add_node(name, make_repair_node(fn) if name == "repair" else make_agent_node(name, fn))
     g.add_node("gate_manifest", make_gate("manifest_confirmation", "proposed_manifest", "gate_manifest"))
     g.add_node("gate_champion", make_gate("champion_replacement", "mlflow_metadata", "gate_champion"))
     g.add_node("gate_retraining", make_gate("retraining", "retraining_request", "gate_retraining"))
@@ -98,11 +98,12 @@ class Run:
               simulate: dict | None = None) -> "Run":
         """Crée un nouveau run et l'exécute jusqu'à la première pause (ou la fin).
 
-        supervisor : "rules" (défaut) ou "gemini" ; sinon la variable ORCH_SUPERVISOR.
+        supervisor : "rules" ou "gemini" ; par défaut ORCH_SUPERVISOR, sinon gemini si
+                     GEMINI_API_KEY est définie, sinon rules (voir llm.default_mode).
         simulate   : pannes simulées pour les démos, enregistrées avec le run
                      ({"drift": bool, "failure": "transient" | "permanent" | None}).
         """
-        mode = supervisor or os.environ.get("ORCH_SUPERVISOR", "rules")
+        mode = supervisor or default_mode()
         get_decider(mode)  # erreur claire tout de suite si le mode est inconnu
         run = cls(uuid.uuid4().hex[:12], runs_dir)
         run.run_dir.mkdir(parents=True, exist_ok=True)

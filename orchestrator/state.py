@@ -34,6 +34,8 @@ class PipelineState(TypedDict, total=False):
     history: Annotated[list[dict], operator.add]
 
     retrain_count: int
+    repair_count: int       # tentatives de réparation déjà faites (boucle du validateur v2)
+    repaired_dir: str       # copie corrigée du projet, validée à la place de l'original
     final_status: str       # DONE, BLOCKED, FAILED, REJECTED_BY_HUMAN, MANIFEST_PROPOSED
 
     # --- superviseur -----------------------------------------------------------
@@ -57,6 +59,7 @@ def initial_state(run_id: str, project_dir: str, run_dir: str,
         "decisions": [],
         "history": [],
         "retrain_count": 0,
+        "repair_count": 0,
         "supervisor_mode": supervisor_mode,
         "supervision": [],
         "attempts": {},

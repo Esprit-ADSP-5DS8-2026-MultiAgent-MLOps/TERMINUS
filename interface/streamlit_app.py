@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from orchestrator.checkpoint import describe_backend  # noqa: E402
 from orchestrator.graph import Run, list_runs  # noqa: E402
+from orchestrator.llm import default_mode  # noqa: E402
 
 PROJECTS = ROOT / "eval" / "projects"
 RUNS = ROOT / "runs"
@@ -86,6 +87,7 @@ FAILURES = {None: "aucune", "transient": "passagère (réseau)", "permanent": "p
 ACTION_LABELS = {
     "agent1": "lancer l'analyse", "agent2": "lancer MLflow", "agent3": "lancer le déploiement",
     "agent4": "lancer le monitoring", "propose_manifest": "proposer un manifeste",
+    "repair": "tenter une réparation", "validate": "revalider le projet réparé",
     "gate_manifest": "demander une validation", "gate_champion": "demander une validation",
     "gate_retraining": "demander une validation", "gate_failure": "demander à un humain",
     "retry": "réessayer", "end_done": "terminer", "end_failed": "arrêter", "end_blocked": "arrêter",
@@ -417,6 +419,7 @@ def show_findings(state: dict) -> None:
 STEP_NAMES = {
     "validator": "Validateur",
     "propose_manifest": "Agent 1 · proposition du manifeste",
+    "repair": "Validateur v2 · réparation",
     "agent1": "Agent 1 · analyse",
     "agent2": "Agent 2 · MLflow",
     "agent3": "Agent 3 · déploiement",
@@ -558,8 +561,10 @@ except RuntimeError as exc:  # base injoignable : on le dit clairement
 with st.sidebar:
     st.markdown("### Nouveau run")
     project = st.selectbox("Projet ML", list_projects(), format_func=project_label)
-    supervisor_mode = st.radio("Qui décide de la suite ?", list(SUPERVISORS),
-                               format_func=SUPERVISORS.get, horizontal=True)
+    modes = list(SUPERVISORS)
+    supervisor_mode = st.radio("Qui décide de la suite ?", modes, format_func=SUPERVISORS.get,
+                               index=modes.index(default_mode()) if default_mode() in modes else 0,
+                               horizontal=True)
     if supervisor_mode == "gemini" and not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
         st.warning("Clé GEMINI_API_KEY absente : les règles prendront le relais à chaque décision.")
     drift = st.toggle("Simuler un drift au monitoring")

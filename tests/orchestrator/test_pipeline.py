@@ -52,4 +52,6 @@ def test_rejected_project_stops_after_validator(tmp_path):
         pytest.skip("variante 02_* introuvable : lancer python eval/make_variants.py")
     s = run_pipeline(str(variants[0]), approve, runs_dir=str(tmp_path))
     assert s["final_status"] == "BLOCKED"
-    assert list(s["results"]) == ["validator"]
+    # le stub de réparation ne répare rien : rien n'est lancé après lui
+    assert list(s["results"]) == ["validator", "repair"]
+    assert s["repair_count"] == 1

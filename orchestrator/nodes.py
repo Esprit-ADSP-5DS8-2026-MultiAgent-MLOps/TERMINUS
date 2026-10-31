@@ -1,6 +1,6 @@
 """
-Les nœuds du graphe : le validateur (réel), les agents (stubs pour l'instant)
-et les nœuds de fin.
+Les nœuds du graphe : le validateur, les agents (vrais ou stubs, voir registry.py),
+la réparation et les nœuds de fin.
 
 Un nœud reçoit l'état et renvoie SEULEMENT ce qu'il veut modifier dans l'état.
 """
@@ -14,7 +14,13 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from common.schemas import AgentInput, AgentResult, AgentStatus, ValidatorHandoff
+from common.schemas import (
+    AgentInput,
+    AgentResult,
+    AgentStatus,
+    RepairResult,
+    ValidatorHandoff,
+)
 
 from .state import PipelineState
 
@@ -31,7 +37,7 @@ _HANDOFF_TO_STATUS = {
 
 
 # ---------------------------------------------------------------------------
-# Validateur (le seul composant réel pour l'instant)
+# Validateur
 # ---------------------------------------------------------------------------
 
 
@@ -56,12 +62,15 @@ def verify(report: Path, project_dir: str) -> list[str]:
 
 def validate(state: PipelineState) -> dict:
     run_dir = Path(state["run_dir"])
-    out = run_dir / "validator"
+    # Après une réparation, on valide la copie corrigée (le projet d'origine n'est jamais modifié).
+    project_dir = state.get("repaired_dir") or state["project_dir"]
+    repairs = state.get("repair_count", 0)
+    out = run_dir / ("validator" if not repairs else f"validator_after_repair_{repairs}")
     out.mkdir(parents=True, exist_ok=True)
     report = out / "compatibility_report.json"
     started = time.monotonic()
 
-    proc = run_validator(state["project_dir"], report, run_dir / "snapshot")
+    proc = run_validator(project_dir, report, run_dir / "snapshot")
 
     if not report.exists():
         result = AgentResult(
@@ -90,7 +99,7 @@ def validate(state: PipelineState) -> dict:
     can_proceed = handoff.can_proceed
 
     if can_proceed:
-        refused = verify(report, state["project_dir"])
+        refused = verify(report, project_dir)
         if refused:
             status, can_proceed = AgentStatus.FAILED, False
             reasons += refused
@@ -106,7 +115,7 @@ def validate(state: PipelineState) -> dict:
     return {
         "report_path": str(report),
         # les agents lisent la copie figée ; à défaut (pas de snapshot), le projet d'origine
-        "snapshot_dir": data.get("snapshot_path") or state["project_dir"],
+        "snapshot_dir": data.get("snapshot_path") or project_dir,
         "handoff_status": handoff.status.value,
         "artifacts": result.outputs,
         **_record("validator", result, started),
@@ -118,12 +127,13 @@ def validate(state: PipelineState) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def make_agent_node(node_name: str, agent_fn: Callable[[AgentInput], AgentResult]):
+def make_agent_node(node_name: str, agent_fn: Callable[[AgentInput], AgentResult],
+                    workdir_for: Callable[[PipelineState], Path] | None = None):
     """Enveloppe commune à tous les agents : prépare l'entrée, mesure le temps,
     transforme toute exception en FAILED, vérifie que la réponse respecte le schéma."""
 
     def node(state: PipelineState) -> dict:
-        workdir = Path(state["run_dir"]) / node_name
+        workdir = workdir_for(state) if workdir_for else Path(state["run_dir"]) / node_name
         workdir.mkdir(parents=True, exist_ok=True)
         inp = AgentInput(
             run_id=state["run_id"],
@@ -146,6 +156,62 @@ def make_agent_node(node_name: str, agent_fn: Callable[[AgentInput], AgentResult
 
     node.__name__ = node_name
     return node
+
+
+# ---------------------------------------------------------------------------
+# Réparation : validateur -> réparation -> juge -> revalidation
+# ---------------------------------------------------------------------------
+
+
+def make_repair_node(agent_fn: Callable[[AgentInput], AgentResult]):
+    """L'agent de réparation tourne dans runs/<run_id>/repair/attempt_<n>/.
+
+    L'orchestrateur ne fait pas confiance aveuglément à la réponse : la copie réparée doit
+    exister, être dans le workdir de la tentative, et le juge doit l'avoir approuvée.
+    Sinon la réparation est refusée et le projet reste BLOCKED.
+    """
+
+    def workdir(state: PipelineState) -> Path:
+        return Path(state["run_dir"]) / "repair" / f"attempt_{state.get('repair_count', 0) + 1}"
+
+    run_agent = make_agent_node("repair", agent_fn, workdir)
+
+    def node(state: PipelineState) -> dict:
+        update = run_agent(state)
+        attempt = state.get("repair_count", 0) + 1
+        update["repair_count"] = attempt
+        result = update["results"]["repair"]
+        if result["can_proceed"]:
+            problem = _check_repair(result["outputs"], workdir(state))
+            if problem:
+                result.update(status=AgentStatus.FAILED.value, can_proceed=False,
+                              reasons=[*result["reasons"], f"réparation refusée par l'orchestrateur : {problem}"])
+                update["history"][-1].update(result)
+            else:
+                update["repaired_dir"] = str(Path(result["outputs"]["repaired_project"]).resolve())
+        return update
+
+    node.__name__ = "repair"
+    return node
+
+
+def _check_repair(outputs: dict, workdir: Path) -> str | None:
+    if "repair_result" not in outputs or "repaired_project" not in outputs:
+        return "sorties repair_result et repaired_project attendues"
+    try:
+        rr = RepairResult.model_validate_json(Path(outputs["repair_result"]).read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - fichier illisible ou non conforme : réparation refusée
+        return f"repair_result invalide ({type(exc).__name__}: {str(exc)[:200]})"
+    project = Path(outputs["repaired_project"]).resolve()
+    if not project.is_dir():
+        return f"copie réparée introuvable : {project}"
+    if not project.is_relative_to(workdir.resolve()):
+        return "la copie réparée doit être écrite dans le workdir de la tentative"
+    if not rr.judge.approved:
+        return f"le juge n'a pas approuvé la réparation ({rr.judge.rationale[:200]})"
+    if not rr.changes:
+        return "aucune modification déclarée"
+    return None
 
 
 def _agent_name(node_name: str) -> str:

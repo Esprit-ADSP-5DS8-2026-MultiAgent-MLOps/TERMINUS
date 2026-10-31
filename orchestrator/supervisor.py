@@ -32,6 +32,7 @@ MAX_STEP_RETRIES = 2
 ROUTERS = {
     "validator": routing.after_validate,
     "propose_manifest": routing.after_propose_manifest,
+    "repair": routing.after_repair,
     "agent1": routing.after_agent1,
     "agent2": routing.after_agent2,
     "agent3": routing.after_agent3,
@@ -48,6 +49,7 @@ STEP_NODE = {"validator": "validate"}  # nom du résultat -> nom du nœud à rel
 LABELS = {
     "validator": "Validateur",
     "propose_manifest": "Agent 1 (proposition du manifeste)",
+    "repair": "Réparation automatique (validateur v2)",
     "agent1": "Agent 1 (analyse)",
     "agent2": "Agent 2 (MLflow)",
     "agent3": "Agent 3 (déploiement)",
@@ -64,6 +66,8 @@ DESCRIPTIONS = {
     "agent3": "Lancer l'Agent 3 : construire, tester et déployer l'API du modèle",
     "agent4": "Lancer l'Agent 4 : surveiller le modèle déployé",
     "propose_manifest": "Demander à l'Agent 1 de proposer un mlops.yaml",
+    "repair": "Tenter une réparation automatique du projet (sur une copie, jugée, puis revalidée)",
+    "validate": "Revalider la copie réparée du projet",
     "gate_manifest": "Demander à un humain de valider le manifeste proposé",
     "gate_champion": "Demander à un humain de valider la mise en production du modèle",
     "gate_retraining": "Demander à un humain s'il faut réentraîner le modèle",
@@ -94,6 +98,8 @@ def options_for(state: PipelineState) -> tuple[str, dict[str, str]]:
             options["retry"] = (f"Relancer l'étape {LABELS[last]} "
                                 f"(nouvelle tentative {done + 1} sur {MAX_STEP_RETRIES})")
         options["gate_failure"] = DESCRIPTIONS["gate_failure"]
+    if last == "validator" and rule == "repair":
+        options["end_blocked"] = "Arrêter sans réparer : le problème ne se corrige pas automatiquement"
     if last == "agent4" and rule == "gate_retraining":
         options["end_done"] = "Ne pas demander de réentraînement : continuer la surveillance et terminer"
     return rule, options
@@ -107,6 +113,7 @@ def context_for(state: PipelineState) -> dict:
         "etape_terminee": LABELS.get(last, last),
         "etapes_deja_executees": [LABELS.get(h["node"], h["node"]) for h in state.get("history", [])],
         "reentrainements_deja_faits": state.get("retrain_count", 0),
+        "reparations_deja_faites": state.get("repair_count", 0),
     }
     result = state.get("results", {}).get(last)
     if result:

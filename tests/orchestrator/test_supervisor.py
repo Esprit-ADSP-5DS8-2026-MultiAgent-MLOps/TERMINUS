@@ -41,6 +41,21 @@ def steps(summary):
     return [h["node"] for h in summary["history"]]
 
 
+# --- mode par défaut ----------------------------------------------------------------
+
+
+def test_default_mode_is_gemini_when_a_key_is_available(monkeypatch):
+    monkeypatch.delenv("ORCH_SUPERVISOR", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "cle-de-test")
+    assert llm.default_mode() == "gemini"
+    monkeypatch.delenv("GEMINI_API_KEY")
+    assert llm.default_mode() == "rules"  # sans clé, le pipeline tourne quand même
+    monkeypatch.setenv("ORCH_SUPERVISOR", "rules")
+    monkeypatch.setenv("GEMINI_API_KEY", "cle-de-test")
+    assert llm.default_mode() == "rules"  # le choix explicite gagne
+
+
 # --- mode règles ---------------------------------------------------------------
 
 
