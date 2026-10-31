@@ -101,3 +101,14 @@ def test_export_writes_ollama_modelfile_and_space(tmp_path):
     modelfile = (stage / "Modelfile").read_text(encoding="utf-8")
     assert f"FROM ./{export.GGUF_NAME}" in modelfile and "{{ .Role }}" in modelfile
     assert (stage / "adapters" / "adapters.safetensors").exists()
+
+
+def test_empty_shell_variable_does_not_erase_the_agent_key(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text("GROQ_API_KEY=cle-agent4\nMONITORING_JUDGE=gemini:modele-agent4\n", encoding="utf-8")
+    monkeypatch.setenv("MONITORING_ENV_FILE", str(env))
+    monkeypatch.setenv("GROQ_API_KEY", "")                       # ligne vide exportée par le .env racine
+    monkeypatch.setenv("MONITORING_JUDGE", "gemini:choix-du-terminal")
+    settings = llm._settings()
+    assert settings["GROQ_API_KEY"] == "cle-agent4"
+    assert settings["MONITORING_JUDGE"] == "gemini:choix-du-terminal"  # une valeur non vide gagne toujours

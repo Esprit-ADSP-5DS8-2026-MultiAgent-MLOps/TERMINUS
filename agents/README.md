@@ -51,6 +51,15 @@ l'agent comme le fera l'orchestrateur et vérifie sa réponse (schémas, sorties
 dans le workdir, projet laissé intact). Quand elle affiche « Conforme », il reste une ligne à ajouter
 dans `orchestrator/registry.py`.
 
+## Configuration : un `.env` par agent
+
+- `.env` à la racine : orchestrateur et infrastructure commune seulement (`ORCH_*`, `GEMINI_API_KEY`,
+  `ORCH_DATABASE_URL`), chargé dans le terminal avec `set -a; source .env; set +a`.
+- `agents/<agent>/.env` : les clés et réglages de l'agent, avec un `agents/<agent>/.env.example` vide commité.
+  L'agent le charge lui-même au démarrage (ex. `dotenv_values`), sans écraser une variable déjà définie
+  et non vide dans le terminal.
+- Chaque membre utilise ses propres clés ; aucun `.env` n'est commité.
+
 ## Installer un agent dans l'environnement commun
 
 ```bash
