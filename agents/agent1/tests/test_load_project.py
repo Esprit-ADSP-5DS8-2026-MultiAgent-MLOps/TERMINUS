@@ -33,3 +33,22 @@ def test_load_project_records_errors(tmp_path: Path) -> None:
     assert result["workspace_path"] == ""
     assert result["snapshot_path"] == ""
     assert result["errors"]
+
+
+
+def test_read_only_project_gives_a_writable_workspace(tmp_path):
+    """The orchestrator snapshot is read-only (0o444); ruff must still be able to write in the workspace."""
+    import stat
+    from pathlib import Path as _Path
+
+    from agents.agent1.nodes.load_project import load_project
+
+    project = tmp_path / "project"
+    project.mkdir()
+    script = project / "main.py"
+    script.write_text("print('ok')\n")
+    script.chmod(0o444)
+    result = load_project({"project_path": str(project)})  # type: ignore[arg-type]
+    copied = _Path(result["workspace_path"]) / "main.py"
+    assert copied.stat().st_mode & stat.S_IWUSR
+    assert not script.stat().st_mode & stat.S_IWUSR  # the source stays read-only

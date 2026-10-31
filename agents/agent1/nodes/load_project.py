@@ -1,6 +1,7 @@
 """Copy an input project into isolated working directories."""
 
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 
@@ -24,6 +25,10 @@ def load_project(state: Agent1State) -> dict[str, object]:
         snapshot = root / "snapshot"
         shutil.copytree(source, workspace, ignore=_copy_ignore)
         shutil.copytree(source, snapshot, ignore=_copy_ignore)
+        # The orchestrator gives a read-only copy of the validated project (chmod 444):
+        # the workspace must be writable for ruff and the edits.
+        for path in [workspace, *workspace.rglob("*")]:
+            path.chmod(path.stat().st_mode | stat.S_IWUSR)
         return {
             "workspace_path": str(workspace),
             "snapshot_path": str(snapshot),

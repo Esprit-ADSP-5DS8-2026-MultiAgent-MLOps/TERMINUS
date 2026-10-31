@@ -65,7 +65,9 @@ def llm_available() -> bool:
         return _availability
     request = urllib.request.Request(
         f'{config["base_url"].rstrip("/")}/models',
-        headers={"Authorization": f'Bearer {config["api_key"]}'} if config["api_key"] else {},
+        # Same User-Agent as the other calls: Groq (Cloudflare) answers 403 to the default "Python-urllib/x.y".
+        headers={"User-Agent": "agent1/1.0",
+                 **({"Authorization": f'Bearer {config["api_key"]}'} if config["api_key"] else {})},
         method="GET",
     )
     try:
