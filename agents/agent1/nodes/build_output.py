@@ -28,7 +28,10 @@ def _write_artifacts(state: Agent1State) -> tuple[str, str, list[dict[str, str]]
             )
         else:
             output_path.mkdir(parents=True, exist_ok=True)
-        snapshot = Path(state.get("snapshot_path", ""))
+        # Path("") would be the current directory (the whole repository, data included):
+        # without a snapshot, nothing is compared.
+        snapshot_value = str(state.get("snapshot_path", ""))
+        snapshot = Path(snapshot_value) if snapshot_value else Path("/__agent1_missing__")
         files = set()
         if snapshot.is_dir():
             files.update(
