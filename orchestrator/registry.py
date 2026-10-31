@@ -19,7 +19,13 @@ import logging
 import os
 from collections.abc import Callable
 
-from .stubs.agents import agent1_stub, agent2_stub, agent3_stub, agent4_stub, propose_manifest_stub
+from .stubs.agents import (
+    agent1_stub,
+    agent2_stub,
+    agent3_stub,
+    agent4_stub,
+    propose_manifest_stub,
+)
 
 log = logging.getLogger("orchestrator.registry")
 
@@ -61,7 +67,7 @@ def resolve() -> tuple[dict[str, Callable], dict[str, str]]:
         try:
             agents[name] = _load(REAL[name])
             origin[name] = "réel"
-        except Exception as exc:  # paquet non installé, erreur d'import : on garde le stub
+        except Exception as exc:  # noqa: BLE001 - paquet non installé, erreur d'import : on garde le stub
             log.warning("agent %s indisponible, stub utilisé : %s", name, exc)
             origin[name] = f"stub ({type(exc).__name__}: {exc})"[:200]
     return agents, origin
