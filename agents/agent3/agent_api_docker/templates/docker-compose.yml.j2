@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    image: {{ r.project_name }}:latest
+    ports:
+      - "{{ port }}:{{ port }}"
+{% if env_vars %}
+    environment:
+{% for e in env_vars %}
+      {{ e.name }}: {{ (e.default or '') | tojson }}
+{% endfor %}
+{% endif %}

@@ -1,0 +1,19 @@
+.git
+.gitignore
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.ipynb
+.env
+.env.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.log
+test_api_generated.py
+junit.xml
+server.log
+{% for p in ignore %}
+{{ p }}
+{% endfor %}

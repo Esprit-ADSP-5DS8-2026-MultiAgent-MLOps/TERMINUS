@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -98,6 +99,9 @@ def cmd_run(args) -> Run:
               "trafic observé. Pour la démo du drift : ORCH_AGENTS=stub python -m orchestrator run ...")
     if args.simulate_failure and AGENT_ORIGIN.get("agent3") == "réel":
         print("Note : --simulate-failure ne concerne que le stub de l'Agent 3.")
+    # Un humain répond ici : les agents peuvent poser leurs propres questions (ex. compte Docker Hub de l'Agent 3).
+    if not args.auto_approve and not args.no_wait and sys.stdin.isatty():
+        os.environ["ORCH_INTERACTIVE"] = "1"
     simulate = None
     if args.simulate_failure or args.simulate_drift:
         simulate = {"failure": args.simulate_failure, "drift": args.simulate_drift}
@@ -145,6 +149,8 @@ def cmd_export(args) -> None:
 
 
 def cmd_decide(args, decision: str) -> Run:
+    if sys.stdin.isatty():
+        os.environ["ORCH_INTERACTIVE"] = "1"
     run = Run.load(args.run_id, args.runs_dir)
     run.answer({"decision": decision, "by": getpass.getuser(), "comment": args.message})
     return run

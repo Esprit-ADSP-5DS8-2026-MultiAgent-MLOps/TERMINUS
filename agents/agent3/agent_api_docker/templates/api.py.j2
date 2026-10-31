@@ -1,0 +1,68 @@
+"""API generee automatiquement. Ne pas editer a la main : regeneree par l'agent."""
+import os
+from contextlib import asynccontextmanager
+{% if supports_proba %}
+from typing import Optional
+
+import pandas as pd
+{% endif %}
+{% if custom_module %}
+import {{ custom_module }}  # noqa: F401  (classes personnalisees requises par joblib.load)
+{% endif %}
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, ConfigDict
+
+{% if loader_fn %}
+from {{ predict_module }} import {{ loader_fn }}, {{ r.inference.entrypoint.function }}
+{% else %}
+import joblib
+
+from {{ predict_module }} import {{ r.inference.entrypoint.function }}
+{% endif %}
+
+MODEL_PATH = os.environ.get("MODEL_PATH", "{{ model_path }}")
+state: dict = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    state["model"] = {{ loader_fn or "joblib.load" }}(MODEL_PATH)
+    yield
+    state.clear()
+
+
+app = FastAPI(title="{{ r.project_name }}", version="1.0", lifespan=lifespan)
+
+
+class PredictRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"example": {{ r.io.example_input | tojson }}})
+{% for f in fields %}
+    {{ f.name }}: {{ f.py_type }}
+{% endfor %}
+
+
+class PredictResponse(BaseModel):
+    prediction: int
+{% if supports_proba %}
+    proba: Optional[float] = None
+{% endif %}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "model_loaded": "model" in state}
+
+
+@app.post("/predict", response_model=PredictResponse)
+def predict_route(req: PredictRequest):
+    """Route synchrone : l'inference est bloquante (CPU), FastAPI l'execute dans un thread."""
+    model = state.get("model")
+    if model is None:
+        raise HTTPException(status_code=503, detail="Modele non charge")
+    data = req.model_dump()
+    pred = {{ r.inference.entrypoint.function }}(model, data)[0]
+    out = {"prediction": int(pred)}
+{% if supports_proba %}
+    out["proba"] = float(model.predict_proba(pd.DataFrame([data]))[0, 1])
+{% endif %}
+    return out

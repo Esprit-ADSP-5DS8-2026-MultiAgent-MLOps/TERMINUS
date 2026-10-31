@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0",
+  "project_name": "credit-risk",
+  "needs_user_input": false,
+
+  "python": {
+    "version": "3.12",
+    "package_manager": "pip",
+    "note": "Minimum 3.11 requis par numpy 2.4 / pandas 3.0 / scikit-learn 1.8. Verifie sur Python 3.12.3."
+  },
+
+  "dependencies": {
+    "file": "requirements.txt",
+    "status": "reliable",
+    "packages": [
+      {"name": "scikit-learn", "version": "1.8.0"},
+      {"name": "pandas", "version": "3.0.2"},
+      {"name": "numpy", "version": "2.4.4"},
+      {"name": "joblib", "version": "1.5.3"}
+    ],
+    "missing_imports": [],
+    "api_packages_to_add": ["fastapi", "uvicorn[standard]", "pydantic"],
+    "os_packages": []
+  },
+
+  "ml": {
+    "framework": "sklearn",
+    "framework_version": "1.8.0",
+    "model_type": "Pipeline(CreditFeatures -> ColumnTransformer -> RandomForestClassifier|LogisticRegression)",
+    "model_file": "output/model.joblib",
+    "model_exists_in_project": false,
+    "model_generation": {
+      "required_before_serving": true,
+      "command": "python -c \"from train import train; train('data.csv', 'output')\"",
+      "requires_files": ["data.csv", "train.py", "preprocessing.py"],
+      "duration_estimate_s": 15,
+      "recommended_stage": "docker_build"
+    },
+    "model_format": "joblib",
+    "loader": "joblib.load",
+    "loader_location": "predict.py:load_model",
+    "custom_classes_module": "preprocessing",
+    "custom_classes_note": "preprocessing.py doit etre importe avant joblib.load (classe CreditFeatures), sinon le chargement echoue.",
+    "other_artifacts": [
+      {"path": "output/metrics.json", "role": "metrics"}
+    ]
+  },
+
+  "inference": {
+    "entrypoint": {
+      "file": "predict.py",
+      "function": "predict",
+      "signature": "predict(model, data) -> list[int]",
+      "loader_function": "load_model(model_path) -> Pipeline",
+      "accepts": ["dict", "list[dict]", "pandas.DataFrame"],
+      "is_async": false
+    },
+    "supports_proba": true,
+    "proba_method": "model.predict_proba(df)[:, 1]",
+    "proba_note": "predict.py ne retourne que les classes. La probabilite exige un appel direct a model.predict_proba.",
+    "preprocessing_location": "inside_model"
+  },
+
+  "io": {
+    "input_type": "tabular",
+    "input_schema": [
+      {"name": "status", "type": "str", "required": true, "allowed_values": ["... < 100 DM", "0 <= ... < 200 DM", "... >= 200 DM / salary for at least 1 year", "no checking account"]},
+      {"name": "duration", "type": "int", "required": true, "min": 4, "max": 72, "unit": "mois"},
+      {"name": "credit_history", "type": "str", "required": true, "allowed_values": ["all credits at this bank paid back duly", "critical account/other credits existing", "delay in paying off in the past", "existing credits paid back duly till now", "no credits taken/all credits paid back duly"]},
+      {"name": "purpose", "type": "str", "required": true, "allowed_values": ["business", "car (new)", "car (used)", "domestic appliances", "education", "furniture/equipment", "others", "radio/television", "repairs", "retraining"]},
+      {"name": "amount", "type": "int", "required": true, "min": 250, "max": 18424},
+      {"name": "savings", "type": "str", "required": true, "allowed_values": ["... < 100 DM", "100 <= ... < 500 DM", "500 <= ... < 1000 DM", "... >= 1000 DM", "unknown/no savings account"]},
+      {"name": "employment_duration", "type": "str", "required": true, "allowed_values": ["unemployed", "... < 1 year", "1 <= ... < 4 years", "4 <= ... < 7 years", "... >= 7 years"]},
+      {"name": "installment_rate", "type": "int", "required": true, "min": 1, "max": 4},
+      {"name": "personal_status_sex", "type": "str", "required": true, "allowed_values": ["female : divorced/separated/married", "male : divorced/separated", "male : married/widowed", "male : single"]},
+      {"name": "other_debtors", "type": "str", "required": true, "allowed_values": ["none", "co-applicant", "guarantor"]},
+      {"name": "present_residence", "type": "int", "required": true, "min": 1, "max": 4},
+      {"name": "property", "type": "str", "required": true, "allowed_values": ["real estate", "building society savings agreement/life insurance", "car or other", "unknown/no property"]},
+      {"name": "age", "type": "int", "required": true, "min": 19, "max": 75},
+      {"name": "other_installment_plans", "type": "str", "required": true, "allowed_values": ["bank", "stores", "none"]},
+      {"name": "housing", "type": "str", "required": true, "allowed_values": ["rent", "own", "for free"]},
+      {"name": "number_credits", "type": "int", "required": true, "min": 1, "max": 4},
+      {"name": "job", "type": "str", "required": true, "allowed_values": ["unemployed/unskilled - non-resident", "unskilled - resident", "skilled employee/official", "management/self-employed/highly qualified employee/officer"]},
+      {"name": "people_liable", "type": "int", "required": true, "min": 1, "max": 2},
+      {"name": "telephone", "type": "str", "required": true, "allowed_values": ["no", "yes"]},
+      {"name": "foreign_worker", "type": "str", "required": true, "allowed_values": ["no", "yes"]}
+    ],
+    "input_constraints_note": "min/max observes sur data.csv (1000 lignes), pas des regles metier. Utiliser des bornes souples ou aucune borne cote API. Le modele ignore les categories inconnues (handle_unknown='ignore') mais les colonnes doivent toutes etre presentes (duration, amount, age sont requis par le feature engineering).",
+    "output_schema": [
+      {"name": "prediction", "type": "int"},
+      {"name": "proba", "type": "float", "optional": true, "meaning": "probabilite de la classe 1"}
+    ],
+    "class_labels": [0, 1],
+    "class_labels_note": "Dataset type German Credit : 1 = bon risque (700 lignes), 0 = mauvais risque (300 lignes). A confirmer par l'utilisateur.",
+    "example_input": {
+      "status": "... < 100 DM", "duration": 6, "credit_history": "critical account/other credits existing",
+      "purpose": "domestic appliances", "amount": 1169, "savings": "unknown/no savings account",
+      "employment_duration": "... >= 7 years", "installment_rate": 4, "personal_status_sex": "male : single",
+      "other_debtors": "none", "present_residence": 4, "property": "real estate", "age": 67,
+      "other_installment_plans": "none", "housing": "own", "number_credits": 2,
+      "job": "skilled employee/official", "people_liable": 1, "telephone": "yes", "foreign_worker": "yes"
+    },
+    "example_output": {"prediction": 1, "proba": 0.785},
+    "example_source": "data.csv ligne 1, sortie obtenue en executant le projet (random_forest, seed 42)",
+    "schema_confidence": "high"
+  },
+
+  "resources": {
+    "gpu_required": "no",
+    "recommended_base_image": "python:3.12-slim",
+    "estimated_model_size_mb": 2,
+    "estimated_image_size_mb": 450
+  },
+
+  "existing_app": {
+    "has_api": false,
+    "framework": null,
+    "app_module": null,
+    "port": null,
+    "has_dockerfile": false,
+    "env_vars": [
+      {"name": "OUTPUT_DIR", "default": "output", "used_in": "main.py"}
+    ],
+    "external_services": []
+  },
+
+  "project": {
+    "root_folder_in_zip": "credit_risk/",
+    "file_tree": ["main.py", "predict.py", "preprocessing.py", "train.py", "data.csv", "requirements.txt", "mlops.yaml"],
+    "layout": "flat",
+    "ignorable_paths": [".git", "__pycache__/", "*.pyc", ".venv/", "venv/", "output/", "*.ipynb", ".env"],
+    "keep_for_build_only": ["data.csv", "train.py", "main.py", "mlops.yaml"],
+    "runtime_files": ["predict.py", "preprocessing.py", "output/model.joblib"]
+  },
+
+  "quality": {
+    "baseline_metrics": {"best_model": "random_forest", "roc_auc": 0.777, "accuracy": 0.715},
+    "min_threshold": {"metric": "roc_auc", "value": 0.70},
+    "source": "mlops.yaml + execution reelle"
+  },
+
+  "warnings": [
+    "Aucun modele pre-entraine dans le projet : il faut l'entrainer au build (multi-stage conseille) ou au demarrage.",
+    "main.py n'est PAS un serveur : c'est un script train+predict. Ne pas l'utiliser comme point d'entree du conteneur.",
+    "Le modele depend de la version exacte de scikit-learn : garder scikit-learn==1.8.0 identique entre entrainement et service.",
+    "Donnees sensibles (sexe, statut personnel, travailleur etranger) : risque de biais, a signaler a l'utilisateur."
+  ],
+
+  "unresolved": [
+    {"field": "io.class_labels", "question": "Confirmez-vous que prediction=1 signifie bon risque (credit accorde) et 0 mauvais risque ?"}
+  ]
+}

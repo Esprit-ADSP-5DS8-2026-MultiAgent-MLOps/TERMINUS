@@ -28,7 +28,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 | 1 | Ahmed | contrat v0.2, nœud `repair` réservé, superviseur Gemini par défaut, `check-agent` | fait |
 | 2 | Yacine | Agent 1 : adaptateur, détection de la cible corrigée | intégré, à valider avec Yacine |
 | 3 | Aziz | Agent 2 (MLflow) : adaptateur, registre, champion | intégré, à valider avec Aziz |
-| 4 | Syrine | Agent 3 (API, Docker) | à faire |
+| 4 | Syrine | Agent 3 (API, Docker) : modèle MLflow servi, conteneur déployé, champion | intégré, à valider avec Syrine |
 | 5 | Mohamed | Agent 4 sur le vrai `endpoint`, run complet | à faire |
 | 6 | Sarra | validateur v2, réparation, juge | à faire |
 | 7 | tout le groupe | démo complète, README, `main` | à faire |
@@ -133,6 +133,30 @@ Adaptateur : rapport v1.0 depuis les fichiers du contrat (`python` ← `project_
 `io.input_schema` ← `data_profile.columns`), build et tests Docker sur le modèle `model_uri`, puis
 `deployment_result.json` avec `model_source` et `endpoint` (l'API qui tourne) : c'est l'entrée de l'Agent 4.
 Vérification : `python -m orchestrator check-agent agent3 agent_api_docker.orchestrator_adapter:run`.
+
+Fait (branche `integ/agent3`) :
+- `agents/agent3/` : paquet `agent_api_docker` (inchangé), `fixes/`, ses projets `eval/projects/`, ses tests ;
+  `pyproject.toml` et `requirements.txt` sans les versions ML de l'image (elles viennent du rapport) ;
+- `orchestrator_adapter.py` :
+  1. modèle de l'Agent 2 chargé depuis MLflow (`model_uri`) et écrit en `model/model.joblib`, avec
+     `mlflow_predict.py` (rend les étiquettes d'origine) ; repli : modèle du projet entraîné au build ;
+  2. rapport v1.0 construit depuis le contrat et le CSV ; Python et librairies = celles qui ont entraîné le modèle ;
+  3. `run_pipeline` de l'agent tel quel : génération, validation, tests locaux, image et tests dans le conteneur ;
+  4. conteneur `mlops-<projet>` démarré sur `AGENT3_PORT` (8000) : `deployment_result.endpoint` ;
+  5. alias `champion` posé sur la version MLflow déployée (`promote()` de l'Agent 2).
+- sans Docker : API testée en local, `endpoint` vide, statut WARNING.
+
+À voir avec Syrine :
+- deux tests échouaient déjà sur sa branche (Syrine : à laisser tels quels) : `test_low_confidence_stops` (dossier `eval/expected_reports/`
+  absent) et `test_push_requires_approval` (`docker_push` a un argument `source_ref` en plus) ;
+- `api.py.j2` renvoie `prediction: int` : la régression n'est pas servie (l'adaptateur s'arrête avec la raison) ;
+- publication Docker Hub : `AGENT3_PUSH=1` + `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (et `DOCKER_IMAGE_NAMESPACE`)
+  dans `agents/agent3/.env` ; l'approbation est la gate `champion_replacement`. Dépôt public par défaut sur Docker Hub.
+  En ligne de commande interactive, comme le CLI de Syrine : destination affichée, choix du compte (Entrée = compte
+  du `.env`, sinon un autre compte et son token), confirmation du push.
+
+À voir avec Aziz : `executor.py` encode la cible (`LabelEncoder`) sans garder l'encodeur dans le modèle ; le modèle
+prédit l'indice de la classe. L'adaptateur de l'Agent 3 rétablit les étiquettes ; à corriger à la source.
 
 ### 5. Agent 4 (Mohamed) : déjà conforme (`check-agent agent4 monitoring_agent.pipeline:run`)
 

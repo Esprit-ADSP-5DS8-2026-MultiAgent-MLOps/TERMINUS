@@ -1,0 +1,237 @@
+{
+  "schema_version": "1.0",
+  "project_name": "diabetes-progression",
+  "analyzed_at": "2026-10-15T18:00:00Z",
+  "analysis_status": "complete",
+  "layout": {
+    "type": "src_layout",
+    "root": ".",
+    "has_package": true,
+    "has_src_dir": true,
+    "has_tests": true,
+    "has_notebooks": false
+  },
+  "summary": {
+    "total_files": 7,
+    "python_files": 4,
+    "total_size_kb": 4.1,
+    "largest_file": {
+      "path": "model/regressor.joblib",
+      "size_bytes": 1633
+    }
+  },
+  "files": [
+    {
+      "path": "model/features.json",
+      "kind": "config",
+      "role": "feature_order",
+      "size_bytes": 160,
+      "lines": 15,
+      "sha256_prefix": "656213504ada"
+    },
+    {
+      "path": "model/regressor.joblib",
+      "kind": "artifact",
+      "role": "trained_model",
+      "size_bytes": 1633,
+      "lines": null,
+      "sha256_prefix": null
+    },
+    {
+      "path": "requirements.txt",
+      "kind": "dependencies",
+      "role": "dependency_file",
+      "size_bytes": 61,
+      "lines": 4,
+      "sha256_prefix": "f9dfa2cbbebf"
+    },
+    {
+      "path": "scripts/retrain.py",
+      "kind": "python",
+      "role": "training_optional",
+      "size_bytes": 872,
+      "lines": 26,
+      "sha256_prefix": "30e38d748668"
+    },
+    {
+      "path": "src/dp_model/__init__.py",
+      "kind": "python",
+      "role": "package_marker",
+      "size_bytes": 0,
+      "lines": 0,
+      "sha256_prefix": "e3b0c44298fc"
+    },
+    {
+      "path": "src/dp_model/service.py",
+      "kind": "python",
+      "role": "inference",
+      "size_bytes": 823,
+      "lines": 25,
+      "sha256_prefix": "c1b896c7b8c7"
+    },
+    {
+      "path": "tests/test_service.py",
+      "kind": "python",
+      "role": "unit_test",
+      "size_bytes": 609,
+      "lines": 15,
+      "sha256_prefix": "90f68b9fe15d"
+    }
+  ],
+  "python_modules": {
+    "scripts/retrain.py": {
+      "functions": [
+        "main"
+      ],
+      "classes": [],
+      "has_main_guard": true,
+      "imports": {
+        "internal": [],
+        "external": [
+          "joblib",
+          "sklearn"
+        ],
+        "stdlib": [
+          "json",
+          "pathlib"
+        ]
+      }
+    },
+    "src/dp_model/__init__.py": {
+      "functions": [],
+      "classes": [],
+      "has_main_guard": false,
+      "imports": {
+        "internal": [],
+        "external": [],
+        "stdlib": []
+      }
+    },
+    "src/dp_model/service.py": {
+      "functions": [
+        "load_artifact",
+        "score"
+      ],
+      "classes": [],
+      "has_main_guard": false,
+      "imports": {
+        "internal": [],
+        "external": [
+          "joblib",
+          "pandas"
+        ],
+        "stdlib": [
+          "json",
+          "os",
+          "pathlib"
+        ]
+      }
+    },
+    "tests/test_service.py": {
+      "functions": [
+        "test_score_example"
+      ],
+      "classes": [],
+      "has_main_guard": false,
+      "imports": {
+        "internal": [
+          "src/dp_model/service.py"
+        ],
+        "external": [
+          "pytest"
+        ],
+        "stdlib": [
+          "pathlib",
+          "sys"
+        ]
+      }
+    }
+  },
+  "internal_dependency_graph": {
+    "scripts/retrain.py": [],
+    "src/dp_model/__init__.py": [],
+    "src/dp_model/service.py": [],
+    "tests/test_service.py": [
+      "src/dp_model/service.py"
+    ]
+  },
+  "entrypoints": {
+    "executable_scripts": [
+      "scripts/retrain.py"
+    ],
+    "training": {
+      "file": "scripts/retrain.py",
+      "function": "main",
+      "signature": "main()"
+    },
+    "inference": {
+      "file": "src/dp_model/service.py",
+      "function": "score",
+      "signature": "score(artifact, rows)"
+    },
+    "model_loader": {
+      "file": "src/dp_model/service.py",
+      "function": "load_artifact"
+    },
+    "web_server": null,
+    "pythonpath": [
+      "src"
+    ]
+  },
+  "artifacts": {
+    "present": [
+      {
+        "path": "model/regressor.joblib",
+        "format": "joblib"
+      },
+      {
+        "path": "model/features.json",
+        "format": "json"
+      }
+    ],
+    "produced_at_runtime": []
+  },
+  "data_files": [],
+  "config_files": [],
+  "docker_readiness": {
+    "has_dockerfile": false,
+    "has_dockerignore": false,
+    "has_compose": false,
+    "has_api": false,
+    "has_tests": true
+  },
+  "ignorable_paths": [
+    ".git",
+    "__pycache__/",
+    "*.pyc",
+    ".venv/",
+    "venv/",
+    "tests/",
+    "scripts/",
+    ".env"
+  ],
+  "files_needed_at_runtime": [
+    "src/dp_model/__init__.py",
+    "src/dp_model/service.py",
+    "model/regressor.joblib",
+    "model/features.json"
+  ],
+  "files_needed_only_at_build": [],
+  "issues": [
+    {
+      "severity": "medium",
+      "code": "NO_WEB_SERVER",
+      "message": "Aucune API : le projet expose une bibliotheque (load_artifact, score)."
+    },
+    {
+      "severity": "medium",
+      "code": "SRC_LAYOUT_PYTHONPATH",
+      "message": "Le code est sous src/ : le PYTHONPATH doit inclure src."
+    },
+    {
+      "severity": "low",
+      "code": "BINARY_MODEL_IN_REPO",
+      "message": "Modele binaire versionne : verifier la compatibilite de version de scikit-learn."
+    }
+  ]
+}
