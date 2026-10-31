@@ -14,6 +14,7 @@ from finetune.export import export, load_runs, split_of
 from finetune.faults import FAULTS, inject
 from finetune.filters import FilterConfig, changed_lines, evaluate, invented_paths
 from finetune.recorder import RecordingClient, rebuild_trajectory, redact, sanitize, secret_values
+from validator.sandbox import DockerSandbox
 
 
 def snapshot(d: Path) -> dict:
@@ -228,7 +229,10 @@ def test_full_chain_keeps_a_genuine_repair_and_exports_it(need_ml, tmp_path):
     stats, runs, cfg = run_collect(tmp_path, "unpinned_dep", fix_pins)
     assert stats["runs"] == 1 and stats["accepted"] == 1, runs[0]["rejected_by"]
     r = runs[0]
-    assert r["accepted"] and r["repair"]["files_changed"] == ["requirements.txt"] and r["revalidation"]["issue_checks"] == ["ENV.SANDBOX_ISOLATION"]
+    # env="current" : sans Docker, la revalidation tourne dans l'interpréteur du validateur (ENV.SANDBOX_ISOLATION) ;
+    # avec Docker (sandbox auto), le projet corrigé a son image et ce problème n'apparaît pas
+    isolation = [] if DockerSandbox.available() else ["ENV.SANDBOX_ISOLATION"]
+    assert r["accepted"] and r["repair"]["files_changed"] == ["requirements.txt"] and r["revalidation"]["issue_checks"] == isolation
     t = r["trajectory"]
     assert [m["role"] for m in t["messages"]][:2] == ["system", "user"] and t["messages"][-1]["tool_calls"][0]["function"]["name"] == "submit_repair" and t["tools"]
     assert "unpinned" not in t["messages"][1]["content"] and "Projet «" in t["messages"][1]["content"]        # le prompt ne révèle pas le défaut injecté
