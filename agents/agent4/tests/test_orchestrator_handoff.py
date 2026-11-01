@@ -50,3 +50,15 @@ def test_new_data_is_the_current_episode_even_without_input_drift(tmp_path):
     out = Supervisor.export_new_data(fake, str(tmp_path / "new.parquet"))
     assert asked == [(61, 70), (71, 80)]                      # seulement l'épisode 6-7
     assert list(pd.read_parquet(out).columns) == ["x", "target"]
+
+
+def test_concept_scenario_is_a_learnable_rule():
+    import random
+
+    from monitoring_agent.runtime.simulator import perturb
+
+    rng, med = random.Random(0), {"amount": 100.0}
+    high = [perturb({"amount": 150.0}, "concept", rng, ["amount"], [], 1.0, med)[1] for _ in range(50)]
+    low = [perturb({"amount": 50.0}, "concept", rng, ["amount"], [], 1.0, med)[1] for _ in range(50)]
+    assert all(high) and not any(low)                         # au-delà de la médiane, la cible s'inverse
+    assert perturb({"amount": 150.0}, "concept", rng, ["amount"], [], 0.0, med)[1] is False

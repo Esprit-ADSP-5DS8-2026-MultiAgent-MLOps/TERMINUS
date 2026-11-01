@@ -61,3 +61,13 @@ def test_only_a_deployed_run_can_be_monitored(tmp_path):
                      runs_dir=str(tmp_path))
     with pytest.raises(RuntimeError, match="DONE"):
         Run.load(s["run_id"], str(tmp_path)).monitor()
+
+
+def test_rejected_retraining_candidate_keeps_the_deployed_model():
+    from orchestrator.routing import after_agent2
+
+    failed_gate = {"status": "FAILED", "can_proceed": False, "outputs": {"mlflow_metadata": "m.json"}}
+    crashed = {"status": "FAILED", "can_proceed": False, "outputs": {}}
+    assert after_agent2({"results": {"agent2": failed_gate}, "retrain_count": 1}) == "end_champion_kept"
+    assert after_agent2({"results": {"agent2": failed_gate}, "retrain_count": 0}) == "end_failed"
+    assert after_agent2({"results": {"agent2": crashed}, "retrain_count": 1}) == "end_failed"

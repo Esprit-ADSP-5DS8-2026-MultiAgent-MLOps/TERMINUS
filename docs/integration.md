@@ -177,6 +177,12 @@ Fait (branche `integ/agent4-boucle`) : la boucle retour.
 - Agent 2 : lit les nouvelles données en parquet ; en réentraînement, le champion est jugé sur sa
   performance mesurée en production (`current_performance`), pas sur son ancien jeu de test.
 
+- un candidat refusé pendant un réentraînement (quality gate raté) termine en CHAMPION_KEPT, pas FAILED :
+  le modèle déployé continue de servir et `monitor` reste possible ;
+- simulateur : le scénario `concept` inverse la cible au-delà de la médiane de la feature numérique la plus
+  variée (règle apprenable). Avant : 35 % des labels inversés au hasard, du bruit qu'aucun réentraînement
+  ne rattrape (essai réel : candidat à 0,61, sous le seuil de 0,70).
+
 Démo : API déployée, `docker compose -f agents/agent4/infra/docker-compose.yml up -d`, gateway,
 `python -m monitoring_agent simulate <projet> --scenario concept`, puis `monitor <run_id>`.
 Après le redéploiement, relancer la gateway (elle garde l'ancienne référence en mémoire).
