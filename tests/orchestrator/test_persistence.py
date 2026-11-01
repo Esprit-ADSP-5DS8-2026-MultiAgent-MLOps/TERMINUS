@@ -76,6 +76,12 @@ def test_cli_no_wait_then_approve(tmp_path, capsys):
     assert main(["--runs-dir", runs, "approve", run.run_id]) == 2  # plus rien à approuver
 
 
+def test_cli_refuses_a_missing_project(tmp_path, capsys):
+    assert main(["--runs-dir", str(tmp_path), "run", str(tmp_path / "absent")]) == 2
+    assert "n'est pas un dossier" in capsys.readouterr().err
+    assert not list_runs(str(tmp_path))
+
+
 # --- choix de la base -------------------------------------------------------
 
 from orchestrator import checkpoint  # noqa: E402

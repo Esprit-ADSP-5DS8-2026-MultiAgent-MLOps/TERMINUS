@@ -5,7 +5,8 @@ Adaptateur de la chaîne Validator v2 -> Repair -> Judge (Sarra) pour le nœud �
 
 Quand le validateur v1 (barrière d'entrée du pipeline) bloque un projet, l'orchestrateur appelle run() :
 1. validator_agent (v2) diagnostique le projet : contrôles, problèmes classés, statut calculé par le moteur de politique ;
-2. repair_agent corrige une COPIE dans le workdir (le projet d'origine n'est jamais modifié), relance les tests ;
+2. repair_agent corrige une COPIE dans le workdir, sous le même nom de dossier (le projet d'origine n'est jamais
+   modifié), et relance les tests ;
 3. le Judge (modèle d'une autre famille) rend son verdict sur la réparation ;
 4. l'orchestrateur revalide la copie avec le v1 ; à la tentative suivante, le verdict REVISE du Judge est transmis
    au Repair (son mode « --attempt 2 --feedback »).
@@ -89,7 +90,8 @@ def run(inp: AgentInput) -> AgentResult:
             return _fail(started, [f"{summary} : {why}"], outputs)
 
         # 2. réparation d'une copie dans le workdir (attempt > 1 : avec le verdict REVISE précédent)
-        rr = run_repair(project, str(paths["validator_v2"]), str(workdir / "project"), build_client("repair"),
+        # la copie garde le nom du projet : Agent 1 en tire project_name (modèle MLflow, image Docker)
+        rr = run_repair(project, str(paths["validator_v2"]), str(workdir / project.name), build_client("repair"),
                         RepairConfig(env=env, sandbox=sandbox), attempt=attempt, judge_feedback=feedback)
         paths["repair_report"].write_text(rr.model_dump_json(indent=2), encoding="utf-8")
         outputs["repair_report"] = str(paths["repair_report"])

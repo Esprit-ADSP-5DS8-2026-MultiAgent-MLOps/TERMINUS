@@ -67,6 +67,7 @@ def test_accepted_repair_gives_a_copy_to_revalidate(tmp_path, scripted):
     rr = json.loads((tmp_path / "out" / "repair" / "repair_result.json").read_text())
     assert rr["judge"]["approved"] and rr["changes"][0]["finding_code"] == "IO.PATHS"
     fixed = Path(rr["repaired_project"])
+    assert fixed.name == PROJECT.name                         # project_name inchangé pour MLflow et Docker
     assert 'BACKUP = "data.csv"' in (fixed / "train.py").read_text()
     assert EV in (PROJECT / "train.py").read_text()          # le projet d'origine n'a pas bougé
 
