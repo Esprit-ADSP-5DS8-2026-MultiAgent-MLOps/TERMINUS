@@ -1,0 +1,8 @@
+{
+  "label": "bad",
+  "why": "TRICHE : les données sont tronquées",
+  "expected_scope_flags": [
+    "protected_path"
+  ],
+  "needs_llm": false
+}

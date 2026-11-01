@@ -1,0 +1,640 @@
+{
+  "$defs": {
+    "Failure": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/FailureKind"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message"
+      ],
+      "title": "Failure",
+      "type": "object"
+    },
+    "FailureKind": {
+      "enum": [
+        "LLM_ERROR",
+        "QUOTA",
+        "TIMEOUT",
+        "BUDGET_EXCEEDED",
+        "MAX_STEPS",
+        "NO_TOOL_USE",
+        "INVALID_SUBMISSION",
+        "INPUT_INVALID",
+        "INTERNAL"
+      ],
+      "title": "FailureKind",
+      "type": "string"
+    },
+    "LineageRef": {
+      "properties": {
+        "project_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Hash"
+        },
+        "report_id": {
+          "title": "Report Id",
+          "type": "string"
+        },
+        "report_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report Sha256"
+        },
+        "report_type": {
+          "enum": [
+            "validator",
+            "repair",
+            "judge"
+          ],
+          "title": "Report Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_type",
+        "report_id"
+      ],
+      "title": "LineageRef",
+      "type": "object"
+    },
+    "MetricsComparison": {
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Before"
+        },
+        "behavior_changed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Behavior Changed"
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "enum": [
+            "COMPARED",
+            "AFTER_ONLY",
+            "NOT_AVAILABLE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tolerance": {
+          "default": 0.0,
+          "title": "Tolerance",
+          "type": "number"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "MetricsComparison",
+      "type": "object"
+    },
+    "Modification": {
+      "properties": {
+        "action": {
+          "enum": [
+            "replace",
+            "create",
+            "rewrite",
+            "delete",
+            "revert"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "diff_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Diff Ref"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "issue_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issue Id"
+        },
+        "patch_id": {
+          "title": "Patch Id",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "risk": {
+          "default": "low",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "scientific"
+          ],
+          "title": "Risk",
+          "type": "string"
+        }
+      },
+      "required": [
+        "patch_id",
+        "file",
+        "action"
+      ],
+      "title": "Modification",
+      "type": "object"
+    },
+    "PatchRecord": {
+      "properties": {
+        "diff": {
+          "default": "",
+          "title": "Diff",
+          "type": "string"
+        },
+        "event": {
+          "default": "applied",
+          "enum": [
+            "applied",
+            "rolled_back"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "issue_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issue Id"
+        },
+        "patch_id": {
+          "title": "Patch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "patch_id",
+        "files"
+      ],
+      "title": "PatchRecord",
+      "type": "object"
+    },
+    "RunStatus": {
+      "enum": [
+        "OK",
+        "FAILED_CLOSED"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "ScopeFlag": {
+      "properties": {
+        "blocked": {
+          "default": false,
+          "title": "Blocked",
+          "type": "boolean"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "protected_path",
+            "scientific_change",
+            "hardcoded_metric",
+            "secret_added",
+            "source_modified"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "kind",
+        "detail"
+      ],
+      "title": "ScopeFlag",
+      "type": "object"
+    },
+    "TestResult": {
+      "properties": {
+        "command": {
+          "default": "",
+          "title": "Command",
+          "type": "string"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Code"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "output_excerpt": {
+          "default": "",
+          "title": "Output Excerpt",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "SKIPPED",
+            "ERROR"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "TestResult",
+      "type": "object"
+    },
+    "UnresolvedIssue": {
+      "properties": {
+        "issue_id": {
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "needs_human": {
+          "default": false,
+          "title": "Needs Human",
+          "type": "boolean"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_id",
+        "reason"
+      ],
+      "title": "UnresolvedIssue",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "attempt": {
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "created_at": {
+      "default": "",
+      "title": "Created At",
+      "type": "string"
+    },
+    "diff": {
+      "default": "",
+      "title": "Diff",
+      "type": "string"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Failure"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lineage": {
+      "items": {
+        "$ref": "#/$defs/LineageRef"
+      },
+      "title": "Lineage",
+      "type": "array"
+    },
+    "llm": {
+      "additionalProperties": true,
+      "title": "Llm",
+      "type": "object"
+    },
+    "meta_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Meta Path"
+    },
+    "metrics_comparison": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricsComparison"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "modifications": {
+      "items": {
+        "$ref": "#/$defs/Modification"
+      },
+      "title": "Modifications",
+      "type": "array"
+    },
+    "next_action": {
+      "default": "ESCALATE",
+      "enum": [
+        "JUDGE",
+        "ESCALATE",
+        "NONE"
+      ],
+      "title": "Next Action",
+      "type": "string"
+    },
+    "patches": {
+      "items": {
+        "$ref": "#/$defs/PatchRecord"
+      },
+      "title": "Patches",
+      "type": "array"
+    },
+    "project": {
+      "title": "Project",
+      "type": "string"
+    },
+    "removed_artifacts": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Removed Artifacts",
+      "type": "array"
+    },
+    "repair_id": {
+      "default": "",
+      "title": "Repair Id",
+      "type": "string"
+    },
+    "repaired_project_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Repaired Project Hash"
+    },
+    "report_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Sha256"
+    },
+    "report_type": {
+      "const": "repair",
+      "default": "repair",
+      "title": "Report Type",
+      "type": "string"
+    },
+    "requires_human_approval": {
+      "default": false,
+      "title": "Requires Human Approval",
+      "type": "boolean"
+    },
+    "requires_judge": {
+      "default": false,
+      "title": "Requires Judge",
+      "type": "boolean"
+    },
+    "requires_revalidation": {
+      "default": false,
+      "title": "Requires Revalidation",
+      "type": "boolean"
+    },
+    "run_status": {
+      "$ref": "#/$defs/RunStatus",
+      "default": "OK"
+    },
+    "schema_version": {
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_flags": {
+      "items": {
+        "$ref": "#/$defs/ScopeFlag"
+      },
+      "title": "Scope Flags",
+      "type": "array"
+    },
+    "source_project_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Project Hash"
+    },
+    "source_validator_status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Validator Status"
+    },
+    "status": {
+      "enum": [
+        "REPAIRED",
+        "PARTIAL",
+        "NOTHING_TO_DO",
+        "ESCALATED",
+        "FAILED"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    },
+    "tests": {
+      "items": {
+        "$ref": "#/$defs/TestResult"
+      },
+      "title": "Tests",
+      "type": "array"
+    },
+    "unresolved_issues": {
+      "items": {
+        "$ref": "#/$defs/UnresolvedIssue"
+      },
+      "title": "Unresolved Issues",
+      "type": "array"
+    },
+    "workspace_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Path"
+    }
+  },
+  "required": [
+    "project",
+    "status"
+  ],
+  "title": "RepairReport",
+  "type": "object"
+}

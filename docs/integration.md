@@ -30,7 +30,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 | 3 | Aziz | Agent 2 (MLflow) : adaptateur, registre, champion | intégré, à valider avec Aziz |
 | 4 | Syrine | Agent 3 (API, Docker) : modèle MLflow servi, conteneur déployé, champion | intégré, à valider avec Syrine |
 | 5 | Mohamed | Agent 4 sur le vrai `endpoint`, run complet | à faire |
-| 6 | Sarra | validateur v2, réparation, juge | à faire |
+| 6 | Sarra | validateur v2, réparation, juge : nœud `repair` | intégré, à valider avec Sarra |
 | 7 | tout le groupe | démo complète, README, `main` | à faire |
 
 ## Fiche de chaque meet
@@ -176,6 +176,29 @@ copie corrigée DANS `inp.workdir`, la fait juger, puis renvoie `repair_result` 
 `repaired_project` (le dossier). L'orchestrateur refuse une copie hors du workdir ou non approuvée par le juge.
 Vérification : `python -m orchestrator check-agent repair repair_agent.orchestrator_adapter:run`.
 
-Points à vérifier : son `validator/` diffère du v1 (413 lignes) alors que le README le dit inchangé ;
-`requires-python >= 3.12` alors que le code compile en 3.11 ; le `handoff` reste compatible avec le contrat
-(il réutilise le modèle `Handoff` du v1).
+Fait (branche `integ/validator-v2`) :
+- `agents/validator/` : ses paquets inchangés (`agentic_core`, `validator_agent`, `repair_agent` + `judge`,
+  `policy`, `finetune`), `eval/`, `docs/`, `data/pilot/`, ses tests (sans les copies `test_validator.py`,
+  `test_handoff.py` du v1) ; `pyproject.toml` en Python ≥ 3.11 et sans le paquet `validator` (celui de la racine) ;
+- `validator/` racine : sa version de `harness.py` et son `entrypoints.py` (entrées LEGACY, `_audit`, `_probe`) ;
+  notre `sandbox.py` garde la correction macOS (rlimit) ;
+- `repair_agent/orchestrator_adapter.py`, appelé quand le v1 bloque le projet (au plus 2 tentatives) :
+  1. validateur v2 : diagnostic ; il ne continue que si `next_action = REPAIR` (sinon WARNING avec la raison :
+     PROCEED = écart v1/v2 à examiner, STOP = rejet, HUMAN_REVIEW = décision humaine) ;
+  2. Repair sur une copie `runs/<id>/repair/attempt_<n>/project` (le projet d'origine n'est jamais touché) ;
+     à la tentative 2, le verdict REVISE du Judge lui est transmis ;
+  3. Judge : la copie n'est retenue que sur ACCEPT et sans `requires_human_approval` ;
+  4. l'orchestrateur revalide la copie avec le v1 puis continue (Agent 1...).
+  Sorties : `validator_v2.json`, `repair.json`, `judge.json` (rapports scellés), `repair.diff`,
+  `repair_result.json`, `repaired_project`.
+- `common/envscope.py` : le `.env` d'un agent n'est appliqué que pendant son appel (Sarra et Yacine chargeaient
+  leur `GROQ_API_KEY` dans tout le processus) ;
+- `agentic_core/env_check.py` : liste des paquets via `importlib.metadata` quand le venv n'a pas `pip` (uv) ;
+- `check-agent` : un agent qui s'arrête proprement (WARNING, `can_proceed = false`) n'a pas à fournir ses sorties.
+
+À voir avec Sarra :
+- son README dit `validator/` inchangé, mais `harness.py` a changé et `entrypoints.py` est nouveau : repris tels quels ;
+- `requires-python >= 3.12` passé à 3.11 (environnement commun) : tout passe en 3.11 ;
+- `agentic_core/__init__.py` charge aussi le `.env` du dossier courant : sans effet dans le pipeline (envscope) ;
+- `REPAIR_ENV=current` ajoute un problème `ENV.SANDBOX_ISOLATION` que le Judge sanctionne (REVISE) : garder `venv` ;
+- modèles par défaut (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b`) : à confirmer sur son compte Groq et son quota.

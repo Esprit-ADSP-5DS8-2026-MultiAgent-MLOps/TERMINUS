@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic-mlops-repair"
+version = "3.0.0"
+description = "Agentic MLOps : Validator (+ moteur de politique), Repair et Judge pilotés par LLM, validateur déterministe conservé comme baseline"
+readme = "README.md"
+requires-python = ">=3.11"   # testé en 3.11 (370 tests) ; validator/ (v1) vient de la racine du dépôt
+dependencies = ["pydantic>=2", "pandas>=2", "pyyaml", "packaging", "requests"]
+
+[project.optional-dependencies]
+dev = ["pytest", "bandit"]
+
+[tool.setuptools]
+# liste explicite : `eval` et `tests` ne sont pas des paquets à installer
+packages = ["agentic_core", "policy", "validator_agent", "repair_agent", "agentic_core.orchestrator", "repair_agent.judge", "finetune"]
+
+[tool.setuptools.package-data]
+policy = ["contracts/*.yaml", "*.yaml"]
+validator_agent = ["prompts/*.md"]
+repair_agent = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: exécute réellement le projet dans un sandbox (réseau requis pour construire le venv) ; activer avec CV_RUN_SLOW=1"]

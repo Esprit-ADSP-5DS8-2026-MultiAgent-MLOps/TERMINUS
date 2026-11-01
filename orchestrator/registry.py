@@ -17,7 +17,9 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import sys
 from collections.abc import Callable
+from pathlib import Path
 
 from .stubs.agents import (
     agent1_stub,
@@ -47,11 +49,17 @@ REAL: dict[str, str] = {
     "propose_manifest": "agents.agent1.orchestrator_adapter:propose_manifest",
     "agent2": "mlflow_agent.orchestrator_adapter:run",               # agents/agent2 (MLflow)
     "agent3": "agent_api_docker.orchestrator_adapter:run",           # agents/agent3 (API + Docker)
-    # "repair": "repair_agent.orchestrator_adapter:run",             # étape 6 (Sarra)
+    "repair": "repair_agent.orchestrator_adapter:run",               # agents/validator (Validator v2, Repair, Judge)
 }
 
 
+REPO = Path(__file__).resolve().parents[1]
+
+
 def _load(path: str) -> Callable:
+    # « agents.agent1 » se trouve depuis la racine du dépôt, même si la commande est lancée d'un sous-dossier
+    if str(REPO) not in sys.path:
+        sys.path.append(str(REPO))
     module, _, name = path.partition(":")
     return getattr(importlib.import_module(module), name)
 

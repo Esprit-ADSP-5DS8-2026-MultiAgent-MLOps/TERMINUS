@@ -88,6 +88,9 @@ def print_run(run: Run) -> None:
 
 
 def cmd_run(args) -> Run:
+    if not Path(args.project_dir).is_dir():
+        raise RuntimeError(f"{args.project_dir} n'est pas un dossier (chemin relatif au dossier courant : "
+                           f"{Path.cwd()})")
     from .graph import AGENT_ORIGIN
     print(f"Pipeline sur {args.project_dir}… (le validateur peut prendre jusqu'à une minute)")
     print("Agents : " + " · ".join(f"{name} {origin}" for name, origin in AGENT_ORIGIN.items()

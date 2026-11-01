@@ -1,0 +1,12 @@
+project:
+  name: nlp-tfidf
+  task: classification
+data:
+  path: data.csv
+  target: label
+evaluation:
+  primary_metric: roc_auc
+  min_threshold: 0.6
+entrypoints:
+  train: train.py
+  predict: predict.py

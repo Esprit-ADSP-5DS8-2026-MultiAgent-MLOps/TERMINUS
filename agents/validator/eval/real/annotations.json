@@ -1,0 +1,72 @@
+{
+  "_comment": "Jugement HUMAIN, indépendant du moteur de politique. human_verdict : ACCEPTABLE (un relecteur l'admettrait tel quel, donc le rejeter = FAUX REJET) | NOT_ACCEPTABLE (défaut réel) | REVIEW (ambigu : une revue humaine est la bonne issue). acceptable_statuses : statuts du validateur compatibles avec ce jugement. expected_fail_checks : contrôles qui DOIVENT échouer. target_after : statut visé une fois une étape de la feuille de route livrée. Pour ajouter un VRAI dépôt : le cloner dans eval/real/repos/<nom> et ajouter une entrée ici (même format).",
+  "src_layout_manifest": {
+    "human_verdict": "ACCEPTABLE",
+    "acceptable_statuses": [
+      "ACCEPTED",
+      "NEEDS_REVIEW"
+    ],
+    "expected_fail_checks": [],
+    "rationale": "Layout src/, fit() déclaré dans entrypoints, pas de main.py, métriques calculées sur un holdout. Rien à reprocher.",
+    "source": "fixture écrite à la main"
+  },
+  "src_layout_no_manifest": {
+    "human_verdict": "ACCEPTABLE",
+    "acceptable_statuses": [
+      "ACCEPTED"
+    ],
+    "expected_fail_checks": [],
+    "rationale": "Même code, sans mlops.yaml. Un humain déduit data/credit.csv, la cible `default` et la métrique en 30 secondes. Sans spec, NEEDS_REVIEW est tolérable ; REPAIR_REQUIRED/REJECTED est un faux rejet. [Étape 2 livrée : ACCEPTED exigé, avec avertissement STRUCT.MANIFEST (spec déduite et vérifiée).]",
+    "source": "fixture écrite à la main"
+  },
+  "flat_custom_names": {
+    "human_verdict": "ACCEPTABLE",
+    "acceptable_statuses": [
+      "ACCEPTED",
+      "NEEDS_REVIEW"
+    ],
+    "expected_fail_checks": [],
+    "rationale": "Modules à la racine nommés trainer.py / serving.py, fonction fit(), entrypoints déclarés `trainer:fit` et `serving`.",
+    "source": "fixture écrite à la main"
+  },
+  "notebook_only": {
+    "human_verdict": "NOT_ACCEPTABLE",
+    "acceptable_statuses": [
+      "REPAIR_REQUIRED",
+      "NEEDS_REVIEW"
+    ],
+    "expected_fail_checks": [
+      "STRUCT.REQUIRED_FILES"
+    ],
+    "known_gaps": {
+      "STRUCT.MANIFEST": "spec non déductible avec certitude -> revue humaine (comportement voulu)"
+    },
+    "rationale": "Seulement un notebook : aucune fonction d'entraînement ni de prédiction appelable. Doit être converti en modules (réparation). Ne doit JAMAIS être accepté.",
+    "source": "fixture écrite à la main"
+  },
+  "src_layout_defects": {
+    "human_verdict": "NOT_ACCEPTABLE",
+    "acceptable_statuses": [
+      "REPAIR_REQUIRED",
+      "REJECTED"
+    ],
+    "expected_fail_checks": [
+      "IO.PATHS",
+      "ML.METRICS_GENUINE"
+    ],
+    "rationale": "Layout src/ correct, mais chemin absolu /home/alice/reports/... en dur et métriques écrites à la main (0.97 / 0.95). Les défauts doivent être trouvés AUSSI hors d'un train.py racine.",
+    "source": "fixture écrite à la main"
+  },
+  "ambiguous_trainers": {
+    "human_verdict": "REVIEW",
+    "acceptable_statuses": [
+      "NEEDS_REVIEW"
+    ],
+    "expected_fail_checks": [],
+    "known_gaps": {
+      "STRUCT.MANIFEST": "spec non déductible avec certitude -> revue humaine (comportement voulu)"
+    },
+    "rationale": "Deux fonctions d'entraînement équivalentes (run_a.main, run_b.main) et aucun manifeste : on ne peut pas deviner laquelle est LA référence. Revue humaine.",
+    "source": "fixture écrite à la main"
+  }
+}

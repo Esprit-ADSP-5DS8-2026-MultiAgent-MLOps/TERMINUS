@@ -39,3 +39,9 @@ agents/agent3/workspaces/
 # Modèles fine-tunés (fusionnés, GGUF) : hébergés sur Hugging Face, jamais dans git
 *.gguf
 *.safetensors
+
+# Validateur v2 / Repair (Sarra) : sorties d'évaluation et dossiers de travail
+agents/validator/out/
+agents/validator/tmp/
+agents/validator/.cache/
+agents/validator/results_*.json

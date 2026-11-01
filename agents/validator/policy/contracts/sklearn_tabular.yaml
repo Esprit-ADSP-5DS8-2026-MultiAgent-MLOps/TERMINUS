@@ -1,0 +1,66 @@
+# Profil « scikit-learn tabulaire » : l'ancien contrat C1–C12 devient UN profil parmi d'autres.
+id: sklearn-tabular
+version: "2.0"
+description: Projet d'entraînement scikit-learn sur données tabulaires (CSV), avec train/predict et manifeste.
+harness: sklearn_tabular
+execution_required: true
+required_files: [main.py, train.py, predict.py, requirements.txt]
+frameworks_in_scope: [scikit-learn, pandas, numpy, scipy, joblib, xgboost, lightgbm]
+frameworks_out_of_scope: [torch, tensorflow, keras, jax, transformers, mxnet]
+checks:
+  # ---------------------------------------------------------------- niveau 1 : structure
+  - {id: STRUCT.REQUIRED_FILES, level: structure, title: Fichiers requis, category: structure, nature: mechanical,
+     description: "requirements.txt et les fichiers des entrypoints (train, load_model, predict) présents : lus dans `entrypoints` du manifeste, sinon trouvés par AST, sinon train.py/predict.py. main.py facultatif (preuve d'absence : « absent:<fichier> »)."}
+  - {id: STRUCT.LIMITS, level: structure, title: Limites de taille, category: structure, on_fail: REJECTED,
+     description: "Nombre et taille des fichiers raisonnables (list_files) ; un dépôt gonflé est rejeté, pas réparé."}
+  - {id: STRUCT.MANIFEST, level: structure, title: Manifeste de projet, category: structure, nature: configuration, on_fail: NEEDS_REVIEW,
+     description: "Un manifeste (mlops.yaml/yml) ou, à défaut, des informations déduisibles : tâche, cible, métrique principale, chemin des données. Absent = revue humaine."}
+  # ---------------------------------------------------------------- niveau 2 : code et environnement
+  - {id: CODE.SYNTAX, level: code_env, title: Syntaxe Python valide, category: code, nature: mechanical,
+     description: "Tous les .py (et cellules de code des notebooks) se parsent (analyze_code.syntax_errors vide)."}
+  - {id: ENV.DEPENDENCIES_PINNED, level: code_env, title: Dépendances épinglées, category: dependencies, nature: configuration,
+     description: "requirements.txt : chaque paquet épinglé avec == (read_dependency_config)."}
+  - {id: ENV.DEPENDENCIES_DECLARED, level: code_env, title: Imports déclarés, category: dependencies, nature: configuration, requirement: recommended,
+     description: "Chaque import tiers (analyze_code.third_party_imports) figure dans les dépendances déclarées."}
+  - id: FRAMEWORK.SCOPE
+    level: code_env
+    title: Framework dans le périmètre
+    category: ml_contract
+    on_fail: REJECTED
+    nature: methodological
+    description: "Les frameworks ML utilisés sont dans le périmètre du profil. torch/tensorflow/… = hors périmètre → rejet (non réparable)."
+  # ---------------------------------------------------------------- niveau 3 : contrat ML
+  - {id: ML.TRAIN_INTERFACE, depends_on: [STRUCT.REQUIRED_FILES, CODE.SYNTAX], level: ml_contract, title: Interface train(), category: ml_contract, nature: mechanical,
+     description: "train.py expose train(data_path, output_dir) -> dict de métriques numériques et écrit model.joblib dans output_dir (analyze_code.functions, harnais)."}
+  - {id: ML.PREDICT_INTERFACE, depends_on: [STRUCT.REQUIRED_FILES, CODE.SYNTAX], level: ml_contract, title: Interface predict, category: ml_contract, nature: mechanical,
+     description: "predict.py expose load_model(model_path) et predict(model, data) (DataFrame et dict) renvoyant une liste JSON-sérialisable."}
+  - {id: ML.METRICS_GENUINE, level: ml_contract, title: Métriques réellement calculées, category: ml_contract, nature: methodological,
+     description: "Les métriques renvoyées par train() sont calculées sur des données de validation, pas écrites en dur (lis train.py)."}
+  - id: ML.NON_INTERACTIVE
+    level: ml_contract
+    title: Exécution non interactive
+    category: execution
+    description: "Aucun input()/lecture de stdin ; main.py s'exécute sans intervention (analyze_code.interactive_input)."
+  - {id: DATA.USABLE, level: ml_contract, title: Données exploitables, category: data, nature: configuration,
+     description: "Le fichier de données existe, se lit, contient la colonne cible, n'est pas vide (inspect_data)."}
+  - {id: ML.REPRODUCIBILITY, level: ml_contract, title: Reproductibilité, category: reproducibility, requirement: recommended, severity: MINOR,
+     description: "Graines fixées (random_state) ; deux entraînements donnent les mêmes métriques (harnais : deterministic)."}
+  # ---------------------------------------------------------------- niveau 4 : sécurité et exécution
+  - {id: SEC.DANGEROUS_CALLS, level: security_exec, title: Appels dangereux, category: security, severity: CRITICAL, on_fail: REJECTED,
+     description: "Pas d'eval/exec/os.system/subprocess/pickle non maîtrisé (analyze_code.dangerous_calls). Un projet dangereux est REJETÉ, jamais exécuté."}
+  - {id: SEC.SECRETS, level: security_exec, title: Secrets en clair, category: security, severity: CRITICAL, on_fail: REJECTED,
+     description: "Aucune clé/jeton/mot de passe dans le code ou la config (analyze_code.secrets, sensitive_files)."}
+  - {id: SEC.NETWORK, level: security_exec, title: Accès réseau, category: security, severity: CRITICAL, on_fail: REJECTED,
+     description: "Aucun import ou URL réseau (requests, socket, urllib…) : analyze_code.network_imports / network_urls."}
+  - {id: SEC.COMMITTED_ARTIFACTS, level: security_exec, title: Artefacts binaires versionnés, category: security, requirement: recommended, severity: MINOR,
+     description: "Pas de .joblib/.pkl/.h5 dans le dépôt (list_files.binary_artifact) : ils ne sont jamais chargés."}
+  - {id: IO.PATHS, level: security_exec, title: Chemins et écritures, category: code, nature: mechanical,
+     description: "Pas de chemin absolu en dur ; écritures uniquement dans output_dir (analyze_code.absolute_paths, harnais files_written_outside_output_dir)."}
+  - id: EXEC.RUN
+    depends_on: [STRUCT.REQUIRED_FILES, CODE.SYNTAX, ML.NON_INTERACTIVE]
+    level: security_exec
+    title: Exécution réussie dans le sandbox
+    category: execution
+    description: "run_in_sandbox(harness) : executed_ok=true. Interdit de conclure PASS sans l'avoir exécuté (jamais d'exécution si un contrôle SEC.* est FAIL)."
+  - {id: ENV.SANDBOX_ISOLATION, level: security_exec, title: Environnement isolé dans le sandbox, category: execution, nature: methodological, requirement: mandatory, on_fail: NEEDS_REVIEW,
+     description: "Le projet s'exécute dans SON venv dédié (ou un interpréteur fourni conforme à ses dépendances épinglées), jamais dans l'interpréteur du validateur. Calculé par Python (rapport `environment`), jamais par le LLM."}

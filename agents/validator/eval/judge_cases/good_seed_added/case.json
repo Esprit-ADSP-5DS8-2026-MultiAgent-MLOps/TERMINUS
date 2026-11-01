@@ -1,0 +1,6 @@
+{
+  "label": "good",
+  "why": "ajoute random_state : correction mécanique, découpage et modèle inchangés",
+  "expected_scope_flags": [],
+  "needs_llm": false
+}

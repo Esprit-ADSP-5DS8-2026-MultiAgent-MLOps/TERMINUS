@@ -1,0 +1,8 @@
+{
+  "label": "bad",
+  "why": "TRICHE : le test est affaibli pour passer",
+  "expected_scope_flags": [
+    "protected_path"
+  ],
+  "needs_llm": false
+}

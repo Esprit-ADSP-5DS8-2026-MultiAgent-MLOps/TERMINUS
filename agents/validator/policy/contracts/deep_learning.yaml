@@ -1,0 +1,47 @@
+# Profil « deep learning » (train() seul, torch/tensorflow/keras autorisés) — dérivé de training_only
+# Profil « entraînement seul » : prouve qu'on change de profil en modifiant UNE DONNÉE (ce fichier), ni le code ni le moteur ni les tests.
+# Différences avec sklearn-tabular : pas de predict.py/main.py/manifeste exigés ; seul train() est exécuté.
+id: deep-learning
+version: "1.0"
+sandbox_memory_mb: 16384
+description: Projet qui n'expose qu'un point d'entraînement train(data_path, output_dir) ; aucune interface de prédiction exigée.
+harness: train_only
+execution_required: true
+required_files: [train.py, requirements.txt]
+frameworks_in_scope: [scikit-learn, pandas, numpy, scipy, joblib, xgboost, lightgbm, torch, torchvision, torchaudio, tensorflow, keras]
+frameworks_out_of_scope: [jax, mxnet]
+checks:
+  - {id: STRUCT.REQUIRED_FILES, level: structure, title: Fichiers requis, category: structure,
+     description: "train.py et requirements.txt présents à la racine (aucun main.py ni predict.py exigé)."}
+  - {id: STRUCT.LIMITS, level: structure, title: Limites de taille, category: structure, on_fail: REJECTED,
+     description: "Nombre et taille des fichiers raisonnables (list_files)."}
+  - {id: CODE.SYNTAX, level: code_env, title: Syntaxe Python valide, category: code,
+     description: "Tous les .py se parsent (analyze_code.syntax_errors vide)."}
+  - {id: ENV.DEPENDENCIES_PINNED, level: code_env, title: Dépendances épinglées, category: dependencies, nature: configuration,
+     description: "requirements.txt : chaque paquet épinglé avec == (read_dependency_config)."}
+  - {id: FRAMEWORK.SCOPE, level: code_env, title: Framework dans le périmètre, category: ml_contract, on_fail: REJECTED, nature: methodological,
+     description: "Les frameworks ML utilisés sont dans le périmètre du profil."}
+  - {id: ML.TRAIN_INTERFACE, depends_on: [STRUCT.REQUIRED_FILES, CODE.SYNTAX], level: ml_contract, title: Interface train(), category: ml_contract,
+     description: "train.py expose train(data_path, output_dir) -> dict de métriques numériques."}
+  - {id: ML.METRICS_GENUINE, level: ml_contract, title: Métriques réellement calculées, category: ml_contract, nature: methodological,
+     description: "Les métriques renvoyées par train() sont calculées, pas écrites en dur."}
+  - {id: DATA.USABLE, level: ml_contract, title: Données exploitables, category: data, nature: configuration,
+     description: "Le fichier de données existe, se lit, contient la colonne cible (inspect_data)."}
+  - {id: ML.REPRODUCIBILITY, level: ml_contract, title: Reproductibilité, category: reproducibility, requirement: recommended, severity: MINOR,
+     description: "Graines fixées ; deux entraînements donnent les mêmes métriques."}
+  - {id: SEC.DANGEROUS_CALLS, level: security_exec, title: Appels dangereux, category: security, severity: CRITICAL, on_fail: REJECTED,
+     description: "Pas d'eval/exec/os.system/subprocess (analyze_code.dangerous_calls)."}
+  - {id: SEC.SECRETS, level: security_exec, title: Secrets en clair, category: security, severity: CRITICAL, on_fail: REJECTED,
+     description: "Aucun secret dans le code ou la config."}
+  - {id: SEC.NETWORK, level: security_exec, title: Accès réseau, category: security, severity: CRITICAL, on_fail: REJECTED,
+     description: "Aucun import ou URL réseau."}
+  - {id: IO.PATHS, level: security_exec, title: Chemins et écritures, category: code,
+     description: "Pas de chemin absolu en dur ; écritures uniquement dans output_dir."}
+  - id: EXEC.RUN
+    depends_on: [STRUCT.REQUIRED_FILES, CODE.SYNTAX, ML.NON_INTERACTIVE]
+    level: security_exec
+    title: Exécution réussie dans le sandbox
+    category: execution
+    description: "run_in_sandbox(harness) : executed_ok=true (train() exécuté deux fois)."
+  - {id: ENV.SANDBOX_ISOLATION, level: security_exec, title: Environnement isolé dans le sandbox, category: execution, nature: methodological, requirement: mandatory, on_fail: NEEDS_REVIEW,
+     description: "Le projet s'exécute dans SON venv dédié (ou un interpréteur fourni conforme à ses dépendances épinglées), jamais dans l'interpréteur du validateur. Calculé par Python (rapport `environment`), jamais par le LLM."}
