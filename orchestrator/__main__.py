@@ -8,6 +8,7 @@ Ligne de commande de l'orchestrateur.
     python -m orchestrator approve <run_id> [-m "commentaire"]
     python -m orchestrator reject  <run_id> [-m "commentaire"]
     python -m orchestrator resume  <run_id>                         # après un plantage
+    python -m orchestrator monitor <run_id>                         # Agent 4 : réentraîner si demandé
     python -m orchestrator export-decisions -o decisions.jsonl      # décisions du superviseur
     python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run  # avant intégration
 
@@ -119,6 +120,19 @@ def cmd_run(args) -> Run:
     return run
 
 
+def cmd_monitor(args) -> Run:
+    """Relance l'Agent 4 sur un run déployé ; une demande de réentraînement repasse par les gates."""
+    run = Run.load(args.run_id, args.runs_dir)
+    print(f"Monitoring du run {run.run_id} : l'Agent 4 relit la production…")
+    if not args.no_wait and sys.stdin.isatty():
+        os.environ["ORCH_INTERACTIVE"] = "1"
+    run.monitor()
+    if not args.no_wait:
+        while not run.finished:
+            run.answer(ask_human(run.question))
+    return run
+
+
 def cmd_status(args) -> None:
     if args.run_id:
         print_run(Run.load(args.run_id, args.runs_dir))
@@ -196,6 +210,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("resume", help="reprendre un run arrêté par un plantage")
     p.add_argument("run_id")
 
+    p = sub.add_parser("monitor", help="relancer l'Agent 4 sur un run déployé (réentraînement si demandé)")
+    p.add_argument("run_id")
+    p.add_argument("--no-wait", action="store_true", help="ne pas poser la question : s'arrêter à la gate")
+
     p = sub.add_parser("export-decisions", help="exporter les décisions du superviseur (JSONL)")
     p.add_argument("-o", "--output", default="decisions.jsonl", help="fichier de sortie")
     p.add_argument("--supervisor", choices=["rules", "gemini"], default=None,
@@ -219,6 +237,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.cmd == "run":
             run = cmd_run(args)
+        elif args.cmd == "monitor":
+            run = cmd_monitor(args)
         elif args.cmd in ("approve", "reject"):
             run = cmd_decide(args, args.cmd)
         else:

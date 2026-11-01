@@ -109,8 +109,24 @@ def _dataset(inp: AgentInput, spec, warnings: list[str]) -> Path:
     # L'agent n'accepte que des chemins sous un dossier de base : on lui donne une copie dans le workdir.
     dest = Path(inp.workdir) / "data" / "train.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dest)
+    if src.suffix.lower() in {".parquet", ".pq"}:   # nouvelles données de l'Agent 4
+        pd.read_parquet(src).to_csv(dest, index=False)
+    else:
+        shutil.copyfile(src, dest)
     return dest
+
+
+def _production_score(inp: AgentInput, metric: str, warnings: list[str]) -> float | None:
+    """Réentraînement : le champion se mesure sur la période qui a déclenché la demande (labels de production),
+    pas sur son ancien jeu de test : c'est sur ces données que le candidat doit faire mieux."""
+    if "retraining_request" not in inp.inputs:
+        return None
+    perf = read_output(inp, "retraining_request").current_performance or {}
+    if metric in perf:
+        warnings.append(f"réentraînement : champion comparé à sa performance mesurée en production "
+                        f"({metric} {perf[metric]:.4f})")
+        return float(perf[metric])
+    return None
 
 
 def _report(spec, df: pd.DataFrame) -> AnalysisReport:
@@ -176,6 +192,9 @@ def run(inp: AgentInput) -> AgentResult:
     name = spec.project_name
     _ensure_experiment(client, name)
     champion = _champion_score(client, name, spec.primary_metric)
+    production = _production_score(inp, spec.primary_metric, warnings)
+    if production is not None and champion is not None:
+        champion = production
     result = run_experiment(report, plan, paths, tracking_uri=tracking_uri(), experiment_name=name,
                             registered_model_name=name, warnings_in=warnings)
     outputs = {"experiment_result": str(workdir / "experiment_result.json"),
@@ -197,6 +216,11 @@ def run(inp: AgentInput) -> AgentResult:
         reasons.append(f"ne bat pas le champion actuel ({metric} {test:.4f} contre {champion:.4f})")
     passed = gate_ok and not champion_kept
 
+    # Données d'entraînement de CETTE version, gardées à part (data/train.csv est réécrit au réentraînement suivant) :
+    # l'Agent 4 en fait la référence du monitoring quand cette version est déployée.
+    training = data.with_name(f"train_v{result.model_version}.csv") if result.model_version else data
+    if training != data:
+        shutil.copyfile(data, training)
     if result.model_version and passed:  # une version refusée reste dans le registre, sans alias
         client.set_registered_model_alias(name, "candidate", result.model_version)
     diff = workdir / "instrumentation.md"
@@ -210,6 +234,7 @@ def run(inp: AgentInput) -> AgentResult:
         metrics={f"train_{metric}": result.train_score, f"validation_{metric}": result.validation_score,
                  f"test_{metric}": test, f"baseline_test_{metric}": base},
         params={"model": result.best_model_name or "", "plan_source": source,
+                "training_data": str(training.resolve()),   # référence du monitoring (Agent 4)
                 **{k: str(v) for k, v in result.best_params.items()}},
         instrumentation_diff_path=str(diff),
         quality_gate=QualityGate(primary_metric=metric, value=test, min_threshold=spec.min_threshold,

@@ -8,8 +8,9 @@ Scénarios (après une phase normale de `warmup` requêtes) :
                Le label reste celui de la ligne d'origine : pour le modèle, la relation
                features -> cible change aussi. La perf mesurée chute, l'estimée beaucoup moins.
 - quality    : catégories inconnues + valeurs aberrantes        -> problème de qualité, pas de « vrai » drift
-- concept    : features inchangées, mais la relation features -> cible change
-               (labels inversés sur une partie des cas)        -> aucun drift, seule la perf mesurée baisse
+- concept    : features inchangées, mais la relation features -> cible change : au-delà de la médiane
+               de la feature numérique la plus variée, la cible s'inverse -> aucun drift, seule la perf
+               mesurée baisse. La nouvelle relation s'apprend : un réentraînement peut la rattraper.
 
 Le scénario `concept` montre la limite de l'estimation sans labels (CBPE) : il faut la vérité terrain.
 """
@@ -46,7 +47,7 @@ def _numeric(df: pd.DataFrame) -> list[str]:
 
 
 def perturb(row: dict, scenario: str, rng: random.Random, numeric: list[str], categorical: list[str],
-            intensity: float) -> tuple[dict, bool]:
+            intensity: float, medians: dict[str, float] | None = None) -> tuple[dict, bool]:
     """Applique le scénario à une ligne. Renvoie (ligne, inverser_le_label)."""
     row = dict(row)
     if scenario == "covariate":
@@ -63,7 +64,11 @@ def perturb(row: dict, scenario: str, rng: random.Random, numeric: list[str], ca
                 row[col] = type(row[col])(row[col] * 100)
         return row, False
     if scenario == "concept":
-        return row, rng.random() < 0.35 * intensity
+        col = numeric[0] if numeric else None
+        if col and medians and col in medians and row.get(col) is not None:
+            # règle apprenable : au-delà de la médiane de `col`, la cible s'inverse
+            return row, row[col] > medians[col] and rng.random() < intensity
+        return row, rng.random() < 0.35 * intensity               # sans médiane : bruit sur les labels
     return row, False
 
 
@@ -80,6 +85,7 @@ async def simulate(gateway_url: str, data: pd.DataFrame, target: str, scenario: 
     features = data.drop(columns=[target])
     numeric = _numeric(features)
     categorical = [c for c in features.columns if c not in numeric]
+    medians = {c: float(features[c].median()) for c in numeric[:1]}
     rows = features.to_dict(orient="records")
     labels = data[target].tolist()
 
@@ -95,7 +101,7 @@ async def simulate(gateway_url: str, data: pd.DataFrame, target: str, scenario: 
             flip = False
             if i >= warmup and scenario != "normal":
                 intensity = min(1.0, (i - warmup + 1) / max(ramp, 1))
-                row, flip = perturb(row, scenario, rng, numeric, categorical, intensity)
+                row, flip = perturb(row, scenario, rng, numeric, categorical, intensity, medians)
             row = {c: (None if isinstance(v, float) and np.isnan(v) else v) for c, v in row.items()}
             rid = uuid.uuid4().hex
             async with sem:

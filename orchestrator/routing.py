@@ -56,6 +56,9 @@ def after_agent2(state: PipelineState) -> str:
         return "gate_champion"
     if r["status"] == "WARNING" and not r["can_proceed"]:
         return "end_champion_kept"  # le candidat ne bat pas le champion : il reste en production
+    if state.get("retrain_count", 0) and not r["can_proceed"] and "mlflow_metadata" in r["outputs"]:
+        # réentraînement : le candidat rate le quality gate ; le modèle déployé continue de servir
+        return "end_champion_kept"
     return "agent3" if r["can_proceed"] else "end_failed"
 
 

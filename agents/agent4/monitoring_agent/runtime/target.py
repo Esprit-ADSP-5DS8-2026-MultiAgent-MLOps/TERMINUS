@@ -114,9 +114,12 @@ async def score_through_api(rows: list[dict], upstream_url: str, pred_field: str
 
 
 def build_target(project_dir: str | Path, upstream_url: str, name: str | None = None,
-                 window_size: int = 200, data_file: str = "data.csv") -> tuple[MonitoringTarget, dict]:
+                 window_size: int = 200, data_file: str = "data.csv",
+                 reference_data: str | Path | None = None) -> tuple[MonitoringTarget, dict]:
+    """`reference_data` : les données d'entraînement du modèle servi (après un réentraînement, ce ne sont plus
+    celles du projet). Par défaut : `data_file` du projet."""
     project_dir = Path(project_dir).resolve()
-    data = pd.read_csv(project_dir / data_file)
+    data = pd.read_csv(Path(reference_data) if reference_data else project_dir / data_file)
     mapping = mapping_from_project(project_dir, data)
     target = MonitoringTarget(project=name or project_dir.name, upstream_url=upstream_url.rstrip("/"),
                               mapping=mapping, window_size=window_size)

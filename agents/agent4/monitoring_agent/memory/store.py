@@ -231,8 +231,9 @@ def default_memory() -> IncidentMemory | None:
             _OPEN[path] = IncidentMemory(path)
             import atexit
             atexit.register(_OPEN[path].client.close)   # fermeture propre (sinon message d'erreur à la sortie)
-        except Exception:
-            log.warning("mémoire d'incidents indisponible (%s)", path, exc_info=True)
+        except Exception as exc:  # ex. dossier verrouillé par la gateway : l'agent décide sans mémoire
+            log.warning("mémoire d'incidents indisponible (%s) : %s", path, str(exc).splitlines()[0][:200])
+            log.debug("détail", exc_info=True)
             return None
     return _OPEN[path]
 

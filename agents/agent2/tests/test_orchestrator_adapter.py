@@ -34,6 +34,8 @@ def test_candidate_is_registered_and_asks_for_promotion(tmp_path):
     assert meta.model_uri == "models:/credit_risk/1" and meta.alias == "candidate"
     assert meta.quality_gate.passed and meta.champion_replacement_requested
     assert meta.quality_gate.value > meta.quality_gate.baseline_value
+    training = Path(meta.params["training_data"])             # référence du monitoring de l'Agent 4
+    assert training.name == "train_v1.csv" and training.is_file()
 
 
 def test_same_model_does_not_replace_the_champion(tmp_path):
@@ -67,3 +69,30 @@ def test_candidate_worse_than_the_project_model_is_flagged(tmp_path, monkeypatch
     result = adapter.run(inp)
     assert result.status.value == "NEEDS_APPROVAL"
     assert "moins bon que le modèle actuel du projet" in result.reasons[0]
+
+
+def test_retraining_reads_agent4_parquet_and_compares_to_production(tmp_path):
+    """Réentraînement : nouvelles données en parquet (Agent 4) ; le champion est jugé sur sa performance
+    mesurée en production, pas sur son ancien jeu de test."""
+    import pandas as pd
+    from mlflow_agent.orchestrator_adapter import _dataset, _production_score
+
+    from common.schemas import AgentInput, RetrainingRequest, write_output
+
+    new = tmp_path / "new_data.parquet"
+    pd.DataFrame({"amount": [1.0, 2.0], "target": [0, 1]}).to_parquet(new)
+    wd = tmp_path / "agent2"
+    wd.mkdir()
+    req_inp = AgentInput(run_id="r", project_dir=str(CREDIT_RISK), report_path="", workdir=str(tmp_path),
+                         inputs={})
+    path = write_output(req_inp, "retraining_request", RetrainingRequest(
+        model_uri="models:/credit_risk/1", reason="performance_drop", new_data_path=str(new),
+        current_performance={"roc_auc": 0.64}))
+    inp = AgentInput(run_id="r", project_dir=str(CREDIT_RISK), report_path="", workdir=str(wd),
+                     inputs={"retraining_request": path})
+    warnings = []
+    spec = type("S", (), {"data_path": "data.csv"})()
+    data = _dataset(inp, spec, warnings)
+    assert pd.read_csv(data).to_dict("list") == {"amount": [1.0, 2.0], "target": [0, 1]}
+    assert _production_score(inp, "roc_auc", warnings) == 0.64
+    assert _production_score(inp, "f1", []) is None
