@@ -60,13 +60,24 @@ class Supervisor:
                     model_uri=self.target.model_uri, export_new_data=self.export_new_data)
 
     def export_new_data(self, path: str) -> str | None:
-        """Données labellisées des fenêtres en drift : ce sur quoi l'Agent 2 pourra réentraîner."""
+        """Données labellisées de l'épisode en cours : ce sur quoi l'Agent 2 pourra réentraîner.
+
+        L'épisode = les dernières fenêtres labellisées consécutives en drift OU en baisse de performance mesurée
+        (un concept drift dégrade le modèle sans drift des entrées). Les épisodes plus anciens sont exclus.
+        """
         frames = []
         w = self.target.window_size
-        for r in self.store.window_reports(self.history):
-            if r["dataset_drift"]["n_drifted"] > 0 and r["performance"] and r["performance"]["labels_available"]:
-                i = r["window"]["index"]
-                frames.append(self.store.labelled_frame(i * w + 1, (i + 1) * w, self.target.mapping.target))
+        labelled = [r for r in self.store.window_reports(self.history)
+                    if r["performance"] and r["performance"]["labels_available"]]
+        episode = []
+        for r in reversed(labelled):
+            if r["dataset_drift"]["n_drifted"] > 0 or r["performance"].get("realized_degraded"):
+                episode.append(r)
+            elif episode:
+                break
+        for r in reversed(episode):
+            i = r["window"]["index"]
+            frames.append(self.store.labelled_frame(i * w + 1, (i + 1) * w, self.target.mapping.target))
         if not frames:
             return None
         df = pd.concat(frames, ignore_index=True)

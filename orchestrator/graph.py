@@ -198,6 +198,22 @@ class Run:
         self.graph.invoke(None, self.config)
         self._save_if_finished()
 
+    def monitor(self) -> None:
+        """Run déployé (DONE) : relance l'Agent 4 sur le modèle en production.
+
+        Si le monitoring demande un réentraînement (retraining_request), le run repart :
+        gate « retraining » -> Agent 2 -> gate « champion_replacement » -> Agent 3 -> Agent 4.
+        Sinon il se termine de nouveau en DONE. Chaque appel est un nouvel épisode : le compteur
+        de réentraînements repart à zéro (le garde-fou évite seulement une boucle dans un épisode).
+        """
+        if self.status != "DONE" or "agent4" not in self.state.get("results", {}):
+            raise RuntimeError(f"le run {self.run_id} n'a pas de modèle déployé et surveillé ({self.status}) : "
+                               "monitor s'applique à un run terminé en DONE")
+        self.graph.update_state(self.config, {"final_status": "", "retrain_count": 0, "last_step": "agent3"},
+                                as_node="agent3")
+        self.graph.invoke(None, self.config)
+        self._save_if_finished()
+
     def summary(self) -> dict:
         return self.state
 

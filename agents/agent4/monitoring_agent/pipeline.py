@@ -6,7 +6,9 @@ Point d'entrée de l'Agent 4 pour l'orchestrateur (contrat : common/schemas.py).
 À chaque appel :
 1. mise en place (si l'Agent 3 a déployé une API : deployment_result.endpoint)
    référence notée par l'API, règles Prometheus + dashboard Grafana générés et validés ;
-2. décision (si la gateway a déjà observé de la production pour ce projet)
+2. demande de la gateway : si l'agent de la gateway a déjà demandé un réentraînement
+   (runs/<projet>/actions/retraining_request.json), elle est remise à l'orchestrateur, une seule fois ;
+3. sinon, décision (si la gateway a déjà observé de la production pour ce projet)
    l'agent enquête sur la dernière fenêtre et décide ; une demande de réentraînement produit
    retraining_request.json, que l'orchestrateur soumet à sa propre validation humaine puis à l'Agent 2.
 
@@ -15,6 +17,7 @@ L'agent n'échoue jamais pour une raison de monitoring : au pire il renvoie WARN
 
 from __future__ import annotations
 
+import json
 import shutil
 import time
 from pathlib import Path
@@ -60,6 +63,30 @@ def _setup(inp, spec, dep, outputs: dict, warnings: list) -> MonitoringTarget | 
     return target
 
 
+def _gateway_request(target: MonitoringTarget, workdir: Path, outputs: dict, warnings: list) -> bool:
+    """Demande de réentraînement décidée par la gateway, pas encore remise à l'orchestrateur.
+
+    Copiée dans le workdir (avec ses nouvelles données), puis marquée remise : elle n'est donnée qu'une fois,
+    que l'humain l'approuve ou non à la gate « retraining ».
+    """
+    src = target.dir / "actions" / "retraining_request.json"
+    if not src.is_file():
+        return False
+    req = json.loads(src.read_text(encoding="utf-8"))
+    data = Path(req.get("new_data_path") or "")
+    if data.is_file():
+        shutil.copy(data, workdir / data.name)
+        req["new_data_path"] = str(workdir / data.name)
+        outputs["new_data"] = str(workdir / data.name)
+    dest = workdir / "retraining_request.json"
+    dest.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
+    src.rename(src.with_name(f"retraining_request_{time.strftime('%Y%m%dT%H%M%S')}.handed.json"))
+    outputs["retraining_request"] = str(dest)
+    warnings.append(f"demande de réentraînement de la gateway remise à l'orchestrateur ({req.get('reason')}) : "
+                    f"{(req.get('diagnosis') or '')[:200]}")
+    return True
+
+
 def _keep_files(src: dict, outputs: dict, warnings: list) -> None:
     """Le contrat attend des chemins dans outputs : le reste (canal de notification...) va dans warnings."""
     for key, value in src.items():
@@ -82,7 +109,9 @@ def run(inp):
     target = _setup(inp, spec, dep, outputs, warnings)
     status = s.AgentStatus.OK
 
-    if target and target.store_path.exists():
+    if target and _gateway_request(target, Path(inp.workdir), outputs, warnings):
+        status = s.AgentStatus.WARNING
+    elif target and target.store_path.exists():
         store = Store(target.store_path)
         try:
             decider, judge = decider_and_judge()

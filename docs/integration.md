@@ -29,7 +29,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 | 2 | Yacine | Agent 1 : adaptateur, détection de la cible corrigée | intégré, à valider avec Yacine |
 | 3 | Aziz | Agent 2 (MLflow) : adaptateur, registre, champion | intégré, à valider avec Aziz |
 | 4 | Syrine | Agent 3 (API, Docker) : modèle MLflow servi, conteneur déployé, champion | intégré, à valider avec Syrine |
-| 5 | Mohamed | Agent 4 sur le vrai `endpoint`, run complet | à faire |
+| 5 | Mohamed | Agent 4 sur le vrai `endpoint`, boucle de réentraînement (`monitor`) | intégré |
 | 6 | Sarra | validateur v2, réparation, juge : nœud `repair` | intégré, à valider avec Sarra |
 | 7 | tout le groupe | démo complète, README, `main` | à faire |
 
@@ -163,6 +163,25 @@ prédit l'indice de la classe. L'adaptateur de l'Agent 3 rétablit les étiquett
 `monitoring_agent.pipeline:run` lit `project_spec` et `deployment_result`. Avec un `endpoint`, il prépare
 le monitoring (référence notée par l'API, règles Prometheus, dashboard Grafana) ; avec du trafic observé, il
 décide et peut produire `retraining_request.json`, qui déclenche la gate `retraining` de l'orchestrateur.
+
+Fait (branche `integ/agent4-boucle`) : la boucle retour.
+- l'orchestrateur n'appelle l'Agent 4 qu'une fois, juste après le déploiement : pas encore de trafic. La
+  décision se prend ensuite dans la gateway (`python -m monitoring_agent gateway <projet>`), qui écrit
+  `agents/agent4/runs/<projet>/actions/retraining_request.json` (risque moyen : décidé seul, la
+  validation humaine est celle de l'orchestrateur) ;
+- `python -m orchestrator monitor <run_id>` relance l'Agent 4 sur un run DONE : il remet cette demande une
+  seule fois (copiée dans le workdir avec ses nouvelles données), puis gate `retraining` -> Agent 2 ->
+  gate `champion_replacement` -> Agent 3 (redéploie) -> Agent 4. Sans demande, le run reste DONE ;
+- Agent 4 : les nouvelles données couvrent l'épisode en cours (drift des entrées OU baisse de performance
+  mesurée : un concept drift ne fait pas dériver les entrées) ;
+- Agent 2 : lit les nouvelles données en parquet ; en réentraînement, le champion est jugé sur sa
+  performance mesurée en production (`current_performance`), pas sur son ancien jeu de test.
+
+Démo : API déployée, `docker compose -f agents/agent4/infra/docker-compose.yml up -d`, gateway,
+`python -m monitoring_agent simulate <projet> --scenario concept`, puis `monitor <run_id>`.
+Après le redéploiement, relancer la gateway (elle garde l'ancienne référence en mémoire).
+
+À voir avec Aziz : idéalement, évaluer le champion sur le jeu de test du candidat (mêmes lignes).
 
 ### 6. Validateur v2 (Sarra) : `feature/validaor-repair-agents`
 
