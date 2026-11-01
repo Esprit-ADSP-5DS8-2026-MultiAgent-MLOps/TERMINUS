@@ -62,3 +62,41 @@ def test_concept_scenario_is_a_learnable_rule():
     low = [perturb({"amount": 50.0}, "concept", rng, ["amount"], [], 1.0, med)[1] for _ in range(50)]
     assert all(high) and not any(low)                         # au-delà de la médiane, la cible s'inverse
     assert perturb({"amount": 150.0}, "concept", rng, ["amount"], [], 0.0, med)[1] is False
+
+
+def _target(tmp_path, monkeypatch, model_uri):
+    from monitoring_agent.runtime.target import ColumnMapping, MonitoringTarget
+
+    monkeypatch.setenv("MONITORING_RUNS_DIR", str(tmp_path / "runs"))
+    mapping = ColumnMapping(task="classification", features=["x"], target="target", prediction="y_pred",
+                            prediction_proba="y_pred_proba", timestamp="timestamp", id="request_id",
+                            primary_metric="roc_auc", min_threshold=0.7)
+    return MonitoringTarget(project="p", upstream_url="http://api", mapping=mapping, model_uri=model_uri)
+
+
+def test_reference_is_the_training_data_of_the_deployed_model(tmp_path):
+    from monitoring_agent.pipeline import _reference_data
+
+    train = tmp_path / "train_v2.csv"
+    train.write_text("x,target\n1,0\n")
+    meta = tmp_path / "mlflow_metadata.json"
+    meta.write_text(json.dumps({"model_uri": "models:/p/2", "params": {"training_data": str(train)}}))
+    inp = SimpleNamespace(inputs={"mlflow_metadata": str(meta)})
+    assert _reference_data(inp, SimpleNamespace(model_uri="models:/p/2")) == train
+    assert _reference_data(inp, SimpleNamespace(model_uri="models:/p/1")) is None   # candidat non déployé
+    assert _reference_data(SimpleNamespace(inputs={}), SimpleNamespace(model_uri="models:/p/2")) is None
+
+
+def test_new_model_starts_a_new_monitoring_period(tmp_path, monkeypatch):
+    from monitoring_agent.pipeline import _new_period
+
+    old, new = _target(tmp_path, monkeypatch, "models:/p/1"), _target(tmp_path, monkeypatch, "unknown")
+    new.dir.mkdir(parents=True)
+    for suffix in ("", "-wal"):
+        Path(f"{new.store_path}{suffix}").write_text("x")
+    warnings = []
+    _new_period(old, new, "models:/p/1", warnings)               # même modèle : rien ne bouge
+    assert new.store_path.exists() and not warnings
+    _new_period(old, new, "models:/p/2", warnings)
+    assert not new.store_path.exists() and "archivé" in warnings[0]
+    assert len(list(new.dir.glob("monitoring_p_v1_*.db"))) == 1 and len(list(new.dir.glob("monitoring_p_v1_*.db-wal"))) == 1

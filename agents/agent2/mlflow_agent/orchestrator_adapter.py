@@ -216,6 +216,11 @@ def run(inp: AgentInput) -> AgentResult:
         reasons.append(f"ne bat pas le champion actuel ({metric} {test:.4f} contre {champion:.4f})")
     passed = gate_ok and not champion_kept
 
+    # Données d'entraînement de CETTE version, gardées à part (data/train.csv est réécrit au réentraînement suivant) :
+    # l'Agent 4 en fait la référence du monitoring quand cette version est déployée.
+    training = data.with_name(f"train_v{result.model_version}.csv") if result.model_version else data
+    if training != data:
+        shutil.copyfile(data, training)
     if result.model_version and passed:  # une version refusée reste dans le registre, sans alias
         client.set_registered_model_alias(name, "candidate", result.model_version)
     diff = workdir / "instrumentation.md"
@@ -229,6 +234,7 @@ def run(inp: AgentInput) -> AgentResult:
         metrics={f"train_{metric}": result.train_score, f"validation_{metric}": result.validation_score,
                  f"test_{metric}": test, f"baseline_test_{metric}": base},
         params={"model": result.best_model_name or "", "plan_source": source,
+                "training_data": str(training.resolve()),   # référence du monitoring (Agent 4)
                 **{k: str(v) for k, v in result.best_params.items()}},
         instrumentation_diff_path=str(diff),
         quality_gate=QualityGate(primary_metric=metric, value=test, min_threshold=spec.min_threshold,

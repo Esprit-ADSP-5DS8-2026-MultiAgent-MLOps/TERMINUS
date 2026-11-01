@@ -34,6 +34,8 @@ def test_candidate_is_registered_and_asks_for_promotion(tmp_path):
     assert meta.model_uri == "models:/credit_risk/1" and meta.alias == "candidate"
     assert meta.quality_gate.passed and meta.champion_replacement_requested
     assert meta.quality_gate.value > meta.quality_gate.baseline_value
+    training = Path(meta.params["training_data"])             # référence du monitoring de l'Agent 4
+    assert training.name == "train_v1.csv" and training.is_file()
 
 
 def test_same_model_does_not_replace_the_champion(tmp_path):

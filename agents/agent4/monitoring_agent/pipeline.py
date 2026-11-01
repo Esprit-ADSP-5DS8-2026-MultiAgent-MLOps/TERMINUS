@@ -34,6 +34,34 @@ from .runtime.target import MonitoringTarget, build_target, runs_dir
 INFRA = Path(__file__).resolve().parent.parent / "infra"
 
 
+def _reference_data(inp, dep) -> Path | None:
+    """Les données d'entraînement du modèle déployé (Agent 2, mlflow_metadata.params.training_data) : c'est ce
+    que le modèle a vu, donc la référence du monitoring. None si elles ne correspondent pas au modèle déployé
+    (candidat refusé...) ou absentes : on garde alors la référence existante, sinon les données du projet."""
+    path = inp.inputs.get("mlflow_metadata")
+    if not path or not Path(path).is_file():
+        return None
+    meta = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = Path((meta.get("params") or {}).get("training_data") or "")
+    return data if meta.get("model_uri") == dep.model_uri and data.is_file() else None
+
+
+def _new_period(previous: MonitoringTarget | None, target: MonitoringTarget, model_uri: str, warnings: list) -> None:
+    """Nouveau modèle servi : nouvelle période de monitoring. L'historique du modèle précédent est archivé
+    (fenêtres, décisions, alertes) au lieu d'être mélangé avec celui du nouveau modèle."""
+    if previous is None or previous.model_uri in ("unknown", model_uri) or not target.store_path.exists():
+        return
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    tag = previous.model_uri.removeprefix("models:/").replace("/", "_v")
+    archive = target.store_path.with_name(f"monitoring_{tag}_{stamp}.db")
+    for suffix in ("", "-wal", "-shm"):                     # SQLite en mode WAL
+        f = Path(f"{target.store_path}{suffix}")
+        if f.exists():
+            f.rename(Path(f"{archive}{suffix}"))
+    warnings.append(f"nouveau modèle {model_uri} : nouvelle période de monitoring, historique de "
+                    f"{previous.model_uri} archivé ({archive.name}) ; relancer la gateway")
+
+
 def _setup(inp, spec, dep, outputs: dict, warnings: list) -> MonitoringTarget | None:
     if dep is None or not dep.endpoint:
         warnings.append("pas d'API déployée (deployment_result.endpoint vide) : monitoring en ligne non configuré")
@@ -42,10 +70,24 @@ def _setup(inp, spec, dep, outputs: dict, warnings: list) -> MonitoringTarget | 
         except FileNotFoundError:
             return None
     try:
-        target, info = build_target(inp.project_dir, dep.endpoint, name=spec.project_name)
-    except Exception as exc:  # noqa: BLE001 - API injoignable, données absentes... : on explique, on ne plante pas
-        warnings.append(f"mise en place du monitoring impossible : {type(exc).__name__}: {exc}")
-        return None
+        previous = MonitoringTarget.load(spec.project_name)
+    except FileNotFoundError:
+        previous = None
+    reference = _reference_data(inp, dep)
+    if reference is None and previous and previous.model_uri == dep.model_uri and previous.reference_path.exists():
+        # même modèle, données d'entraînement inconnues : on garde sa référence (ne pas revenir aux données du projet)
+        target, info = previous, {"failed": 0, "scored": previous.reference_rows}
+        target.upstream_url = dep.endpoint.rstrip("/")
+    else:
+        try:
+            target, info = build_target(inp.project_dir, dep.endpoint, name=spec.project_name,
+                                        reference_data=reference)
+        except Exception as exc:  # noqa: BLE001 - API injoignable, données absentes... : on explique, on ne plante pas
+            warnings.append(f"mise en place du monitoring impossible : {type(exc).__name__}: {exc}")
+            return None
+    if reference is not None:
+        warnings.append(f"référence : données d'entraînement de {dep.model_uri} ({info['scored']} lignes)")
+    _new_period(previous, target, dep.model_uri, warnings)
     target.model_uri = dep.model_uri
     target.save()
     rules = write_rules(target, INFRA / "prometheus" / "rules")

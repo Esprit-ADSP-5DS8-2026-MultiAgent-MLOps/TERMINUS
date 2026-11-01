@@ -183,6 +183,11 @@ Fait (branche `integ/agent4-boucle`) : la boucle retour.
   variée (règle apprenable). Avant : 35 % des labels inversés au hasard, du bruit qu'aucun réentraînement
   ne rattrape (essai réel : candidat à 0,61, sous le seuil de 0,70).
 
+- après un réentraînement, la référence du monitoring = les données d'entraînement du modèle déployé
+  (Agent 2 : `mlflow_metadata.params.training_data`, copie `train_v<version>.csv`), et une nouvelle période
+  de monitoring commence (historique du modèle précédent archivé en `monitoring_<modèle>_v<n>_<date>.db`).
+  Avant : référence = `data.csv` du projet, faux incidents « baisse de performance estimée » sur le v2.
+
 Démo : API déployée, `docker compose -f agents/agent4/infra/docker-compose.yml up -d`, gateway,
 `python -m monitoring_agent simulate <projet> --scenario concept`, puis `monitor <run_id>`.
 Après le redéploiement, relancer la gateway (elle garde l'ancienne référence en mémoire).
