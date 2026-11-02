@@ -1,0 +1,20 @@
+# Manifest de l'app Slack de l'orchestrateur (api.slack.com/apps > Create New App > From a manifest).
+# App distincte de celle de l'Agent 4 : en Socket Mode, deux programmes sur la même app se partageraient les clics.
+display_information:
+  name: MLOps Orchestrateur
+  description: Pose les validations humaines du pipeline (manifeste, champion, réentraînement, échecs).
+  background_color: "#1f7a4d"
+features:
+  bot_user:
+    display_name: mlops-orchestrateur
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+settings:
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

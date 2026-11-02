@@ -290,6 +290,15 @@ def _confirm_push(req, input_fn=input, out=print) -> bool:
         return False
 
 
+def _publish_choice(inp: AgentInput) -> bool | None:
+    """Choix fait dans Slack à la gate champion (runs/<run_id>/publish.json) : publier ou non. None : pas de choix."""
+    f = Path(inp.workdir).parent / "publish.json"
+    try:
+        return bool(json.loads(f.read_text(encoding="utf-8")).get("push")) if f.is_file() else None
+    except (OSError, ValueError):
+        return None
+
+
 def _push_wanted(warnings: list[str]) -> bool:
     """AGENT3_PUSH=1 (environnement ou agents/agent3/.env) et identifiants Docker Hub disponibles."""
     from . import config
@@ -374,8 +383,11 @@ def run(inp: AgentInput) -> AgentResult:
     use_docker = os.environ.get("AGENT3_DOCKER", "1") != "0" and DockerCLI().available()[0]
     if not use_docker:
         warnings.append("Docker indisponible (démon arrêté ou AGENT3_DOCKER=0) : API testée en local, non déployée")
-    push = use_docker and _push_wanted(warnings)
     interactive = _interactive()
+    choice = None if interactive else _publish_choice(inp)      # terminal : la question est posée plus bas
+    if choice is False:
+        warnings.append("publication Docker Hub non demandée à la validation du champion")
+    push = use_docker and choice is not False and _push_wanted(warnings)
     log = workdir / "agent3.log"
     with log.open("w", encoding="utf-8") as f:
         result = run_pipeline(

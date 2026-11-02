@@ -132,3 +132,19 @@ def test_no_terminal_question_outside_the_command_line(monkeypatch):
 
     monkeypatch.delenv("ORCH_INTERACTIVE", raising=False)
     assert not _interactive()       # --auto-approve, Streamlit, tests : identifiants du .env
+
+
+def test_publish_choice_made_in_slack(tmp_path):
+    """La gate champion validée dans Slack écrit runs/<id>/publish.json : l'Agent 3 publie ou non."""
+    from agent_api_docker.orchestrator_adapter import _publish_choice
+
+    from common.schemas import AgentInput
+
+    wd = tmp_path / "run" / "agent3"
+    wd.mkdir(parents=True)
+    inp = AgentInput(run_id="r", project_dir=str(tmp_path), report_path="", workdir=str(wd))
+    assert _publish_choice(inp) is None
+    (wd.parent / "publish.json").write_text('{"push": false, "by": "aziz"}')
+    assert _publish_choice(inp) is False
+    (wd.parent / "publish.json").write_text('{"push": true, "by": "syrine"}')
+    assert _publish_choice(inp) is True

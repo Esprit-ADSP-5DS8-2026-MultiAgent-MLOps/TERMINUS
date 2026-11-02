@@ -9,6 +9,8 @@ Ligne de commande de l'orchestrateur.
     python -m orchestrator reject  <run_id> [-m "commentaire"]
     python -m orchestrator resume  <run_id>                         # après un plantage
     python -m orchestrator monitor <run_id>                         # Agent 4 : réentraîner si demandé
+    python -m orchestrator slack                                    # validations humaines dans Slack
+    python -m orchestrator run eval/projects/credit_risk --slack    # le run attend les décisions Slack
     python -m orchestrator export-decisions -o decisions.jsonl      # décisions du superviseur
     python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run  # avant intégration
 
@@ -104,6 +106,9 @@ def cmd_run(args) -> Run:
     if args.simulate_failure and AGENT_ORIGIN.get("agent3") == "réel":
         print("Note : --simulate-failure ne concerne que le stub de l'Agent 3.")
     # Un humain répond ici : les agents peuvent poser leurs propres questions (ex. compte Docker Hub de l'Agent 3).
+    if args.slack:
+        args.no_wait = True
+        print("Décisions dans Slack : le service doit tourner (python -m orchestrator slack).")
     if not args.auto_approve and not args.no_wait and sys.stdin.isatty():
         os.environ["ORCH_INTERACTIVE"] = "1"
     simulate = None
@@ -198,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
                       help="approuver toutes les gates (tests uniquement)")
     mode.add_argument("--no-wait", action="store_true",
                       help="ne pas poser la question : s'arrêter à la première pause")
+    mode.add_argument("--slack", action="store_true",
+                      help="les décisions se prennent dans Slack (service : python -m orchestrator slack)")
 
     p = sub.add_parser("status", help="lister les runs, ou détailler un run")
     p.add_argument("run_id", nargs="?")
@@ -212,7 +219,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("monitor", help="relancer l'Agent 4 sur un run déployé (réentraînement si demandé)")
     p.add_argument("run_id")
-    p.add_argument("--no-wait", action="store_true", help="ne pas poser la question : s'arrêter à la gate")
+    p.add_argument("--no-wait", "--slack", dest="no_wait", action="store_true",
+                   help="ne pas poser la question : s'arrêter à la gate (décision dans Slack ou approve/reject)")
+
+    sub.add_parser("slack", help="service Slack : validations humaines, réentraînements de l'Agent 4")
 
     p = sub.add_parser("export-decisions", help="exporter les décisions du superviseur (JSONL)")
     p.add_argument("-o", "--output", default="decisions.jsonl", help="fichier de sortie")
@@ -225,6 +235,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--project", default=None, help="projet de test (défaut : selon l'agent)")
 
     args = parser.parse_args(argv)
+    if args.cmd == "slack":
+        from .slack import serve
+        return serve(args.runs_dir)
     if args.cmd == "check-agent":
         from .check_agent import main as check_main
         return check_main(args.name, args.target, args.project, str(Path(args.runs_dir) / "check"))
