@@ -90,9 +90,8 @@ def test_agent4_request_relaunches_monitoring_and_asks_in_slack(service, tmp_pat
                      runs_dir=service.runs_dir)
     run = Run.load(s["run_id"], service.runs_dir)
     (run.run_dir / SIMULATE_FILE).write_text(json.dumps({"drift": True, "failure": None}))   # le stub demandera
-    actions = tmp_path / "agent4" / project_of(run) / "actions"
-    actions.mkdir(parents=True)
-    (actions / "retraining_request.json").write_text("{}")             # ce qu'écrit la gateway de l'Agent 4
+    served = json.loads(Path(run.state["artifacts"]["deployment_result"]).read_text())["model_uri"]
+    _gateway_request(tmp_path, project_of(run), served)
     service.tick()
     texts = [p["text"] for p in service.client.posts]
     assert any("demande un réentraînement" in t for t in texts)
@@ -103,10 +102,28 @@ def test_agent4_request_relaunches_monitoring_and_asks_in_slack(service, tmp_pat
     assert len(service.client.posts) == n
 
 
+def _gateway_request(tmp_path, folder, model_uri, project=None):
+    """Ce qu'écrit la gateway de l'Agent 4 : monitoring.json du projet et actions/retraining_request.json."""
+    d = tmp_path / "agent4" / folder
+    (d / "actions").mkdir(parents=True)
+    (d / "monitoring.json").write_text(json.dumps({"project": project or folder}))
+    (d / "actions" / "retraining_request.json").write_text(json.dumps({"model_uri": model_uri}))
+
+
+def test_stale_or_archived_requests_never_retrain(service, tmp_path):
+    s = run_pipeline(CREDIT_RISK, lambda q: {"decision": "approve", "by": "t", "comment": ""},
+                     runs_dir=service.runs_dir)
+    run = Run.load(s["run_id"], service.runs_dir)
+    _gateway_request(tmp_path, project_of(run), "unknown")                       # ancienne demande
+    _gateway_request(tmp_path, project_of(run) + ".old", "unknown", project_of(run))   # archive
+    service.tick()
+    texts = [p["text"] for p in service.client.posts]
+    assert sum("ignorée" in t for t in texts) == 1 and not any(".old" in t for t in texts)
+    assert Run.load(run.run_id, service.runs_dir).status == "DONE"
+
+
 def test_request_without_deployed_run_is_reported(service, tmp_path):
-    actions = tmp_path / "agent4" / "inconnu" / "actions"
-    actions.mkdir(parents=True)
-    (actions / "retraining_request.json").write_text("{}")
+    _gateway_request(tmp_path, "inconnu", "models:/inconnu/1")
     service.tick()
     service.tick()
     assert sum("aucun run déployé" in p["text"] for p in service.client.posts) == 1

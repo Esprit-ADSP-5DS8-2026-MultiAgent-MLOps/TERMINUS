@@ -324,9 +324,17 @@ class OrchestratorSlack:
             if run is not None and (run.run_id in self.busy or run.status == "WAITING_HUMAN"):
                 continue                    # déjà en cours : la demande sera vue au prochain passage
             self.triggered.add(seen)
+            if _read(str(req.parent.parent / "monitoring.json")).get("project") != project:
+                continue                    # archive (04_x.old...) : pas un monitoring actif
             if run is None or not self._deployed(run):
                 self._post({}, f":warning: L'Agent 4 demande un réentraînement de `{project}`, mais aucun run "
                                "déployé de ce projet n'est enregistré : lancer d'abord le pipeline.")
+                continue
+            asked = _read(str(req)).get("model_uri")
+            served = _read(run.state.get("artifacts", {}).get("deployment_result")).get("model_uri")
+            if asked != served:             # demande ancienne ou d'un autre déploiement : jamais de réentraînement
+                self._post({}, f":information_source: Demande de réentraînement de `{project}` ignorée : elle "
+                               f"concerne `{asked}`, le run `{run.run_id}` sert `{served}`.")
                 continue
             self.done.discard(run.run_id)   # le run va repartir : on le suit de nouveau
             self._post(self._state(run.run_dir), f":chart_with_downwards_trend: L'Agent 4 demande un réentraînement "
