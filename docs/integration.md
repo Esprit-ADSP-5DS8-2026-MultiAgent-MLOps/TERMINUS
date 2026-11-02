@@ -31,6 +31,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 | 4 | Syrine | Agent 3 (API, Docker) : modèle MLflow servi, conteneur déployé, champion | intégré, à valider avec Syrine |
 | 5 | Mohamed | Agent 4 sur le vrai `endpoint`, boucle de réentraînement (`monitor`) | intégré |
 | 6 | Sarra | validateur v2, réparation, juge : nœud `repair` | intégré, à valider avec Sarra |
+| 6b | tout le groupe | validations humaines dans Slack (`python -m orchestrator slack`, docs/slack.md) | intégré, listes de validation à remplir |
 | 7 | tout le groupe | démo complète, README, `main` | à faire |
 
 ## Fiche de chaque meet
