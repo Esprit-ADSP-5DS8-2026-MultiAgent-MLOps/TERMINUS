@@ -192,8 +192,8 @@ def gate_blocks(run: Run, settings: Settings) -> list[dict]:
 def final_text(run: Run) -> str:
     s = run.state
     text = f"{FINAL_TEXT.get(run.status, run.status)} · `{project_of(run)}` · run `{run.run_id}`"
-    for name, r in s.get("results", {}).items():
-        if r["status"] in ("FAILED", "NEEDS_APPROVAL") or (r["status"] == "WARNING" and not r["can_proceed"]):
+    for name, r in s.get("results", {}).items():   # ce qui a arrêté le run ; une validation déjà donnée n'en fait pas partie
+        if r["status"] == "FAILED" or (r["status"] == "WARNING" and not r["can_proceed"]):
             text += "".join(f"\n• {name} : {reason[:200]}" for reason in r["reasons"][:2])
     return text
 
@@ -429,5 +429,8 @@ def serve(runs_dir: str = "runs") -> int:
           + (", ".join(f"{g}={len(u)}" for g, u in settings.per_gate.items()) or "liste commune")
           + f" · défaut : {len(settings.default) or 'tout le canal'}")
     print("En attente des runs (Ctrl+C pour arrêter)…")
-    SocketModeHandler(app, settings.app_token).start()
+    try:
+        SocketModeHandler(app, settings.app_token).start()
+    except KeyboardInterrupt:
+        print("\nService Slack arrêté.")
     return 0

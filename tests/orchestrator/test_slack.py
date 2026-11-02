@@ -70,6 +70,7 @@ def test_gate_is_posted_once_and_answered_by_an_allowed_person(service):
     assert not _buttons(service.client.updates[-1])                     # boutons retirés du message
     assert Run.load(run.run_id, service.runs_dir).status == "DONE"
     assert "terminé" in service.client.posts[-1]["text"]
+    assert "promotion à approuver" not in service.client.posts[-1]["text"]   # validation déjà donnée
     assert "déjà été traitée" in service.on_click(APPROVE, value, "USYRINE", "syrine")
     decision = Run.load(run.run_id, service.runs_dir).state["decisions"][-1]
     assert decision["by"] == "syrine (Slack)" and decision["decision"] == "approve"
