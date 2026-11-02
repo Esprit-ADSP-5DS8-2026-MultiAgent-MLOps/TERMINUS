@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { api, GATE_TITLES, type RunDetail } from "../api";
+
+const AGENT4 = { console: "http://127.0.0.1:8100/console/", grafana: "http://127.0.0.1:3000", alerts: "http://127.0.0.1:9090/alerts" };
 import { Annonce, Cmd, ErrorLine } from "../components/Bits";
 import { GateCard } from "../components/GateCard";
 import { Track } from "../components/Track";
@@ -55,6 +57,43 @@ function FileViewer({ runId, artifacts }: { runId: string; artifacts: Record<str
         ))}
       </ul>
       {open && <pre className="mono-pre" aria-label={`Contenu de ${open}`}>{text}</pre>}
+    </section>
+  );
+}
+
+/** Ce que l'Agent 4 surveille, sans quitter Terminus : état de la gateway, dernier avis, liens directs. */
+function Surveillance({ r }: { r: RunDetail }) {
+  const health = usePoll(() => api.health(), 15000);
+  const gateway = health.data?.find((h) => h.service === "Gateway Agent 4");
+  const notes = r.results?.agent4?.warnings ?? [];
+  const project = r.project ?? "";
+  const dashboard = `${AGENT4.grafana}/d/${`mlmon-${project}`.slice(0, 40)}`;
+  return (
+    <section className="panel" aria-labelledby="surveillance">
+      <h2 id="surveillance" className="panel-head">
+        <span>$ agent4 surveille {project}</span>
+        <span style={{ fontWeight: 400, color: "var(--signal)" }}>
+          {gateway ? (gateway.ok ? "gateway ✓" : "gateway ✗") : "…"}
+        </span>
+      </h2>
+      <div className="panel-body small">
+        {gateway && !gateway.ok && (
+          <p>
+            <span className="st-signal">!</span> Le trafic n'est pas observé. Lancer la gateway :
+            <br /><code style={{ overflowWrap: "anywhere" }}>cd agents/agent4 && python -m monitoring_agent gateway {project} --host 0.0.0.0</code>
+          </p>
+        )}
+        {notes.length > 0 && (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            {notes.map((n, i) => <li key={i} style={{ overflowWrap: "anywhere" }}>› {n}</li>)}
+          </ul>
+        )}
+        <span style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px" }}>
+          <a href={AGENT4.console} target="_blank" rel="noreferrer">→ console</a>
+          <a href={dashboard} target="_blank" rel="noreferrer">→ grafana</a>
+          <a href={AGENT4.alerts} target="_blank" rel="noreferrer">→ alertes</a>
+        </span>
+      </div>
     </section>
   );
 }
@@ -133,12 +172,13 @@ export function Pipeline() {
                   image {r.served.image} · Docker Hub {r.served.pushed ? "publiée" : "non publiée"}
                 </p>
                 {["DONE", "CHAMPION_KEPT", "FAILED"].includes(r.status) && (
-                  <button className="btn" onClick={monitor}>[ relire la production (Agent 4) ]</button>
+                  <button className="btn" onClick={monitor}>[ relancer l'Agent 4 ]</button>
                 )}
                 <ErrorLine error={monitorError} />
               </div>
             </section>
           )}
+          {!r.gate && r.served?.endpoint && <Surveillance r={r} />}
         </div>
       </div>
 
