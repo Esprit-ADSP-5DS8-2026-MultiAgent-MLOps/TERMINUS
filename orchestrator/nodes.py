@@ -195,7 +195,30 @@ def make_repair_node(agent_fn: Callable[[AgentInput], AgentResult]):
     return node
 
 
-def _check_repair(outputs: dict, workdir: Path) -> str | None:
+def make_repair_review_gate():
+    """Réparation acceptée par le juge mais sensible : un humain valide (Terminus).
+
+    Même après l'accord humain, l'orchestrateur revérifie la copie (dans le workdir de la tentative,
+    modifications déclarées) ; seul l'accord du juge est remplacé par celui de l'humain.
+    """
+    from .gates import make_gate
+
+    gate = make_gate("repair_review", "repair_result", "gate_repair_review")
+
+    def node(state: PipelineState) -> dict:
+        update = gate(state)
+        if update["decisions"][-1]["decision"] == "approve":
+            outputs = state["results"]["repair"]["outputs"]
+            workdir = Path(state["run_dir"]) / "repair" / f"attempt_{state.get('repair_count', 0)}"
+            if _check_repair(outputs, workdir, human_approved=True) is None:
+                update["repaired_dir"] = str(Path(outputs["repaired_project"]).resolve())
+        return update
+
+    node.__name__ = "gate_repair_review"
+    return node
+
+
+def _check_repair(outputs: dict, workdir: Path, human_approved: bool = False) -> str | None:
     if "repair_result" not in outputs or "repaired_project" not in outputs:
         return "sorties repair_result et repaired_project attendues"
     try:
@@ -207,7 +230,7 @@ def _check_repair(outputs: dict, workdir: Path) -> str | None:
         return f"copie réparée introuvable : {project}"
     if not project.is_relative_to(workdir.resolve()):
         return "la copie réparée doit être écrite dans le workdir de la tentative"
-    if not rr.judge.approved:
+    if not rr.judge.approved and not human_approved:
         return f"le juge n'a pas approuvé la réparation ({rr.judge.rationale[:200]})"
     if not rr.changes:
         return "aucune modification déclarée"

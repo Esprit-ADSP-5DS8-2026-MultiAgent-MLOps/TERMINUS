@@ -30,6 +30,7 @@ from pathlib import Path
 from common.envscope import read_env_file
 
 from .graph import Run, RunNotFound
+from .runlock import RunBusy, is_busy, run_lock
 
 log = logging.getLogger("orchestrator.slack")
 
@@ -43,7 +44,10 @@ TITLES = {
     "champion_replacement": "Nouveau champion à valider",
     "retraining": "Réentraînement demandé par l'Agent 4",
     "failure_review": "Étape en échec",
+    "repair_review": "Réparation à valider",
+    "validator_override": "Désaccord entre les validateurs",
 }
+FRONT_ONLY = {"repair_review", "validator_override"}   # diff, rapports côte à côte : décidé dans Terminus
 FINAL_TEXT = {
     "DONE": ":white_check_mark: terminé : modèle déployé et surveillé",
     "CHAMPION_KEPT": ":shield: champion gardé : le modèle en production reste en place",
@@ -175,6 +179,10 @@ def gate_blocks(run: Run, settings: Settings) -> list[dict]:
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text":
                    f"run `{run.run_id}` · validation : "
                    + (", ".join(f"<@{u}>" for u in sorted(who)) if who else "tout le canal")}]})
+    if gate in FRONT_ONLY:
+        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text":
+                       ":railway_track: à décider dans Terminus (diff et rapports à relire)"}]})
+        return blocks
     yes = "Relancer l'étape" if gate == "failure_review" else "Approuver"
     no = "Arrêter le run" if gate == "failure_review" else "Refuser"
     buttons = [{"type": "button", "action_id": APPROVE, "value": value, "style": "primary",
@@ -243,7 +251,7 @@ class OrchestratorSlack:
             root = Path(self.runs_dir)
             if root.exists():
                 for d in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime):
-                    if d.name not in self.done and d.name not in self.busy:
+                    if d.name not in self.done and d.name not in self.busy and not is_busy(d):
                         self._visit(d)
             self._retraining_requests()
 
@@ -290,6 +298,8 @@ class OrchestratorSlack:
         if data["run"] in self.busy or gate_key(run) != data["key"]:
             return "Cette validation a déjà été traitée."
         gate = run.question["gate"]
+        if gate in FRONT_ONLY:
+            return "Cette décision se prend dans Terminus."
         if not self.settings.can(gate, user_id):
             return "Tu n'es pas dans la liste des personnes autorisées pour cette validation."
         if action_id == PUBLISH and not self.settings.can("docker_push", user_id):
@@ -373,7 +383,10 @@ class OrchestratorSlack:
 
     def _execute(self, run_id: str, work: Callable[[], None]) -> None:
         try:
-            work()
+            with run_lock(Path(self.runs_dir) / run_id):    # jamais en même temps que Terminus ou la CLI
+                work()
+        except RunBusy:
+            self._post({}, f":hourglass: run `{run_id}` déjà en cours ailleurs (Terminus ou terminal) : décision ignorée")
         except Exception as exc:
             log.exception("run %s", run_id)
             self._post({}, f":x: run `{run_id}` : erreur pendant l'exécution ({type(exc).__name__}: {exc})"[:500])
@@ -415,8 +428,14 @@ def serve(runs_dir: str = "runs") -> int:
 
     threading.Thread(target=service.worker, daemon=True, name="runs").start()
 
+    heartbeat = Path(runs_dir) / ".slack_heartbeat"     # lu par Terminus (page santé)
+
     def poll():
         while True:
+            try:
+                heartbeat.write_text(str(time.time()))
+            except OSError:
+                pass
             if not service.busy:
                 try:
                     service.tick()

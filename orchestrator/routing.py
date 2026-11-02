@@ -6,6 +6,8 @@ Ces fonctions ne modifient rien : elles lisent l'état et renvoient le nom du n�
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .gates import MAX_RETRAINS, last_decision
 from .state import PipelineState
 
@@ -32,7 +34,23 @@ def after_validate(state: PipelineState) -> str:
 
 def after_repair(state: PipelineState) -> str:
     # Réparation jugée et acceptée : on revalide la copie corrigée ; sinon le projet reste refusé.
-    return "validate" if _result(state, "repair")["can_proceed"] else "end_blocked"
+    r = _result(state, "repair")
+    if r["status"] == "NEEDS_APPROVAL":   # un humain tranche (Terminus) : réparation sensible ou désaccord v1/v2
+        return "gate_repair_review" if "repair_result" in r["outputs"] else "gate_validator_override"
+    return "validate" if r["can_proceed"] else "end_blocked"
+
+
+def after_gate_repair_review(state: PipelineState) -> str:
+    # Approuvée et vérifiée (copie dans le workdir de la tentative) : revalidation ; sinon arrêt.
+    approved = last_decision(state) == "approve"
+    copy = _result(state, "repair")["outputs"].get("repaired_project")
+    return ("validate" if approved and copy and state.get("repaired_dir") == str(Path(copy).resolve())
+            else "end_blocked")
+
+
+def after_gate_validator_override(state: PipelineState) -> str:
+    # L'humain donne raison au v2 : la ligne continue sur le projet d'origine.
+    return "agent1" if last_decision(state) == "approve" else "end_blocked"
 
 
 def after_propose_manifest(state: PipelineState) -> str:

@@ -142,3 +142,18 @@ def test_approvers_fall_back_to_the_default_list_then_the_channel():
     assert s.can("retraining", "U2") and not s.can("retraining", "U1")
     assert s.can("failure_review", "U1") and not s.can("failure_review", "U9")
     assert Settings({}).can("champion_replacement", "anyone")
+
+
+def test_front_only_gates_have_no_buttons_in_slack(service, monkeypatch):
+    from orchestrator import graph
+    from tests.orchestrator.test_repair import UNPINNED, sensitive_repair
+
+    if not UNPINNED.exists():
+        pytest.skip("variante 02_unpinned_deps absente")
+    monkeypatch.setitem(graph.AGENTS, "repair", sensitive_repair())
+    run = Run.start(str(UNPINNED), service.runs_dir, simulate={})
+    service.tick()
+    gate = service.client.posts[-1]
+    assert "Réparation à valider" in gate["text"] and not _buttons(gate) and "Terminus" in json.dumps(gate["blocks"])
+    value = json.dumps({"run": run.run_id, "key": f"repair_review:{len(run.state['decisions'])}"})
+    assert "Terminus" in service.on_click(APPROVE, value, "UAZIZ", "aziz")

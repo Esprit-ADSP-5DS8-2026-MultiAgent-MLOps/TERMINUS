@@ -117,3 +117,53 @@ def test_llm_cannot_skip_the_repair(tmp_path, monkeypatch):
     s = run_pipeline(str(UNPINNED), approve, runs_dir=str(tmp_path), supervisor="gemini", simulate={})
     assert steps(s)[:2] == ["validator", "repair"]  # action non autorisée : la règle (réparer) s'applique
     assert "non autorisée" in s["supervision"][0]["fallback"]
+
+
+def sensitive_repair():
+    """Réparation acceptée par le juge mais sensible : l'agent demande une validation humaine."""
+    inner = fake_repair(approved=False)
+
+    def run(inp: AgentInput) -> AgentResult:
+        res = inner(inp)
+        return res.model_copy(update={"status": AgentStatus.NEEDS_APPROVAL, "can_proceed": False,
+                                      "reasons": ["réparation acceptée par le juge, à valider"]})
+
+    return run
+
+
+def disagreement(inp: AgentInput) -> AgentResult:
+    """Le v2 ne confirme pas le blocage du v1."""
+    path = Path(inp.workdir) / "validator_v2.json"
+    path.write_text("{}")
+    return AgentResult(agent="repair", status=AgentStatus.NEEDS_APPROVAL, can_proceed=False,
+                       outputs={"validator_v2": str(path)},
+                       reasons=["validateur v2 : ACCEPTED : le v2 accepte le projet alors que le v1 le bloque"])
+
+
+def test_sensitive_repair_waits_for_a_human_then_is_revalidated(tmp_path, monkeypatch):
+    monkeypatch.setitem(graph.AGENTS, "repair", sensitive_repair())
+    run = graph.Run.start(str(UNPINNED), str(tmp_path), simulate={})
+    q = run.question
+    assert q["gate"] == "repair_review" and q["file_to_review"].endswith("repair_result.json")
+    assert "à valider" in q["reasons"][0]
+    run.answer(approve(q))
+    assert steps(run.state)[:4] == ["validator", "repair", "validator", "agent1"]
+    assert Path(run.state["repaired_dir"]).is_relative_to(tmp_path)
+
+
+def test_sensitive_repair_refused_stops_the_line(tmp_path, monkeypatch):
+    monkeypatch.setitem(graph.AGENTS, "repair", sensitive_repair())
+    run = graph.Run.start(str(UNPINNED), str(tmp_path), simulate={})
+    run.answer({"decision": "reject", "by": "pytest", "comment": ""})
+    assert run.status == "BLOCKED" and "repaired_dir" not in run.state
+
+
+def test_validator_disagreement_can_be_overridden_by_a_human(tmp_path, monkeypatch):
+    monkeypatch.setitem(graph.AGENTS, "repair", disagreement)
+    run = graph.Run.start(str(UNPINNED), str(tmp_path), simulate={})
+    assert run.question["gate"] == "validator_override"
+    run.answer(approve(run.question))
+    assert steps(run.state)[:3] == ["validator", "repair", "agent1"]
+    blocked = graph.Run.start(str(UNPINNED), str(tmp_path), simulate={})
+    blocked.answer({"decision": "reject", "by": "pytest", "comment": ""})
+    assert blocked.status == "BLOCKED"
