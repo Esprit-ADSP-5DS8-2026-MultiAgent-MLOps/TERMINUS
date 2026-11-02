@@ -45,3 +45,7 @@ agents/validator/out/
 agents/validator/tmp/
 agents/validator/.cache/
 agents/validator/results_*.json
+
+# interface web Terminus
+web/node_modules/
+web/dist/

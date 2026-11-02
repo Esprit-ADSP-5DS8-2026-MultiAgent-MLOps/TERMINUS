@@ -6,6 +6,9 @@ set -a; source .env; set +a
 python -m orchestrator api              # http://127.0.0.1:8090/api · documentation : /docs
 ```
 
+L'interface React est dans `web/` (voir `web/README.md`) : `cd web && npm install && npm run dev`,
+puis http://localhost:5173.
+
 L'API ne contient aucune logique de pipeline : elle passe par `Run` (graph.py), comme la ligne de
 commande et le service Slack. Une ligne (run) ne s'exécute qu'à un endroit à la fois : verrou
 `runs/<run_id>/.busy` (runlock.py), partagé par l'API, le service Slack et `approve` / `reject` / `monitor`.
