@@ -20,7 +20,7 @@ from langgraph.types import Command
 from .checkpoint import get_checkpointer
 from .gates import make_gate
 from .llm import default_mode, get_decider
-from .nodes import make_agent_node, make_end, make_repair_node, validate
+from .nodes import make_agent_node, make_end, make_repair_node, make_repair_review_gate, validate
 from .state import PipelineState, initial_state
 from .supervisor import DESTINATIONS, supervisor
 from .registry import resolve
@@ -59,7 +59,8 @@ def agents_for(run_dir: Path) -> dict[str, Callable] | None:
     return agents
 
 
-WORK_NODES = ["validate", *AGENTS, "gate_manifest", "gate_champion", "gate_retraining", "gate_failure"]
+WORK_NODES = ["validate", *AGENTS, "gate_manifest", "gate_champion", "gate_retraining", "gate_failure",
+              "gate_repair_review", "gate_validator_override"]
 
 
 def build_graph(checkpointer=None, agents: dict[str, Callable] | None = None):
@@ -74,6 +75,8 @@ def build_graph(checkpointer=None, agents: dict[str, Callable] | None = None):
     g.add_node("gate_champion", make_gate("champion_replacement", "mlflow_metadata", "gate_champion"))
     g.add_node("gate_retraining", make_gate("retraining", "retraining_request", "gate_retraining"))
     g.add_node("gate_failure", make_gate("failure_review", None, "gate_failure"))
+    g.add_node("gate_repair_review", make_repair_review_gate())
+    g.add_node("gate_validator_override", make_gate("validator_override", "validator_v2", "gate_validator_override"))
     for status in END_STATUSES:
         g.add_node(f"end_{status.lower()}", make_end(status))
         g.add_edge(f"end_{status.lower()}", END)
@@ -115,7 +118,7 @@ class Run:
 
     @classmethod
     def start(cls, project_dir: str, runs_dir: str = "runs", supervisor: str | None = None,
-              simulate: dict | None = None) -> "Run":
+              simulate: dict | None = None, run_id: str | None = None) -> "Run":
         """Crée un nouveau run et l'exécute jusqu'à la première pause (ou la fin).
 
         supervisor : "rules" ou "gemini" ; par défaut ORCH_SUPERVISOR, sinon gemini si
@@ -125,7 +128,7 @@ class Run:
         """
         mode = supervisor or default_mode()
         get_decider(mode)  # erreur claire tout de suite si le mode est inconnu
-        run = cls(uuid.uuid4().hex[:12], runs_dir)
+        run = cls(run_id or uuid.uuid4().hex[:12], runs_dir)
         run.run_dir.mkdir(parents=True, exist_ok=True)
         if simulate is None:  # par défaut, lues dans l'environnement
             simulate = {

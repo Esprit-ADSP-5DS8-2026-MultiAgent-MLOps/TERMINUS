@@ -346,7 +346,8 @@ class RepairResult(Strict):
 
 
 class HumanDecision(Strict):
-    gate: Literal["manifest_confirmation", "champion_replacement", "retraining", "failure_review"]
+    gate: Literal["manifest_confirmation", "champion_replacement", "retraining", "failure_review",
+                  "repair_review", "validator_override"]
     decision: Literal["approve", "reject"]
     by: str
     comment: str = ""

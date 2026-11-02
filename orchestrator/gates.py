@@ -20,6 +20,8 @@ QUESTIONS = {
     "champion_replacement": "Le candidat a passé le quality gate. Le promouvoir en champion ?",
     "retraining": "Un drift a été détecté. Lancer un réentraînement ?",
     "failure_review": "Une étape a échoué. La relancer ?",
+    "repair_review": "La réparation touche un périmètre sensible. Valider la copie réparée ?",
+    "validator_override": "Le validateur v2 ne confirme pas le blocage du v1. Passer outre le v1 ?",
 }
 
 
@@ -42,6 +44,8 @@ def make_gate(gate: str, artifact_key: str | None, node_name: str):
             explanations = [s for s in state.get("supervision", []) if s.get("action") == "gate_failure"]
             if explanations:
                 question["supervisor_explanation"] = explanations[-1]["explanation"]
+        if gate in ("repair_review", "validator_override"):  # ce que la réparation a vu et fait
+            question["reasons"] = state.get("results", {}).get("repair", {}).get("reasons", [])
         answer = interrupt(question)
         decision = HumanDecision(gate=gate, **answer)
         update: dict = {"decisions": [decision.model_dump(mode="json")], "last_step": node_name}

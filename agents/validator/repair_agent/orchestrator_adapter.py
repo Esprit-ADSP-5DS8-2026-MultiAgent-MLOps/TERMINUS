@@ -83,11 +83,14 @@ def run(inp: AgentInput) -> AgentResult:
         if vr.run_status.value != "OK":
             return _fail(started, [f"{summary}, analyse interrompue : "
                                    f"{vr.failure.message if vr.failure else vr.run_status.value}"[:400]], outputs)
+        if vr.next_action in ("PROCEED", "HUMAN_REVIEW"):   # désaccord avec le v1 : un humain tranche (Terminus)
+            why = {"PROCEED": "le v2 accepte le projet alors que le v1 le bloque",
+                   "HUMAN_REVIEW": "le v2 demande une décision humaine"}[vr.next_action]
+            return AgentResult(agent="repair", status=AgentStatus.NEEDS_APPROVAL, can_proceed=False, outputs=outputs,
+                               reasons=[f"{summary} : {why}"], duration_s=round(time.monotonic() - started, 3))
         if vr.next_action != "REPAIR":
-            why = {"PROCEED": "le v2 accepte le projet alors que le v1 le bloque : écart à examiner par un humain",
-                   "STOP": "projet rejeté (hors périmètre ou non sûr) : pas de réparation automatique",
-                   "HUMAN_REVIEW": "décision humaine requise avant toute réparation"}.get(vr.next_action, vr.next_action)
-            return _fail(started, [f"{summary} : {why}"], outputs)
+            why = f"{summary} : projet rejeté (hors périmètre ou non sûr), pas de réparation automatique"
+            return _fail(started, [why], outputs)
 
         # 2. réparation d'une copie dans le workdir (attempt > 1 : avec le verdict REVISE précédent)
         # la copie garde le nom du projet : Agent 1 en tire project_name (modèle MLflow, image Docker)
@@ -122,6 +125,10 @@ def run(inp: AgentInput) -> AgentResult:
     outputs["repair_result"] = write_output(inp, "repair_result", result)
     outputs["repaired_project"] = rr.workspace_path
     warnings = [f"{summary} ; réparation {rr.status} ({len(changes)} modification(s)) ; juge : {jv.verdict}"]
+    if jv.verdict == "ACCEPT" and rr.requires_human_approval:   # sensible : un humain valide (Terminus)
+        return AgentResult(agent="repair", status=AgentStatus.NEEDS_APPROVAL, can_proceed=False, outputs=outputs,
+                           reasons=[f"réparation acceptée par le juge, à valider : {rationale[:300]}"],
+                           warnings=warnings, duration_s=round(time.monotonic() - started, 3))
     if not approved:
         return _fail(started, [f"réparation non retenue, juge : {jv.verdict} ({rationale[:250]})"], outputs, warnings)
     return AgentResult(agent="repair", status=AgentStatus.OK, can_proceed=True, outputs=outputs, warnings=warnings,

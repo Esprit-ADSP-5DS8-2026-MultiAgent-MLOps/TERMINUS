@@ -10,6 +10,7 @@ Ligne de commande de l'orchestrateur.
     python -m orchestrator resume  <run_id>                         # après un plantage
     python -m orchestrator monitor <run_id>                         # Agent 4 : réentraîner si demandé
     python -m orchestrator slack                                    # validations humaines dans Slack
+    python -m orchestrator api                                      # API de Terminus (interface web)
     python -m orchestrator run eval/projects/credit_risk --slack    # le run attend les décisions Slack
     python -m orchestrator export-decisions -o decisions.jsonl      # décisions du superviseur
     python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run  # avant intégration
@@ -33,6 +34,7 @@ from pathlib import Path
 
 from .checkpoint import describe_backend
 from .graph import Run, RunNotFound, list_runs
+from .runlock import run_lock
 
 ICONS = {"OK": "✔", "WARNING": "!", "NEEDS_APPROVAL": "?", "FAILED": "✖"}
 STATUS_TEXT = {
@@ -131,10 +133,11 @@ def cmd_monitor(args) -> Run:
     print(f"Monitoring du run {run.run_id} : l'Agent 4 relit la production…")
     if not args.no_wait and sys.stdin.isatty():
         os.environ["ORCH_INTERACTIVE"] = "1"
-    run.monitor()
-    if not args.no_wait:
-        while not run.finished:
-            run.answer(ask_human(run.question))
+    with run_lock(run.run_dir):
+        run.monitor()
+        if not args.no_wait:
+            while not run.finished:
+                run.answer(ask_human(run.question))
     return run
 
 
@@ -174,7 +177,8 @@ def cmd_decide(args, decision: str) -> Run:
     if sys.stdin.isatty():
         os.environ["ORCH_INTERACTIVE"] = "1"
     run = Run.load(args.run_id, args.runs_dir)
-    run.answer({"decision": decision, "by": getpass.getuser(), "comment": args.message})
+    with run_lock(run.run_dir):          # pas en même temps que Terminus ou le service Slack
+        run.answer({"decision": decision, "by": getpass.getuser(), "comment": args.message})
     return run
 
 
@@ -223,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="ne pas poser la question : s'arrêter à la gate (décision dans Slack ou approve/reject)")
 
     sub.add_parser("slack", help="service Slack : validations humaines, réentraînements de l'Agent 4")
+    p = sub.add_parser("api", help="API de Terminus pour l'interface web")
+    p.add_argument("--port", type=int, default=8090)
 
     p = sub.add_parser("export-decisions", help="exporter les décisions du superviseur (JSONL)")
     p.add_argument("-o", "--output", default="decisions.jsonl", help="fichier de sortie")
@@ -235,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--project", default=None, help="projet de test (défaut : selon l'agent)")
 
     args = parser.parse_args(argv)
+    if args.cmd == "api":
+        from .api import serve as serve_api
+        return serve_api(args.runs_dir, args.port)
     if args.cmd == "slack":
         from .slack import serve
         return serve(args.runs_dir)
@@ -256,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
             run = cmd_decide(args, args.cmd)
         else:
             run = cmd_resume(args)
-    except (RunNotFound, RuntimeError) as exc:
+    except (RunNotFound, RuntimeError) as exc:   # RunBusy compris
         print(f"Erreur : {exc}", file=sys.stderr)
         return 2
     print_run(run)

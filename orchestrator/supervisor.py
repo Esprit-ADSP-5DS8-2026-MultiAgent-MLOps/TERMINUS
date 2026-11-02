@@ -41,6 +41,8 @@ ROUTERS = {
     "gate_champion": routing.after_gate_champion,
     "gate_retraining": routing.after_gate_retraining,
     "gate_failure": routing.after_gate_failure,
+    "gate_repair_review": routing.after_gate_repair_review,
+    "gate_validator_override": routing.after_gate_validator_override,
 }
 
 RETRYABLE = {"validator", "propose_manifest", "agent1", "agent2", "agent3", "agent4"}
@@ -58,6 +60,8 @@ LABELS = {
     "gate_champion": "validation humaine de la mise en production",
     "gate_retraining": "validation humaine du réentraînement",
     "gate_failure": "décision humaine après un échec",
+    "gate_repair_review": "validation humaine de la réparation",
+    "gate_validator_override": "décision humaine sur le désaccord des validateurs",
 }
 
 DESCRIPTIONS = {
@@ -72,6 +76,8 @@ DESCRIPTIONS = {
     "gate_champion": "Demander à un humain de valider la mise en production du modèle",
     "gate_retraining": "Demander à un humain s'il faut réentraîner le modèle",
     "gate_failure": "Demander à un humain s'il faut relancer l'étape qui a échoué",
+    "gate_repair_review": "Demander à un humain de valider une réparation qui touche un périmètre sensible",
+    "gate_validator_override": "Demander à un humain s'il faut passer outre le blocage du validateur v1",
     "end_done": "Terminer : le modèle est déployé et surveillé",
     "end_blocked": "Arrêter : le projet ne respecte pas le contrat",
     "end_failed": "Arrêter le run en échec",
