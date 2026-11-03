@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from common.envscope import read_env_file
+
 from .checkpoint import get_checkpointer
 from .graph import Run, RunNotFound
 from .runlock import is_busy
@@ -121,9 +123,18 @@ def apply(p: Plan, runs_dir: str | Path = "runs", archive: Path | None = None, s
     return archive
 
 
+def repo_context(runs_dir: str) -> str:
+    """Même résultat d'où qu'on lance la commande (ex. depuis agents/agent4) : le .env de la racine
+    complète l'environnement, et un dossier de runs relatif part de la racine du dépôt."""
+    for key, value in read_env_file(REPO / ".env").items():
+        os.environ.setdefault(key, value)
+    return runs_dir if Path(runs_dir).is_absolute() else str(REPO / runs_dir)
+
+
 def main(project: str, runs_dir: str = "runs", yes: bool = False) -> int:
+    runs_dir = repo_context(runs_dir)
     p = plan(project, runs_dir)
-    print(f"Remise à zéro de « {project} »")
+    print(f"Remise à zéro de « {project} » (runs : {runs_dir})")
     for line in describe(p):
         print(f"  {line}")
     if p.empty():

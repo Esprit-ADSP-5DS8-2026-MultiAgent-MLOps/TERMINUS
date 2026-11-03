@@ -1,5 +1,6 @@
 """Remise à zéro d'un projet : seuls ses runs partent, archivés ; les autres projets restent."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -45,3 +46,15 @@ def test_dry_run_changes_nothing(env, capsys):
     assert reset.main("credit_risk", runs, yes=False) == 0
     assert "--yes" in capsys.readouterr().out
     assert Path(runs, "credit2").is_dir()
+
+
+def test_relative_runs_dir_starts_from_the_repo(env, monkeypatch):
+    """Lancée depuis agents/agent4, la commande doit voir les runs de la racine, pas ceux de l'Agent 4."""
+    monkeypatch.setattr(reset, "REPO", env)
+    (env / ".env").write_text("RESET_TEST_VAR=racine\n")
+    monkeypatch.delenv("RESET_TEST_VAR", raising=False)
+    elsewhere = env / "agents" / "agent4"
+    elsewhere.mkdir(parents=True)
+    monkeypatch.chdir(elsewhere)
+    assert reset.repo_context("runs") == str(env / "runs")
+    assert os.environ["RESET_TEST_VAR"] == "racine"
