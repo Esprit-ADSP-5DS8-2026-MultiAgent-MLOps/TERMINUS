@@ -4,12 +4,12 @@ import { Cmd, ErrorLine } from "../components/Bits";
 import { usePoll } from "../hooks";
 
 const GARES = [
-  { n: 0, name: "ORCHESTRATEUR", who: "Ahmed", role: "Décide de la suite après chaque gare, arrête la ligne aux signaux." },
-  { n: 1, name: "VALIDATEUR + RÉPARATION", who: "Sarra", role: "Le v1 contrôle l'entrée ; le v2, le Repair et le juge corrigent une copie quand le v1 bloque." },
-  { n: 2, name: "ANALYSE", who: "Yacine", role: "Lit le code et les données : tâche, cible, métrique, profil, modèle de référence." },
-  { n: 3, name: "MLFLOW", who: "Aziz", role: "Entraîne et compare les modèles en validation croisée, applique le quality gate." },
-  { n: 4, name: "API DOCKER", who: "Syrine", role: "Sert le modèle MLflow dans une API testée, construite en image Docker et déployée." },
-  { n: 5, name: "MONITORING", who: "Mohamed", role: "Surveille la production, diagnostique et demande un réentraînement quand il le faut." },
+  { n: 0, name: "ORCHESTRATEUR", role: "Décide de la suite après chaque gare, arrête la ligne aux signaux." },
+  { n: 1, name: "VALIDATEUR + RÉPARATION", role: "Le v1 contrôle l'entrée ; le v2, le Repair et le juge corrigent une copie quand le v1 bloque." },
+  { n: 2, name: "ANALYSE", role: "Lit le code et les données : tâche, cible, métrique, profil, modèle de référence." },
+  { n: 3, name: "MLFLOW", role: "Entraîne et compare les modèles en validation croisée, applique le quality gate." },
+  { n: 4, name: "API DOCKER", role: "Sert le modèle MLflow dans une API testée, construite en image Docker et déployée." },
+  { n: 5, name: "MONITORING", role: "Surveille la production, diagnostique et demande un réentraînement quand il le faut." },
 ];
 
 const LINKS: Record<number, [string, string][]> = {
@@ -74,7 +74,7 @@ export function Agents() {
           <li key={g.n} className="panel" style={{ display: "flex", flexDirection: "column" }}>
             <div className="small" style={{ padding: "8px 14px", borderBottom: "2px solid var(--ink)", display: "flex",
               justifyContent: "space-between", gap: 10 }}>
-              <strong>GARE {g.n} · {g.name}</strong><span className="muted">{g.who}</span>
+              <strong>GARE {g.n} · {g.name}</strong>
             </div>
             <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, fontSize: 14 }}>
               <p>{g.role}</p>

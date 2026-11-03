@@ -35,6 +35,10 @@ export function Loco({ px = 6, rolling = false, label }: { px?: number; rolling?
       style={{ position: "relative", width: 14 * px, height: 9 * px, flex: "none" }}
     >
       <span style={{ position: "absolute", left: 0, top: 0, width: px, height: px, boxShadow: shadow }} />
+      {rolling && [0, 1, 2].map((i) => (
+        <span key={i} className="smoke"
+          style={{ left: 10 * px, top: -px, width: px * 1.5, height: px * 1.5, animationDelay: `${i * 0.4}s` }} />
+      ))}
     </div>
   );
 }

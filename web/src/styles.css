@@ -116,8 +116,47 @@ h1, h2, h3, p { margin: 0; }
 @keyframes rolling { 50% { transform: translateY(-2px); } }
 .terrain { margin: 8px -28px 0; font-size: 12px; line-height: 1; overflow: hidden; white-space: pre; user-select: none; }
 .terrain .inner { display: inline-block; }
-.terrain .inner.moving { animation: defile 1.6s cubic-bezier(0.45, 0, 0.25, 1); }
-@keyframes defile { from { transform: translateX(0); } to { transform: translateX(-160px); } }
+.terrain .inner { animation: voyage 48s linear infinite; animation-play-state: paused; }
+.terrain .inner.travel { animation-play-state: running; }
+@keyframes voyage { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.smoke { position: absolute; background: var(--soft-line); opacity: 0; animation: fumee 1.2s steps(6) infinite; }
+@keyframes fumee {
+  0% { opacity: 0.8; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(-14px, -30px) scale(1.8); }
+}
+
+/* registre : billets de train */
+.ticket { display: flex; border: 2px solid var(--ink); background: var(--panel); position: relative; }
+.ticket-main { flex: 1 1 auto; min-width: 0; position: relative; padding: 0 0 18px; display: flex; flex-direction: column; gap: 12px; }
+.ticket-band { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 18px;
+  background: var(--ink); color: var(--paper); font-size: 12px; letter-spacing: 0.08em; }
+.ticket.champion .ticket-band { background: var(--signal); color: var(--ink); font-weight: 600; }
+.ticket-route { padding: 0 18px; font-size: 14px; letter-spacing: 0.04em; }
+.ticket-fields { margin: 0; padding: 0 18px; display: grid; grid-template-columns: 130px 1fr; gap: 4px 16px; font-size: 14px; }
+.ticket-fields dt { color: var(--muted); }
+.ticket-fields dd { margin: 0; min-width: 0; }
+.ticket-id { overflow-wrap: anywhere; font-size: 13px; }
+.ticket-stub { flex: 0 0 150px; border-left: 2px dashed var(--ink); padding: 14px 16px; position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.ticket-number { font-family: var(--pixel); font-size: 34px; line-height: 1.1; margin-bottom: 10px; }
+.notch { position: absolute; left: -12px; width: 22px; height: 22px; border: 2px solid var(--ink); border-radius: 50%;
+  background: var(--paper); }
+.notch.top { top: -13px; clip-path: inset(50% 0 0 0); }
+.notch.bottom { bottom: -13px; clip-path: inset(0 0 50% 0); }
+.barcode { display: flex; align-items: stretch; height: 34px; margin-top: auto; }
+.barcode span { background: var(--ink); }
+.stamp { position: absolute; right: 18px; bottom: 14px; transform: rotate(-7deg); font-family: var(--pixel); font-size: 15px;
+  padding: 3px 10px; border: 3px double var(--muted); color: var(--muted); letter-spacing: 0.06em; }
+.stamp.on { border-color: var(--ink); color: var(--ink); background: var(--signal); }
+@media (max-width: 720px) {
+  .ticket { flex-direction: column; }
+  .ticket-stub { border-left: none; border-top: 2px dashed var(--ink); flex-basis: auto; flex-direction: row; align-items: center; gap: 12px; }
+  .ticket-number { margin: 0; font-size: 26px; }
+  .barcode { margin: 0 0 0 auto; }
+  .notch { display: none; }
+  .stamp { position: static; align-self: flex-end; margin-right: 18px; }
+  .ticket-fields { grid-template-columns: 110px 1fr; }
+}
 
 /* diff */
 .diff { border: 2px solid var(--line); background: var(--panel); overflow-x: auto; font-size: 14px; line-height: 1.8; }
@@ -139,6 +178,7 @@ h1, h2, h3, p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .passage { display: none; }
-  .blink, .rolling, .terrain .inner.moving { animation: none; }
+  .blink, .rolling, .terrain .inner, .smoke { animation: none; }
+  .smoke { display: none; }
   .loco-slot { transition: none; }
 }

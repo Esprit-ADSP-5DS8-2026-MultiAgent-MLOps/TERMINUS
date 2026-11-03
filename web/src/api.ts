@@ -131,7 +131,11 @@ export const api = {
   health: () => call<Health[]>("/api/health"),
   projects: () => call<Project[]>("/api/projects"),
   runs: () => call<RunSummary[]>("/api/runs"),
-  run: (id: string) => call<RunDetail>(`/api/runs/${id}`),
+  run: async (id: string): Promise<RunDetail> => ({
+    // même si l'API répond pendant que la ligne se forme : jamais de champ manquant (page blanche)
+    track: [], gate: null, supervision: [], decisions: [], results: {}, artifacts: {},
+    ...(await call<Partial<RunDetail> & { run_id: string; status: string }>(`/api/runs/${id}`)),
+  } as RunDetail),
   file: (id: string, path: string) => call<string>(`/api/runs/${id}/file?path=${encodeURIComponent(path)}`),
   start: (project_dir: string, supervisor?: string) =>
     post<{ run_id: string }>("/api/runs", { project_dir, supervisor }),

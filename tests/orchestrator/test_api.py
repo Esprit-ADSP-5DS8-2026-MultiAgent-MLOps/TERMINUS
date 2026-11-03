@@ -89,3 +89,25 @@ def test_files_listed_when_runs_dir_is_relative(tmp_path, monkeypatch):
     run_id = _start(api)
     artifacts = api.get(f"/api/runs/{run_id}").json()["artifacts"]
     assert artifacts["mlflow_metadata"] == "agent2/mlflow_metadata.json"
+
+
+def test_line_being_formed_has_the_full_shape(api, tmp_path):
+    """Juste après « lancer la ligne », l'interface reçoit déjà un plan complet (sinon page blanche)."""
+    (tmp_path / "runs" / "neuve").mkdir(parents=True)
+    d = api.get("/api/runs/neuve").json()
+    assert d["status"] == "STARTING" and d["supervision"] == [] and d["artifacts"] == {} and d["gate"] is None
+    assert [s["status"] for s in d["track"]][:2] == ["running", "todo"]
+
+
+def test_registry_history_shows_the_champion_alias(tmp_path, monkeypatch):
+    from mlflow.tracking import MlflowClient
+
+    from orchestrator import api as api_module
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path / 'mlflow.db'}")
+    c = MlflowClient()
+    c.create_registered_model("projet")
+    for _ in range(2):
+        c.create_model_version("projet", source=str(tmp_path))
+    c.set_registered_model_alias("projet", "champion", "2")
+    history = api_module.model_history("projet")
+    assert [(v["version"], v["aliases"]) for v in history] == [(2, ["champion"]), (1, [])]

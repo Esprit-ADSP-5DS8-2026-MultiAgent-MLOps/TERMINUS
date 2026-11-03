@@ -32,10 +32,15 @@ const TERRAIN = [
   "▒▓▓▓▒▓█▓█▒▓█▓▓██▓▒▓▓▒▒▓█▓▒█▒▓▓█ ▓█▓█▓▓▒█▓▒▓█▓▓▒▒▒▓▓▒▓▓▓▒▓▓▓▓█▓▒▒█▓▓▓▓▒▓▓▒▓▓▒▒▓▓▓█▒▓█▓▓▓▓▒▒▒▓▓▒▓▓▓▓▓▓███▓▒▓▓█▓▓▓▓▒▓▓█▒█▒▒ ▓▓▓█▓▓▓▒▒█▓█▓▓▓ ▓▒▓▓▒▓▓▓█▓▒▒▒█▒▒▓▓▓▓▒▓▓▓▓▓ ▓▓▒▓█▓██▒█▓▒▒▓▓█",
 ].join("\n");
 
+// Chaque ligne est doublée : le décor défile en boucle sans couture (translateX -50 %).
+const WIDTH = Math.max(...TERRAIN.split("\n").map((l) => l.length));
+const LOOP = TERRAIN.split("\n").map((l) => l.padEnd(WIDTH, " ").repeat(2)).join("\n");
+
+/** Le paysage défile tant que la loco roule, et s'arrête avec elle (au signal, en gare). */
 export function Terrain({ moving }: { moving: boolean }) {
   return (
     <pre aria-hidden="true" className="terrain">
-      <span className={`inner${moving ? " moving" : ""}`}>{TERRAIN}</span>
+      <span className={`inner${moving ? " travel" : ""}`}>{LOOP}</span>
     </pre>
   );
 }
