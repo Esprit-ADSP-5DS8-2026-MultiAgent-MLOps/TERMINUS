@@ -11,6 +11,7 @@ Ligne de commande de l'orchestrateur.
     python -m orchestrator monitor <run_id>                         # Agent 4 : réentraîner si demandé
     python -m orchestrator slack                                    # validations humaines dans Slack
     python -m orchestrator api                                      # API de Terminus (interface web)
+    python -m orchestrator reset credit_risk [--yes]                # remettre un projet à zéro
     python -m orchestrator run eval/projects/credit_risk --slack    # le run attend les décisions Slack
     python -m orchestrator export-decisions -o decisions.jsonl      # décisions du superviseur
     python -m orchestrator check-agent agent2 mlflow_agent.orchestrator_adapter:run  # avant intégration
@@ -226,6 +227,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-wait", "--slack", dest="no_wait", action="store_true",
                    help="ne pas poser la question : s'arrêter à la gate (décision dans Slack ou approve/reject)")
 
+    p = sub.add_parser("reset", help="remettre un projet à zéro (runs, modèle MLflow, conteneur, monitoring)")
+    p.add_argument("project", help="nom du projet (dossier), ex. credit_risk")
+    p.add_argument("--yes", action="store_true", help="appliquer (sans : affiche seulement ce qui sera fait)")
+
     sub.add_parser("slack", help="service Slack : validations humaines, réentraînements de l'Agent 4")
     p = sub.add_parser("api", help="API de Terminus pour l'interface web")
     p.add_argument("--port", type=int, default=8090)
@@ -244,6 +249,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "api":
         from .api import serve as serve_api
         return serve_api(args.runs_dir, args.port)
+    if args.cmd == "reset":
+        from .reset import main as reset_main
+        return reset_main(args.project, args.runs_dir, args.yes)
     if args.cmd == "slack":
         from .slack import serve
         return serve(args.runs_dir)
