@@ -1,43 +1,67 @@
 import { useState } from "react";
-import { api } from "../api";
+import { api, type ModelVersion } from "../api";
 import { Cmd, ErrorLine } from "../components/Bits";
 import { day, usePoll } from "../hooks";
+
+/** Code-barres décoratif, tiré de l'identifiant du run MLflow : chaque version a le sien. */
+function Barcode({ seed }: { seed: string }) {
+  const bars = [...(seed || "0000000000000000").slice(0, 24)].map((c) => parseInt(c, 16) || 0);
+  return (
+    <span className="barcode" aria-hidden="true">
+      {bars.map((b, i) => <span key={i} style={{ width: 1 + (b % 4), marginRight: 1 + ((b >> 2) % 3) }} />)}
+    </span>
+  );
+}
+
+const CLASSE: Record<string, string> = { champion: "CHAMPION", challenger: "CHALLENGER" };
+
+function Ticket({ v, project }: { v: ModelVersion; project: string }) {
+  const champion = v.aliases.includes("champion");
+  const alias = v.aliases[0];
+  const metrics = Object.entries(v.metrics).filter(([k]) => k.startsWith("test_"));
+  const base = Object.entries(v.metrics).find(([k]) => k.startsWith("baseline_test_"));
+  return (
+    <article className={`ticket${champion ? " champion" : ""}`} aria-label={`Version ${v.version}`}>
+      <div className="ticket-main">
+        <div className="ticket-band">
+          <span>TERMINUS · BILLET DE MODÈLE</span>
+          <span>{day(v.created_at)}</span>
+        </div>
+        <p className="ticket-route">
+          <span className="muted">DE</span> entraînement <span aria-hidden="true">━━▶</span>{" "}
+          <span className="muted">À</span> {champion ? "production" : "registre"}
+        </p>
+        <dl className="ticket-fields">
+          <dt>modèle</dt><dd>{v.model ?? "—"}</dd>
+          {metrics.map(([k, m]) => (
+            <div key={k} style={{ display: "contents" }}>
+              <dt>{k.replace("test_", "")} test</dt>
+              <dd><strong>{m.toFixed(4)}</strong>{base ? <span className="muted"> · modèle naïf {base[1].toFixed(4)}</span> : null}</dd>
+            </div>
+          ))}
+          <dt>run MLflow</dt><dd className="ticket-id">{v.run_id ?? "—"}</dd>
+        </dl>
+        <span className={`stamp${champion ? " on" : ""}`}>{CLASSE[alias] ?? (alias ? alias.toUpperCase() : "RETIRÉE")}</span>
+      </div>
+      <div className="ticket-stub">
+        <span className="notch top" aria-hidden="true" />
+        <span className="notch bottom" aria-hidden="true" />
+        <span className="tiny muted">{project}</span>
+        <span className="tiny muted">N°</span>
+        <span className="ticket-number">v{v.version}</span>
+        <Barcode seed={v.run_id ?? ""} />
+      </div>
+    </article>
+  );
+}
 
 function History({ name }: { name: string }) {
   const versions = usePoll(() => api.model(name), 15000, [name]);
   if (versions.error) return <ErrorLine error={versions.error} />;
   if (!versions.data) return <p className="muted">…</p>;
   return (
-    <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column" }}>
-      {versions.data.map((v, i) => {
-        const champion = v.aliases.includes("champion");
-        const metrics = Object.entries(v.metrics).filter(([k]) => k.startsWith("test_"));
-        const base = Object.entries(v.metrics).find(([k]) => k.startsWith("baseline_test_"));
-        return (
-          <li key={v.version} style={{ display: "grid", gridTemplateColumns: "36px 1fr", gap: 16 }}>
-            <div aria-hidden="true" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <span style={{ width: 20, height: 20, border: "3px solid var(--ink)", background: champion ? "var(--signal)" : "transparent" }} />
-              {i < versions.data!.length - 1 && <span style={{ flex: 1, borderLeft: "3px solid var(--ink)" }} />}
-            </div>
-            <article className="panel" style={{ marginBottom: 20 }}>
-              <div className={`panel-head${champion ? " signal" : ""}`} style={champion ? undefined : { background: "transparent", color: "var(--ink)", borderBottom: "2px solid var(--ink)" }}>
-                <strong>v{v.version}{v.aliases.length ? " · " + v.aliases.map((a) => "@" + a).join(" ") : " · retirée"}</strong>
-                <span style={{ fontWeight: 400 }}>{day(v.created_at)}</span>
-              </div>
-              <dl style={{ margin: 0, padding: 16, display: "grid", gridTemplateColumns: "170px 1fr", gap: "6px 16px", fontSize: 14 }}>
-                <dt className="muted">modèle</dt><dd style={{ margin: 0 }}>{v.model ?? "—"}</dd>
-                {metrics.map(([k, m]) => (
-                  <div key={k} style={{ display: "contents" }}>
-                    <dt className="muted">{k.replace("test_", "")} test</dt>
-                    <dd style={{ margin: 0 }}><strong>{m.toFixed(4)}</strong>{base ? <span className="muted"> · modèle naïf {base[1].toFixed(4)}</span> : null}</dd>
-                  </div>
-                ))}
-                <dt className="muted">run MLflow</dt><dd style={{ margin: 0, overflowWrap: "anywhere" }}>{v.run_id ?? "—"}</dd>
-              </dl>
-            </article>
-          </li>
-        );
-      })}
+    <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 22 }}>
+      {versions.data.map((v) => <li key={v.version}><Ticket v={v} project={name} /></li>)}
     </ol>
   );
 }

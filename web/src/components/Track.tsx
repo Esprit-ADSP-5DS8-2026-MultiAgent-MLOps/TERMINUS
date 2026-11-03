@@ -101,7 +101,7 @@ export function Track({ stations, retrainCount = 0 }: { stations: Station[]; ret
           </ol>
         </div>
       </div>
-      <Terrain moving={moving} />
+      <Terrain moving={moving || here?.status === "running"} />
     </>
   );
 }

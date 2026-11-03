@@ -254,12 +254,16 @@ def registry() -> list[dict]:
 
 def model_history(name: str) -> list[dict]:
     c = _mlflow()
+    # search_model_versions ne remplit pas les alias : on les lit sur le modèle enregistré.
+    by_version: dict[int, list[str]] = {}
+    for alias, version in (getattr(c.get_registered_model(name), "aliases", {}) or {}).items():
+        by_version.setdefault(int(version), []).append(alias)
     out = []
     for v in sorted(c.search_model_versions(f"name='{name}'"), key=lambda v: int(v.version), reverse=True):
         run = c.get_run(v.run_id) if v.run_id else None
         metrics = dict(run.data.metrics) if run else {}
         params = dict(run.data.params) if run else {}
-        out.append({"version": int(v.version), "aliases": list(getattr(v, "aliases", []) or []),
+        out.append({"version": int(v.version), "aliases": by_version.get(int(v.version)) or list(getattr(v, "aliases", []) or []),
                     "created_at": datetime.fromtimestamp(v.creation_timestamp / 1000, timezone.utc).isoformat(),
                     "metrics": {k: m for k, m in metrics.items() if k.startswith(("test_", "baseline_test_"))},
                     "model": params.get("best_model") or params.get("model"), "run_id": v.run_id})
@@ -279,6 +283,7 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
     saver = get_checkpointer(runs_dir)
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="terminus")   # agents lourds : un à la fois
     jobs: dict[str, dict] = {}
+    names: dict[str, str] = {}          # projet d'une ligne lancée mais pas encore enregistrée
     lock = threading.Lock()
 
     def load(run_id: str) -> Run:
@@ -339,6 +344,7 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
             raise HTTPException(400, f"{req.project_dir} n'est pas un dossier")
         run_id = uuid.uuid4().hex[:12]
         (Path(runs_dir) / run_id).mkdir(parents=True, exist_ok=True)
+        names[run_id] = project.name
         submit(run_id, "lancement", lambda: Run.start(str(project), runs_dir, supervisor=req.supervisor,
                                                       run_id=run_id))
         return {"run_id": run_id}
@@ -349,8 +355,12 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
         try:
             run = Run.load(run_id, runs_dir, saver)
         except RunNotFound:
-            if run_id in jobs or run_dir.exists():
-                return {"run_id": run_id, "status": "STARTING", "job": jobs.get(run_id), "track": []}
+            if run_id in jobs or run_dir.exists():   # la ligne se forme : même forme qu'une ligne lancée
+                track_ = [{"id": n, "label": STATIONS[n], "status": "running" if i == 0 else "todo"}
+                          for i, n in enumerate(CANONICAL)]
+                return {"run_id": run_id, "project": names.get(run_id), "status": "STARTING",
+                        "job": jobs.get(run_id), "track": track_, "gate": None, "supervision": [],
+                        "decisions": [], "results": {}, "artifacts": {}}
             raise HTTPException(404, f"ligne {run_id} introuvable") from None
         busy = is_busy(run_dir)
         s = run.state
