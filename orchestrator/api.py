@@ -114,7 +114,10 @@ def track(run: Run, busy: bool) -> list[dict]:
     out: list[dict] = []
     for _, kind, e in events:
         if kind == "step":
-            out.append(_station(e["node"], e))
+            st = _station(e["node"], e)
+            if st["id"] == "agent4" and out and out[-1]["id"] == "agent4":
+                st["label"] += " · relecture"          # « relire la production » sans réentraînement
+            out.append(st)
         else:
             node = GATE_NODE.get(e["gate"], e["gate"])
             out.append({"id": node, "label": STATIONS.get(node, node), "at": e.get("at"),
@@ -342,7 +345,7 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
 
     @app.get("/api/runs/{run_id}")
     def run_detail(run_id: str):
-        run_dir = Path(runs_dir) / run_id
+        run_dir = (Path(runs_dir) / run_id).resolve()   # les chemins d'artefacts sont absolus
         try:
             run = Run.load(run_id, runs_dir, saver)
         except RunNotFound:

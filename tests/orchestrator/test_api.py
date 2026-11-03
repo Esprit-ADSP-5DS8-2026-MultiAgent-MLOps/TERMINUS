@@ -1,6 +1,7 @@
 """API de Terminus avec les stubs et le vrai validateur (commandes synchrones, sans thread)."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -79,3 +80,12 @@ def test_unknown_line_and_monitor_on_undeployed_line(api):
     assert api.get("/api/runs/inconnu").status_code == 404
     run_id = _start(api)
     assert api.post(f"/api/runs/{run_id}/monitor").status_code == 409
+
+
+def test_files_listed_when_runs_dir_is_relative(tmp_path, monkeypatch):
+    """`python -m orchestrator api` passe « runs » (relatif) : les fichiers doivent rester listés."""
+    monkeypatch.delenv("ORCH_SIMULATE_DRIFT", raising=False)
+    api = TestClient(create_app(os.path.relpath(tmp_path / "runs"), sync=True))
+    run_id = _start(api)
+    artifacts = api.get(f"/api/runs/{run_id}").json()["artifacts"]
+    assert artifacts["mlflow_metadata"] == "agent2/mlflow_metadata.json"
