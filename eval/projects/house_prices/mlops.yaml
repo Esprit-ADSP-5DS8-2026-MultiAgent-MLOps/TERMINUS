@@ -1,0 +1,12 @@
+project:
+  name: house-prices
+  task: regression
+data:
+  path: data.csv
+  target: price_k
+evaluation:
+  primary_metric: rmse
+  min_threshold: 40        # régression (rmse) : erreur MAXIMALE acceptée, en milliers
+entrypoints:
+  train: train.py
+  predict: predict.py

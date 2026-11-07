@@ -148,3 +148,51 @@ def test_publish_choice_made_in_slack(tmp_path):
     assert _publish_choice(inp) is False
     (wd.parent / "publish.json").write_text('{"push": true, "by": "syrine"}')
     assert _publish_choice(inp) is True
+
+
+HOUSE_PRICES = ROOT / "eval" / "projects" / "house_prices"
+
+
+def test_regression_model_is_served(tmp_path):
+    """Régression : l'API rend un nombre (prediction: float), testée contre le modèle appelé directement."""
+    pytest.importorskip("mlflow")
+    import mlflow
+    import mlflow.sklearn
+    import pandas as pd
+    from agent_api_docker.orchestrator_adapter import run
+    from sklearn.compose import make_column_transformer
+    from sklearn.linear_model import Ridge
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import OneHotEncoder
+
+    from common.schemas import MlflowMetadata
+
+    uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+    mlflow.set_tracking_uri(uri)
+    df = pd.read_csv(HOUSE_PRICES / "data.csv")
+    X, y = df.drop(columns=["price_k"]), df["price_k"]
+    pipe = make_pipeline(make_column_transformer((OneHotEncoder(handle_unknown="ignore"), ["district"]),
+                                                 remainder="passthrough"), Ridge()).fit(X, y)
+    mlflow.set_experiment("t")
+    with mlflow.start_run():
+        mlflow.sklearn.log_model(pipe, name="model", registered_model_name="house_prices")
+
+    inp = prepare("agent3", HOUSE_PRICES, tmp_path / "out")
+    path = Path(inp.inputs["mlflow_metadata"])
+    meta = MlflowMetadata.model_validate_json(path.read_text())
+    meta = meta.model_copy(update={"tracking_uri": uri, "model_uri": "models:/house_prices/1", "model_version": "1"})
+    path.write_text(meta.model_dump_json())
+    result = run(inp)
+    assert result.status.value == "WARNING" and result.can_proceed, result.reasons
+    report = json.loads(Path(result.outputs["analysis_report_v1"]).read_text())
+    assert report["io"]["output_schema"] == [{"name": "prediction", "type": "float"}]
+    assert isinstance(report["io"]["example_output"]["prediction"], float)
+    api = (Path(inp.workdir) / "workspace" / "generated" / "api.py").read_text()
+    assert "prediction: float" in api
+
+
+def test_text_labels_are_served():
+    """Étiquettes texte (« bad »/« good ») : prediction est une chaîne."""
+    from agent_api_docker.orchestrator_adapter import _prediction_type
+
+    assert _prediction_type(["bad", "good"]) == "str" and _prediction_type([0, 1]) == "int"

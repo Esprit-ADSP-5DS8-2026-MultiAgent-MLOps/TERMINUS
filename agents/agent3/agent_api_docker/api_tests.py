@@ -79,7 +79,11 @@ def test_predict_example(client):
     for name in OUTPUT_FIELDS:
         assert name in body, f"champ de sortie absent: {name}"
     if EXAMPLE_OUTPUT:
-        assert body["prediction"] == EXAMPLE_OUTPUT["prediction"]
+        expected = EXAMPLE_OUTPUT["prediction"]
+        if isinstance(expected, float):   # regression : aller-retour JSON des entrees
+            assert body["prediction"] == pytest.approx(expected, rel=1e-6, abs=1e-6)
+        else:
+            assert body["prediction"] == expected
         if "proba" in EXAMPLE_OUTPUT and body.get("proba") is not None:
             assert body["proba"] == pytest.approx(EXAMPLE_OUTPUT["proba"], abs=0.02)
 
@@ -124,7 +128,10 @@ def test_api_matches_direct_model_call(client):
     for i, row in enumerate(rows):
         r = client.post("/predict", json=row)
         assert r.status_code == 200, f"ligne {i}: {r.text}"
-        assert r.json()["prediction"] == direct[i], f"ligne {i}: API != modele"
+        if isinstance(direct[i], float):   # regression : aller-retour JSON des entrees
+            assert r.json()["prediction"] == pytest.approx(direct[i], rel=1e-6, abs=1e-6), f"ligne {i}: API != modele"
+        else:
+            assert r.json()["prediction"] == direct[i], f"ligne {i}: API != modele"
         if SUPPORTS_PROBA and r.json().get("proba") is not None:
             p = float(model.predict_proba(df.iloc[[i]])[0, 1])
             assert r.json()["proba"] == pytest.approx(p, abs=1e-6), f"ligne {i}: proba differente"

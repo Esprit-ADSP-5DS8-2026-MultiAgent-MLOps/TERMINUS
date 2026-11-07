@@ -31,6 +31,13 @@ def test_reference_is_fully_clean_and_dynamic_ran():
     assert rep.facts["dynamic"]["deterministic"] is True
 
 
+def test_regression_reference_is_clean():
+    """Régression (rmse) : le seuil est une erreur maximale, un rmse plus bas que le seuil est bon."""
+    rep = validate(EVAL / "projects/house_prices", bandit=False)
+    assert rep.summary["BLOCKER"] == rep.summary["WARNING"] == 0, [f.code for f in rep.findings]
+    assert rep.observed_metrics["rmse"] < 40
+
+
 def test_code_is_not_executed_when_static_blockers_exist():
     rep = validate(EVAL / "projects/variants/05_dangerous_call", bandit=False)
     dyn = next(l for l in rep.levels if l.name == "dynamic")

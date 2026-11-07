@@ -10,7 +10,7 @@ import tempfile
 from importlib import metadata
 from pathlib import Path
 
-from .contract import ARTIFACT_EXTENSIONS, MODEL_ARTIFACT
+from .contract import ARTIFACT_EXTENSIONS, LOWER_IS_BETTER, MODEL_ARTIFACT
 from .fs import IGNORED_DIRS
 from .models import Severity as S
 from .sandbox import ensure_venv, pick_sandbox
@@ -160,9 +160,12 @@ def _interpret(ctx, rep, work):
                         evidence=f"clés reçues : {sorted(metrics)}")
             else:
                 ctx.observed_metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
-                if val < m.evaluation.min_threshold:
+                # rmse / mae : plus bas = meilleur, le seuil est une erreur MAXIMALE (même règle que le quality gate)
+                lower_better = m.evaluation.primary_metric in LOWER_IS_BETTER
+                if (val > m.evaluation.min_threshold) if lower_better else (val < m.evaluation.min_threshold):
                     ctx.add("C8", "C8.METRIC_BELOW_THRESHOLD", S.WARNING,
-                            f"{m.evaluation.primary_metric}={val:.4f} < seuil {m.evaluation.min_threshold} : le quality gate rejetterait ce modèle.")
+                            f"{m.evaluation.primary_metric}={val:.4f} {'>' if lower_better else '<'} seuil "
+                            f"{m.evaluation.min_threshold} : le quality gate rejetterait ce modèle.")
         if not rep.get("artifact_exists"):
             ctx.add("C3", "C3.NO_MODEL_ARTIFACT", S.BLOCKER, f"train() n'a pas écrit {MODEL_ARTIFACT} dans output_dir.", hint=f"joblib.dump(model, output_dir/'{MODEL_ARTIFACT}')")
 

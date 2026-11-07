@@ -123,11 +123,7 @@ def _production_score(inp: AgentInput, metric: str, warnings: list[str]) -> floa
     if "retraining_request" not in inp.inputs:
         return None
     perf = read_output(inp, "retraining_request").current_performance or {}
-    if metric in perf:
-        warnings.append(f"réentraînement : champion comparé à sa performance mesurée en production "
-                        f"({metric} {perf[metric]:.4f})")
-        return float(perf[metric])
-    return None
+    return float(perf[metric]) if metric in perf else None
 
 
 def _report(spec, df: pd.DataFrame) -> AnalysisReport:
@@ -205,6 +201,9 @@ def run(inp: AgentInput) -> AgentResult:
         champion = result.champion_test_score
         result.warnings.append(f"champion rejugé sur le même jeu de test que le candidat "
                                f"({spec.primary_metric} {champion:.4f})")
+    elif production is not None and champion is not None:
+        result.warnings.append(f"réentraînement : champion comparé à sa performance mesurée en production "
+                               f"({spec.primary_metric} {production:.4f})")
     outputs = {"experiment_result": str(workdir / "experiment_result.json"),
                "analysis_report": str(workdir / "analysis_report.json")}
     Path(outputs["experiment_result"]).write_text(result.model_dump_json(indent=2), encoding="utf-8")
@@ -255,6 +254,8 @@ def run(inp: AgentInput) -> AgentResult:
     # Le modèle actuel du projet (score vu par le validateur) : comparaison indicative, les découpages
     # train/test diffèrent, donc on informe l'humain sans bloquer.
     current = read_output(inp, "baseline").observed_metrics.get(metric) if "baseline" in inp.inputs else None
+    if "retraining_request" in inp.inputs:
+        current = None      # réentraînement : autres données, le score du projet d'origine ne se compare plus
     note = ""
     if current is not None and sign * test < sign * current:
         note = f" ; attention : moins bon que le modèle actuel du projet ({metric} {current:.4f})"

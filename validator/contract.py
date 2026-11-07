@@ -27,6 +27,7 @@ RULES = {
 
 CLASSIFICATION_METRICS = frozenset({"accuracy", "precision", "recall", "f1", "roc_auc"})
 REGRESSION_METRICS = frozenset({"rmse", "mae", "r2"})
+LOWER_IS_BETTER = frozenset({"rmse", "mae"})   # le seuil est alors une erreur maximale
 
 # nom d'import -> nom de distribution pip (quand ils diffèrent)
 IMPORT_TO_DIST = {

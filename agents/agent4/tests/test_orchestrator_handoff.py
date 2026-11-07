@@ -100,3 +100,15 @@ def test_new_model_starts_a_new_monitoring_period(tmp_path, monkeypatch):
     _new_period(old, new, "models:/p/2", warnings)
     assert not new.store_path.exists() and "archivé" in warnings[0]
     assert len(list(new.dir.glob("monitoring_p_v1_*.db"))) == 1 and len(list(new.dir.glob("monitoring_p_v1_*.db-wal"))) == 1
+
+
+def test_concept_scenario_on_a_regression_target():
+    """Régression : la cible des lignes concernées augmente (le marché change), elle ne devient pas « 1 - prix »."""
+    import pandas as pd
+
+    from monitoring_agent.runtime.simulator import CONCEPT_FACTOR, concept_label, is_regression_target
+
+    prices = pd.Series([100.0 + i for i in range(50)])
+    assert is_regression_target(prices) and not is_regression_target(pd.Series([0, 1] * 25))
+    assert concept_label(200.0, regression=True) == 200.0 * CONCEPT_FACTOR
+    assert concept_label(1, regression=False) == 0.0

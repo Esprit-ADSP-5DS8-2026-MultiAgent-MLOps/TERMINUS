@@ -193,7 +193,8 @@ def _report(spec, handoff: ValidatorHandoff, df: pd.DataFrame, build: Path, from
         "io": {
             "input_type": "tabular",
             "input_schema": _input_schema(df, features),
-            "output_schema": [{"name": "prediction", "type": _prediction_type(classes)}]
+            "output_schema": [{"name": "prediction",
+                               "type": "float" if spec.task == "regression" else _prediction_type(classes)}]
                              + ([{"name": "proba", "type": "float", "optional": True}] if binary else []),
             "class_labels": classes,
             "example_input": example,
@@ -364,15 +365,11 @@ def run(inp: AgentInput) -> AgentResult:
     warnings: list[str] = []
     spec = read_output(inp, "project_spec")
     handoff = ValidatorHandoff(**json.loads(Path(inp.report_path).read_text(encoding="utf-8"))["handoff"])
-    if spec.task != "classification":
-        return AgentResult(agent="agent3", status=AgentStatus.FAILED, can_proceed=False,
-                           reasons=[("le modèle d'API de l'agent ne gère que la classification (prediction: int) : "
-                                     "régression à ajouter au template api.py.j2")],
-                           duration_s=round(time.monotonic() - started, 3))
+    regression = spec.task == "regression"
 
     build = _writable_copy(Path(inp.project_dir), workdir / "project")
     df = pd.read_csv(build / spec.data_path)
-    classes = sorted(df[spec.target].dropna().unique().tolist())
+    classes = [] if regression else sorted(df[spec.target].dropna().unique().tolist())
     classes = [c.item() if hasattr(c, "item") else c for c in classes]      # numpy -> Python (JSON)
 
     meta = read_output(inp, "mlflow_metadata") if "mlflow_metadata" in inp.inputs else None
@@ -380,10 +377,10 @@ def run(inp: AgentInput) -> AgentResult:
     if meta and meta.model_uri:
         try:
             _export_mlflow_model(meta, build)
-            stored = _model_classes(meta)
+            stored = None if regression else _model_classes(meta)
             if stored is not None:
                 classes = stored        # celles de l'entraînement, même si les données du projet ont changé
-            else:
+            elif not regression:
                 warnings.append("classes absentes du modèle MLflow : déduites des données du projet (triées)")
             mapping = classes if classes != list(range(len(classes))) else []
             (build / PREDICT_MODULE).write_text(_PREDICT_SRC.format(classes=mapping), encoding="utf-8")

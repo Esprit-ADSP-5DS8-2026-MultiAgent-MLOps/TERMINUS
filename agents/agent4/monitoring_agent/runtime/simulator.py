@@ -9,8 +9,9 @@ Scénarios (après une phase normale de `warmup` requêtes) :
                features -> cible change aussi. La perf mesurée chute, l'estimée beaucoup moins.
 - quality    : catégories inconnues + valeurs aberrantes        -> problème de qualité, pas de « vrai » drift
 - concept    : features inchangées, mais la relation features -> cible change : au-delà de la médiane
-               de la feature numérique la plus variée, la cible s'inverse -> aucun drift, seule la perf
-               mesurée baisse. La nouvelle relation s'apprend : un réentraînement peut la rattraper.
+               de la feature numérique la plus variée, la cible s'inverse (classification) ou augmente de
+               50 % (régression : le marché a changé) -> aucun drift, seule la perf mesurée baisse.
+               La nouvelle relation s'apprend : un réentraînement peut la rattraper.
 
 Le scénario `concept` montre la limite de l'estimation sans labels (CBPE) : il faut la vérité terrain.
 """
@@ -29,6 +30,16 @@ import numpy as np
 import pandas as pd
 
 SCENARIOS = ("normal", "covariate", "quality", "concept")
+CONCEPT_FACTOR = 1.5      # régression : la cible des lignes concernées est multipliée par ce facteur
+
+
+def is_regression_target(y: pd.Series) -> bool:
+    """Cible numérique avec beaucoup de valeurs : régression (sinon classes 0/1 à inverser)."""
+    return pd.api.types.is_numeric_dtype(y) and not pd.api.types.is_bool_dtype(y) and y.nunique() > 10
+
+
+def concept_label(label: float, regression: bool) -> float:
+    return float(label) * CONCEPT_FACTOR if regression else float(1 - label)
 
 
 @dataclass
@@ -88,6 +99,7 @@ async def simulate(gateway_url: str, data: pd.DataFrame, target: str, scenario: 
     medians = {c: float(features[c].median()) for c in numeric[:1]}
     rows = features.to_dict(orient="records")
     labels = data[target].tolist()
+    regression = is_regression_target(data[target])
 
     res = SimulationResult()
     pending: deque[tuple[str, float]] = deque()   # labels pas encore « connus »
@@ -113,7 +125,7 @@ async def simulate(gateway_url: str, data: pd.DataFrame, target: str, scenario: 
             res.sent += 1
             if ok:
                 res.ok += 1
-                pending.append((rid, float(1 - label if flip else label)))
+                pending.append((rid, concept_label(label, regression) if flip else float(label)))
             else:
                 res.errors += 1
 

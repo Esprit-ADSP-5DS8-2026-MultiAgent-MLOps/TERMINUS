@@ -8,14 +8,19 @@ function num(v: unknown, digits = 4): string {
   return typeof v === "number" ? v.toFixed(digits) : "—";
 }
 
+const LOWER_IS_BETTER = new Set(["rmse", "mae"]);
+
 function Champion({ c }: { c: Content }) {
   const g: Content = c.quality_gate ?? {};
+  const lower = LOWER_IS_BETTER.has(g.primary_metric);
   const rows: [string, number | null | undefined, boolean][] = [
     [`${g.primary_metric ?? "score"} candidat`, g.value, true],
     ["modèle naïf", g.baseline_value, false],
     ["champion actuel", g.champion_value, false],
-    ["seuil du manifeste", g.min_threshold, false],
+    [lower ? "erreur max. du manifeste" : "seuil du manifeste", g.min_threshold, false],
   ];
+  // barres à l'échelle des valeurs : 0..1 pour roc_auc, f1… ; jusqu'à la plus grande erreur pour rmse / mae
+  const scale = Math.max(1, ...rows.map(([, v]) => (typeof v === "number" ? Math.abs(v) : 0)));
   return (
     <>
       <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "max-content max-content 1fr", gap: "6px 16px",
@@ -24,14 +29,15 @@ function Champion({ c }: { c: Content }) {
           <div key={label} style={{ display: "contents" }}>
             <dt className={main ? undefined : "muted"}>{label}</dt>
             <dd style={{ margin: 0, fontWeight: main ? 600 : 400 }}>
-              {v == null ? (label === "champion actuel" ? "aucun" : "—") : num(v, label.startsWith("seuil") ? 2 : 4)}
+              {v == null ? (label === "champion actuel" ? "aucun" : "—") : num(v, label.includes("manifeste") ? 2 : 4)}
             </dd>
             <dd aria-hidden="true" className={main ? undefined : "muted"} style={{ margin: 0, letterSpacing: 1 }}>
-              {typeof v === "number" ? bar(v) : ""}
+              {typeof v === "number" ? bar(v, scale) : ""}
             </dd>
           </div>
         ))}
       </dl>
+      {lower && <p className="small muted">{g.primary_metric} : plus bas = meilleur (erreur, dans l'unité de la cible).</p>}
       <div className="small muted" style={{ overflowWrap: "anywhere" }}>
         modèle {c.params?.model ?? "?"} · {c.model_uri ?? ""}
       </div>

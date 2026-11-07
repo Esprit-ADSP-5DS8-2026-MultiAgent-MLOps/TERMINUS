@@ -32,7 +32,8 @@ def run_rules(source: str, context: dict[str, Any]) -> list[dict[str, str | int]
         if name in random_calls and not any(keyword.arg == "random_state" for keyword in node.keywords):
             findings.append(_finding(context.get("file", ""), node.lineno, "NO_RANDOM_STATE", "medium", f"{name} has no fixed random_state.", "Set random_state=42 for reproducibility."))
     imbalanced = bool(context.get("imbalanced"))
-    if split and not any(keyword.arg == "stratify" for keyword in split.keywords):
+    # stratify n'a de sens que pour des classes : pas de faux problème « high » sur une régression
+    if split and context.get("problem_type") != "regression" and not any(keyword.arg == "stratify" for keyword in split.keywords):
         findings.append(_finding(context.get("file", ""), split.lineno, "NO_STRATIFY", "high" if imbalanced else "medium", "Classification split does not preserve class proportions.", "Pass stratify=y to train_test_split."))
     classification = context.get("problem_type") == "classification"
     source_lower = source.lower()

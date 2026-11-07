@@ -42,3 +42,11 @@ def test_deterministic_fixes_apply_and_missing_key_skips_llm(tmp_path: Path) -> 
     assert "stratify=y" in updated
     assert "class_weight='balanced'" in updated or 'class_weight="balanced"' in updated
     assert "XAI_API_KEY" not in str(result)
+
+
+def test_regression_split_is_not_asked_to_stratify() -> None:
+    """Régression : pas de classes à préserver, donc pas de NO_STRATIFY."""
+    src = "from sklearn.model_selection import train_test_split\nX_tr, X_te, y_tr, y_te = train_test_split(X, y, random_state=42)\n"
+    rules = {f["rule"] for f in run_rules(src, {"problem_type": "regression"})}
+    assert "NO_STRATIFY" not in rules
+    assert "NO_STRATIFY" in {f["rule"] for f in run_rules(src, {"problem_type": "classification"})}
