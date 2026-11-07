@@ -116,8 +116,15 @@ function Judge({ j }: { j: Content }) {
   );
 }
 
+// Même liste que validator/contract.py (NEVER_WAIVED) : un humain ne les lève jamais.
+const NEVER_WAIVED = new Set(["C10.DESTRUCTIVE_FS", "C11.BANDIT_HIGH", "C11.DANGEROUS_CALL", "C11.NETWORK_IMPORT",
+  "C11.NETWORK_URL", "C11.PICKLE_USAGE", "C11.SECRET", "C11.SECRET_FILE", "C12.SYMLINK_ESCAPE", "ENGINE.CHECK_CRASHED"]);
+
 function Override({ gate }: { gate: Gate }) {
-  const v1: Content = (gate.validator_v1 as Content)?.handoff ?? {};
+  const report = (gate.validator_v1 as Content) ?? {};
+  const v1: Content = report.handoff ?? {};
+  const blockers: Content[] = (report.findings ?? []).filter((f: Content) => f.severity === "BLOCKER");
+  const codes = [...new Set(blockers.map((f) => f.code as string))];
   const v2: Content = gate.content ?? {};
   const issues: Content[] = v2.issues ?? [];
   return (
@@ -125,6 +132,11 @@ function Override({ gate }: { gate: Gate }) {
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
         <h3 className="cmd">v1 · contrôle d'entrée</h3>
         <p className="small"><span className="st-inverse">{v1.status ?? "BLOCKED"}</span> {v1.reason ?? ""}</p>
+        <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+          {codes.map((c) => (
+            <li key={c}>{c}{NEVER_WAIVED.has(c) && <strong> · ne se lève pas (sécurité)</strong>}</li>
+          ))}
+        </ul>
       </div>
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
         <h3 className="cmd">v2 · diagnostic</h3>
@@ -134,6 +146,10 @@ function Override({ gate }: { gate: Gate }) {
           {issues.length === 0 && <li>aucun problème relevé</li>}
         </ul>
       </div>
+      <p className="small muted" style={{ flex: "1 1 100%" }}>
+        Passer outre : le v1 revalide le projet avec ces bloquants en avertissement, signés de votre nom, puis
+        la ligne continue avec un rapport complet. Un bloquant de sécurité reste bloquant.
+      </p>
     </div>
   );
 }

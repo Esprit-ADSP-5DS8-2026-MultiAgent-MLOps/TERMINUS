@@ -5,6 +5,7 @@ L'agent de réparation est simulé : il corrige une vraie variante du projet (d�
 et le vrai validateur revalide la copie.
 """
 
+import json
 import shutil
 from pathlib import Path
 
@@ -163,7 +164,22 @@ def test_validator_disagreement_can_be_overridden_by_a_human(tmp_path, monkeypat
     run = graph.Run.start(str(UNPINNED), str(tmp_path), simulate={})
     assert run.question["gate"] == "validator_override"
     run.answer(approve(run.question))
-    assert steps(run.state)[:3] == ["validator", "repair", "agent1"]
+    # revalidation avec le bloquant du v1 levé : l'Agent 1 reçoit un rapport complet qui trace la décision
+    assert steps(run.state)[:4] == ["validator", "repair", "validator", "agent1"]
+    assert run.state["waived_codes"] == ["C6.UNPINNED"]
+    report = json.loads(Path(run.state["report_path"]).read_text())
+    assert report["handoff"]["can_proceed"] and report["handoff"]["task"] == "classification"
+    waived = [f for f in report["findings"] if f["code"] == "C6.UNPINNED"]
+    assert waived and all(f["severity"] == "WARNING" and "levé par pytest" in f["message"] for f in waived)
     blocked = graph.Run.start(str(UNPINNED), str(tmp_path), simulate={})
     blocked.answer({"decision": "reject", "by": "pytest", "comment": ""})
     assert blocked.status == "BLOCKED"
+
+
+def test_security_blockers_are_never_lifted(tmp_path, monkeypatch):
+    """Un humain peut donner raison au v2, pas lever un appel dangereux : la ligne s'arrête, sans reboucler."""
+    monkeypatch.setitem(graph.AGENTS, "repair", disagreement)
+    run = graph.Run.start(str(UNPINNED.parent / "05_dangerous_call"), str(tmp_path), simulate={})
+    assert run.question["gate"] == "validator_override"
+    run.answer(approve(run.question))
+    assert run.status == "BLOCKED" and steps(run.state) == ["validator", "repair", "validator"]

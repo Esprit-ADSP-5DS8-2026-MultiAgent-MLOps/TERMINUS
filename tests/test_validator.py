@@ -38,6 +38,17 @@ def test_regression_reference_is_clean():
     assert rep.observed_metrics["rmse"] < 40
 
 
+def test_waived_blocker_becomes_a_traced_warning():
+    """Désaccord v1/v2 tranché par un humain : le bloquant reste visible, en avertissement, avec son nom."""
+    cfg = ContractConfig(waived_codes=frozenset({"C6.UNPINNED", "C11.DANGEROUS_CALL"}), waived_by="Mohamed")
+    rep = validate(EVAL / "projects/variants/02_unpinned_deps", cfg, bandit=False)
+    unpinned = [f for f in rep.findings if f.code == "C6.UNPINNED"]
+    assert unpinned and all(f.severity.value == "WARNING" and "levé par Mohamed" in f.message for f in unpinned)
+    assert rep.verdict.value != "REJECTED"
+    danger = validate(EVAL / "projects/variants/05_dangerous_call", cfg, bandit=False)
+    assert danger.verdict.value == "REJECTED"          # jamais levé : le code serait exécuté
+
+
 def test_code_is_not_executed_when_static_blockers_exist():
     rep = validate(EVAL / "projects/variants/05_dangerous_call", bandit=False)
     dyn = next(l for l in rep.levels if l.name == "dynamic")

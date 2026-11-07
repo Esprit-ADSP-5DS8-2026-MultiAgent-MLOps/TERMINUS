@@ -49,7 +49,9 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
   revalidation de la copie, 2 tentatives au plus, sans gate humaine. Le projet d'origine n'est jamais
   modifié. Nombre de tentatives et gate à confirmer avec Sarra.
 - Superviseur : `gemini` par défaut (`ORCH_SUPERVISOR`), règles si aucune clé.
-- `SCHEMA_VERSION = "0.2"`.
+- `SCHEMA_VERSION = "0.3"` (validé avec Ahmed) : gates `repair_review` et `validator_override`, décidées dans
+  Terminus ; après `validator_override` approuvé, revalidation avec les bloquants du v1 levés (voir
+  `docs/terminus.md`).
 
 ### 2. Agent 1 (Yacine) : `feature/agent-code-data-analysis`
 

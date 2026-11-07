@@ -28,6 +28,11 @@ RULES = {
 CLASSIFICATION_METRICS = frozenset({"accuracy", "precision", "recall", "f1", "roc_auc"})
 REGRESSION_METRICS = frozenset({"rmse", "mae", "r2"})
 LOWER_IS_BETTER = frozenset({"rmse", "mae"})   # le seuil est alors une erreur maximale
+# Jamais levés par un humain : le code serait exécuté (sandbox) avec un appel dangereux, un secret,
+# du réseau ou une suppression de fichiers ; ou le validateur lui-même a planté.
+NEVER_WAIVED = frozenset({"C10.DESTRUCTIVE_FS", "C11.BANDIT_HIGH", "C11.DANGEROUS_CALL", "C11.NETWORK_IMPORT",
+                          "C11.NETWORK_URL", "C11.PICKLE_USAGE", "C11.SECRET", "C11.SECRET_FILE",
+                          "C12.SYMLINK_ESCAPE", "ENGINE.CHECK_CRASHED"})
 
 # nom d'import -> nom de distribution pip (quand ils diffèrent)
 IMPORT_TO_DIST = {
@@ -75,6 +80,9 @@ class ContractConfig:
     duplicate_rate_warn: float = 0.20
     dynamic_timeout_s: int = 300
     memory_mb: int = 4096
+    # Bloquants levés par un humain (désaccord v1/v2 tranché pour le v2) : rapportés en WARNING, tracés.
+    waived_codes: frozenset = field(default_factory=frozenset)
+    waived_by: str | None = None
 
     @property
     def blocked_frameworks(self) -> frozenset:

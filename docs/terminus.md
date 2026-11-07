@@ -36,10 +36,13 @@ avec `status` = `passed`, `blocked`, `failed`, `stopped`, `refused`, `waiting` (
 | Gate | Quand | Approuver | Refuser |
 |---|---|---|---|
 | `repair_review` | le juge accepte la réparation, mais elle touche un périmètre sensible (`requires_human_approval`) | la copie est revérifiée (dans le workdir de la tentative) puis revalidée par le v1 | ligne arrêtée (BLOCKED) |
-| `validator_override` | le v1 bloque, le v2 répond PROCEED ou HUMAN_REVIEW | la ligne continue vers l'Agent 1 sur le projet d'origine | ligne arrêtée (BLOCKED) |
+| `validator_override` | le v1 bloque, le v2 répond PROCEED ou HUMAN_REVIEW | le v1 revalide le projet d'origine avec ses bloquants levés (`--waive`, en avertissement « levé par <nom> »), puis la ligne continue | ligne arrêtée (BLOCKED) |
 
-Dans Slack, elles apparaissent sans boutons, avec « à décider dans Terminus ». Ajout au contrat :
-`HumanDecision.gate` accepte ces deux valeurs (ajout seulement, `SCHEMA_VERSION` inchangé).
+Dans Slack, elles apparaissent sans boutons, avec « à décider dans Terminus ». Contrat : `HumanDecision.gate`
+accepte ces deux valeurs (`SCHEMA_VERSION` 0.3).
 
-À vérifier avec Sarra et Yacine : « passer outre le v1 » envoie à l'Agent 1 un rapport du v1 en BLOCKED ;
-l'Agent 1 doit y trouver les données et le manifeste (sinon l'étape échoue et passe en `failure_review`).
+Après un désaccord tranché pour le v2, l'Agent 1 et les suivants reçoivent un rapport complet (tâche, cible,
+métrique, exécution de contrôle, métriques observées), scellé, qui garde la trace de la décision : les bloquants
+levés sont dans `carry_forward` et dans l'état du run (`waived_codes`). Jamais levés, même par un humain : appel
+dangereux, secret, réseau, suppression de fichiers, pickle, bandit high, lien symbolique sortant, plantage du
+validateur (`NEVER_WAIVED`). S'il ne reste que ceux-là, la ligne s'arrête sans reboucler sur la réparation.

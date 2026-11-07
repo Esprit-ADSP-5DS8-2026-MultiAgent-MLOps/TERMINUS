@@ -17,6 +17,10 @@ Historique :
 - 0.2 : boucle de réparation (RepairResult), ProjectSpec complété pour l'Agent 3
   (model_artifact, interfaces, python_version), DeploymentResult.model_source,
   OUTPUTS / OUTPUT_SCHEMAS (qui produit quoi), read_output / write_output.
+- 0.3 : deux décisions humaines (Terminus) : HumanDecision.gate accepte « repair_review » (réparation
+  sensible à valider) et « validator_override » (le v1 bloque, le v2 ne confirme pas ; si l'humain donne
+  raison au v2, le v1 revalide avec ces bloquants levés et tracés). Ajout seulement : les fichiers 0.2
+  restent lisibles.
 
 Source de vérité du rapport du validateur : validator/models.py.
 Ici, on ne reprend que la partie `handoff` dont les agents ont besoin.
@@ -30,7 +34,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SCHEMA_VERSION = "0.2"
+SCHEMA_VERSION = "0.3"
 
 Task = Literal["classification", "regression"]
 Metric = Literal["accuracy", "precision", "recall", "f1", "roc_auc", "rmse", "mae", "r2"]
@@ -346,6 +350,7 @@ class RepairResult(Strict):
 
 
 class HumanDecision(Strict):
+    # repair_review et validator_override (0.3) : décidées dans Terminus seulement (diff, rapports côte à côte)
     gate: Literal["manifest_confirmation", "champion_replacement", "retraining", "failure_review",
                   "repair_review", "validator_override"]
     decision: Literal["approve", "reject"]

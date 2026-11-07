@@ -71,7 +71,7 @@ DESCRIPTIONS = {
     "agent4": "Lancer l'Agent 4 : surveiller le modèle déployé",
     "propose_manifest": "Demander à l'Agent 1 de proposer un mlops.yaml",
     "repair": "Tenter une réparation automatique du projet (sur une copie, jugée, puis revalidée)",
-    "validate": "Revalider la copie réparée du projet",
+    "validate": "Revalider le projet (copie réparée, ou bloquants du v1 levés par un humain)",
     "gate_manifest": "Demander à un humain de valider le manifeste proposé",
     "gate_champion": "Demander à un humain de valider la mise en production du modèle",
     "gate_retraining": "Demander à un humain s'il faut réentraîner le modèle",
