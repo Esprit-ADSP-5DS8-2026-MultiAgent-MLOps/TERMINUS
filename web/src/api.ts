@@ -14,6 +14,42 @@ export interface Station {
   comment?: string;
   gate?: string;
   at?: string | null;
+  all_reasons?: string[];
+  all_warnings?: string[];
+  details?: StationDetails;
+}
+
+export interface CompareRow { v1: string; v1_message: string; v2: string | null; v2_status: string | null; verdict: string }
+export interface Compare {
+  rows: CompareRow[];
+  only_v2: { v2: string; description: string; severity?: string }[];
+  summary: string;
+  v2_status?: string;
+  v2_next_action?: string;
+}
+export interface StationDetails { facts: [string, string][]; compare?: Compare }
+
+export interface Agent4Pending {
+  id: string;
+  action: string;
+  mode?: string;
+  window_index?: number;
+  created_at?: string;
+  signals?: string[];
+  root_cause?: string | null;
+  summary?: string | null;
+  rationale?: string | null;
+  evidence?: { fact: string; value: unknown; claim: string }[];
+}
+export interface Monitoring {
+  predictions?: number;
+  labels?: number;
+  windows?: number;
+  severity?: string | null;
+  signals?: string[];
+  decider?: string | null;
+  pending: Agent4Pending[];
+  recent: { id: string; action: string; mode?: string; status: string; window_index?: number }[];
 }
 
 export interface Served {
@@ -83,6 +119,7 @@ export interface RunDetail extends RunSummary {
   results: Record<string, { status: string; reasons: string[]; warnings: string[]; duration_s: number }>;
   artifacts: Record<string, string>;
   job?: Job | null;
+  monitoring?: Monitoring | null;
 }
 
 export interface Health { service: string; where: string; ok: boolean; detail: string; optional?: boolean }
@@ -142,6 +179,8 @@ export const api = {
   decide: (id: string, body: { decision: "approve" | "reject"; by: string; comment: string; key: string; publish?: boolean }) =>
     post<{ accepted: boolean }>(`/api/runs/${id}/decision`, body),
   monitor: (id: string) => post<{ accepted: boolean }>(`/api/runs/${id}/monitor`, {}),
+  agent4Answer: (id: string, decisionId: string, body: { decision: "approve" | "reject"; by: string; comment: string }) =>
+    post<{ status: string; retraining: boolean }>(`/api/runs/${id}/agent4/${encodeURIComponent(decisionId)}`, body),
   decisions: () => call<{ pending: Pending[]; recent: Decision[] }>("/api/decisions"),
   registry: () => call<ModelEntry[]>("/api/registry"),
   model: (name: string) => call<ModelVersion[]>(`/api/registry/${encodeURIComponent(name)}`),
@@ -156,4 +195,5 @@ export const GATE_TITLES: Record<string, string> = {
   failure_review: "étape en échec",
   repair_review: "réparation à valider",
   validator_override: "désaccord v1 / v2",
+  agent4_action: "décision de l'Agent 4",
 };

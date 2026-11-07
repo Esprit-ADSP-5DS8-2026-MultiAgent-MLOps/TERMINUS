@@ -59,6 +59,12 @@ class StartRequest(BaseModel):
     supervisor: str | None = None
 
 
+class Agent4Answer(BaseModel):
+    decision: str                       # approve | reject
+    by: str
+    comment: str = ""
+
+
 class DecisionRequest(BaseModel):
     decision: str                       # approve | reject
     by: str
@@ -89,6 +95,132 @@ def project_of(state: dict) -> str:
     return spec.get("project_name") or Path(state.get("project_dir", "?")).name
 
 
+# Équivalence approximative entre les codes du v1 (validator/) et les contrôles du v2 (agents/validator/policy) :
+# sert à mettre les deux verdicts côte à côte, gare par gare.
+V1_TO_V2 = [("C1.", "STRUCT.REQUIRED_FILES"), ("C12.", "STRUCT.LIMITS"), ("C8.", "STRUCT.MANIFEST"),
+            ("C2.SYNTAX", "CODE.SYNTAX"), ("C2.", "FRAMEWORK.SCOPE"), ("C6.UNDECLARED", "ENV.DEPENDENCIES_DECLARED"),
+            ("C6.", "ENV.DEPENDENCIES_PINNED"), ("C3.", "ML.TRAIN_INTERFACE"), ("C4.", "ML.PREDICT_INTERFACE"),
+            ("C5.INTERACTIVE", "ML.NON_INTERACTIVE"), ("C5.", "EXEC.RUN"), ("C7.", "DATA.USABLE"),
+            ("C9.", "ML.REPRODUCIBILITY"), ("C10.", "IO.PATHS"), ("C11.SECRET", "SEC.SECRETS"),
+            ("C11.NETWORK", "SEC.NETWORK"), ("C11.COMMITTED", "SEC.COMMITTED_ARTIFACTS"), ("C11.", "SEC.DANGEROUS_CALLS")]
+
+
+def _v2_check(code: str) -> str | None:
+    return next((v2 for prefix, v2 in V1_TO_V2 if code.startswith(prefix)), None)
+
+
+def _fmt(v, digits: int = 4) -> str:
+    return f"{v:.{digits}f}" if isinstance(v, float) else str(v)
+
+
+def compare_validators(v1: dict, v2: dict) -> dict:
+    """Mesure v1/v2 d'une ligne : chaque bloquant du v1 face au contrôle équivalent du v2, puis ce que seul
+    le v2 a vu. Les deux validateurs n'ont pas la même grille : l'équivalence est indicative."""
+    checks = {c.get("check_id"): c.get("status") for c in v2.get("checks", [])}
+    issues = v2.get("issues", [])
+    rows, seen = [], set()
+    for f in v1.get("findings", []):
+        if f.get("severity") != "BLOCKER":
+            continue
+        target = _v2_check(f["code"])
+        seen.add(target)
+        st = checks.get(target)
+        verdict = ("confirme" if st == "FAIL" else "ne confirme pas" if st in ("PASS", "WARNING")
+                   else "non vérifié" if st else "pas d'équivalent")
+        rows.append({"v1": f["code"], "v1_message": f.get("message", "")[:160], "v2": target, "v2_status": st,
+                     "verdict": verdict})
+    only_v2 = [{"v2": i.get("check_id"), "description": (i.get("description") or "")[:160],
+                "severity": i.get("severity")} for i in issues if i.get("check_id") not in seen]
+    agree = sum(r["verdict"] == "confirme" for r in rows)
+    return {"rows": rows, "only_v2": only_v2[:8], "v1_blockers": len(rows), "confirmed": agree,
+            "v2_status": v2.get("status"), "v2_next_action": v2.get("next_action"),
+            "summary": (f"{agree}/{len(rows)} bloquant(s) du v1 confirmé(s) par le v2"
+                        + (f", {len(only_v2)} problème(s) vu(s) seulement par le v2" if only_v2 else ""))}
+
+
+def station_facts(node: str, entry: dict, ctx: dict) -> dict:
+    """Ce que la gare a fait, lu dans ses fichiers de sortie. Un agent relancé (réentraînement) réécrit les
+    mêmes fichiers : seule sa DERNIÈRE exécution est lue ici (voir track), les précédentes gardent leurs raisons."""
+    out = entry.get("outputs") or {}
+    facts: list[list[str]] = []
+    extra: dict = {}
+    if node == "validator":
+        r = _read(out.get("compatibility_report"))
+        ctx["v1"] = r
+        if r:
+            sm = r.get("summary", {})
+            facts += [["verdict", r.get("verdict", "?")],
+                      ["bloquants / avertissements", f"{sm.get('BLOCKER', 0)} / {sm.get('WARNING', 0)}"],
+                      ["niveaux", " · ".join(f"{l['name']} {'✓' if l['status'] == 'done' else '—'}"
+                                            for l in r.get("levels", []))]]
+            if r.get("observed_metrics"):
+                facts.append(["métriques du projet", ", ".join(f"{k} {_fmt(v)}" for k, v in r["observed_metrics"].items())])
+            waived = sorted({f["code"] for f in r.get("findings", []) if "levé par" in f.get("message", "")})
+            if waived:
+                facts.append(["bloquants levés par un humain", ", ".join(waived)])
+            codes = sorted({f["code"] for f in r.get("findings", []) if f.get("severity") == "BLOCKER"})
+            if codes:
+                facts.append(["bloquants", ", ".join(codes[:6])])
+    elif node == "repair":
+        v2, rr, jv = _read(out.get("validator_v2")), _read(out.get("repair_report")), _read(out.get("judge_verdict"))
+        if v2:
+            facts += [["v2 : statut", f"{v2.get('status')} → {v2.get('next_action')}"],
+                      ["v2 : problèmes", str(len(v2.get("issues", [])))]]
+            extra["compare"] = compare_validators(ctx.get("v1") or {}, v2)
+        if rr:
+            facts += [["réparation", f"{rr.get('status')} · {len(rr.get('modifications', []))} modification(s)"]]
+            if rr.get("requires_human_approval"):
+                facts.append(["périmètre sensible", "oui : validation humaine"])
+        if jv:
+            facts.append(["juge", f"{jv.get('verdict')} ({jv.get('judge_model') or '?'})"
+                                  + (f" · {jv.get('reason')[:120]}" if jv.get("reason") else "")])
+    elif node == "agent1":
+        spec, prof = _read(out.get("project_spec")), _read(out.get("data_profile"))
+        if spec:
+            facts += [["tâche · cible", f"{spec.get('task')} · {spec.get('target')}"],
+                      ["métrique · seuil", f"{spec.get('primary_metric')} · {spec.get('min_threshold')}"],
+                      ["features", str(len(spec.get("feature_columns", [])))]]
+        if prof:
+            facts.append(["lignes", str(prof.get("rows"))])
+            if prof.get("class_balance"):
+                facts.append(["classes", ", ".join(f"{k}: {v}" for k, v in prof["class_balance"].items())])
+    elif node == "agent2":
+        ex, meta = _read(out.get("experiment_result")), _read(out.get("mlflow_metadata"))
+        if ex:
+            m = ex.get("primary_metric", "")
+            tried = ", ".join(f"{k} ({v} essais)" for k, v in (ex.get("trials_completed") or {}).items())
+            facts += [["modèles essayés", tried or "—"], ["retenu", str(ex.get("best_model_name"))],
+                      [f"{m} validation · test", f"{_fmt(ex.get('validation_score'))} · {_fmt(ex.get('test_score'))}"],
+                      ["modèle naïf", _fmt(ex.get("baseline_test_score"))]]
+            if ex.get("champion_test_score") is not None:
+                facts.append(["champion (même jeu de test)", _fmt(ex["champion_test_score"])])
+        if meta:
+            g = meta.get("quality_gate") or {}
+            facts.append(["quality gate", "réussi" if g.get("passed") else "raté : " + "; ".join(g.get("reasons", []))[:160]])
+            facts.append(["registre", f"{meta.get('model_uri')} (alias {meta.get('alias')})"])
+    elif node == "agent3":
+        dep = _read(out.get("deployment_result"))
+        if dep:
+            checks = dep.get("checks", [])
+            facts += [["modèle servi", f"{dep.get('model_uri')} ({dep.get('model_source')})"],
+                      ["image", f"{dep.get('image')}:{dep.get('tag')}" + (" · Docker Hub" if dep.get("pushed") else "")],
+                      ["contrôles", " · ".join(f"{c['name']} {'✓' if c['passed'] else '✗'}" for c in checks)],
+                      ["API", dep.get("endpoint") or "non déployée (Docker absent)"]]
+            facts += [[c["name"], c["details"]] for c in checks if c.get("details")][:2]
+    elif node == "agent4":
+        cfg = _read(out.get("monitoring_config"))
+        if cfg:
+            facts.append(["surveille", f"{cfg.get('model_uri', '?')} · fenêtres de {cfg.get('window_size', '?')}"])
+        if out.get("retraining_request"):
+            req = _read(out["retraining_request"])
+            facts.append(["réentraînement demandé", f"{req.get('reason')} · {(req.get('diagnosis') or '')[:140]}"])
+    elif node == "propose_manifest":
+        man = _read(out.get("proposed_manifest"))
+        if man:
+            facts.append(["manifeste proposé", json.dumps(man, ensure_ascii=False)[:200]])
+    return {"facts": facts, **extra}
+
+
 def _station(node: str, entry: dict) -> dict:
     status = entry.get("status", "")
     if node == "validator" and status == "FAILED":
@@ -101,7 +233,8 @@ def _station(node: str, entry: dict) -> dict:
         kind = "passed"
     return {"id": node, "label": STATIONS.get(node, node), "status": kind, "agent_status": status,
             "duration_s": entry.get("duration_s"), "reasons": entry.get("reasons", [])[:3],
-            "warnings": entry.get("warnings", [])[:3], "at": entry.get("started_at")}
+            "warnings": entry.get("warnings", [])[:3], "at": entry.get("started_at"),
+            "all_reasons": entry.get("reasons", [])[:12], "all_warnings": entry.get("warnings", [])[:12]}
 
 
 def track(run: Run, busy: bool) -> list[dict]:
@@ -112,9 +245,18 @@ def track(run: Run, busy: bool) -> list[dict]:
     events += [(d.get("at") or "", "gate", d) for d in s.get("decisions", [])]
     events.sort(key=lambda e: e[0])
     out: list[dict] = []
-    for _, kind, e in events:
+    ctx: dict = {}                     # rapport du v1 vu juste avant (comparaison v1/v2 à la gare de réparation)
+    last_run = {e["node"]: i for i, (_, kind, e) in enumerate(events) if kind == "step"}
+    for i, (_, kind, e) in enumerate(events):
         if kind == "step":
             st = _station(e["node"], e)
+            # le validateur et la réparation écrivent un dossier par passage ; les agents, un seul (réécrit)
+            per_pass = e["node"] in ("validator", "repair") or last_run[e["node"]] == i
+            try:
+                st["details"] = (station_facts(e["node"], e, ctx) if per_pass else
+                                 {"facts": [["fichiers", "remplacés par le passage suivant : voir ses raisons"]]})
+            except Exception as exc:  # noqa: BLE001 - un fichier illisible ne casse pas le plan de ligne
+                st["details"] = {"facts": [["détails indisponibles", type(exc).__name__]]}
             if st["id"] == "agent4" and out and out[-1]["id"] == "agent4":
                 st["label"] += " · relecture"          # « relire la production » sans réentraînement
             out.append(st)
@@ -171,6 +313,46 @@ def gate_details(run: Run) -> dict | None:
     if q["gate"] == "validator_override":
         d["validator_v1"] = _read(run.state.get("report_path"))
     return d
+
+
+# ---------------------------------------------------------------------------
+# Agent 4 en production : ce que voit sa gateway
+# ---------------------------------------------------------------------------
+
+
+def gateway_url() -> str:
+    return os.environ.get("TERMINUS_GATEWAY_URL", "http://127.0.0.1:8100").rstrip("/")
+
+
+def agent4_live(project: str) -> dict | None:
+    """Fenêtres et décisions de l'agent de la gateway pour CE projet ; None si elle ne le surveille pas."""
+    import httpx
+
+    base = gateway_url()
+    try:
+        st = httpx.get(f"{base}/monitoring/status", timeout=1.5).json()
+        if st.get("project") != project:
+            return None
+        decisions = httpx.get(f"{base}/monitoring/decisions", timeout=1.5).json()
+        pending = []
+        for d in decisions:
+            if d.get("status") != "awaiting_human":
+                continue
+            full = httpx.get(f"{base}/monitoring/decisions/{d['id']}", timeout=1.5).json()
+            sample = (full.get("samples") or [{}])[0]
+            pending.append({**d, "root_cause": sample.get("root_cause"), "summary": sample.get("summary"),
+                            "rationale": sample.get("rationale"),
+                            "evidence": [{"fact": e.get("fact"), "value": e.get("value"), "claim": e.get("claim")}
+                                         for e in sample.get("evidence", [])][:6],
+                            "policy": full.get("policy")})
+    except (httpx.HTTPError, ValueError, KeyError):
+        return None
+    last = st.get("last_window") or {}
+    return {"predictions": st.get("predictions"), "labels": st.get("labels"), "windows": st.get("windows"),
+            "severity": last.get("severity"), "signals": last.get("signals", []),
+            "decider": (st.get("agent") or {}).get("decider"), "pending": pending,
+            "recent": [{k: d.get(k) for k in ("id", "action", "mode", "status", "window_index", "created_at")}
+                       for d in decisions[-5:]]}
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +546,9 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
             raise HTTPException(404, f"ligne {run_id} introuvable") from None
         busy = is_busy(run_dir)
         s = run.state
-        return {**run_summary(run, busy), "track": track(run, busy), "gate": gate_details(run),
+        summary = run_summary(run, busy)
+        live = agent4_live(summary["project"]) if (summary.get("served") or {}).get("endpoint") else None
+        return {**summary, "track": track(run, busy), "gate": gate_details(run), "monitoring": live,
                 "supervision": [{k: d.get(k) for k in ("after", "action", "explanation", "decider", "fallback", "at")}
                                 for d in s.get("supervision", [])],
                 "decisions": s.get("decisions", []), "results": s.get("results", {}),
@@ -408,9 +592,34 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
         submit(run_id, "monitoring", lambda: Run.load(run_id, runs_dir, saver).monitor())
         return {"run_id": run_id, "accepted": True}
 
+    @app.post("/api/runs/{run_id}/agent4/{decision_id}", status_code=202)
+    def agent4_answer(run_id: str, decision_id: str, req: Agent4Answer):
+        """Répondre à une décision de l'agent de la gateway (comme la console ou Slack). Un réentraînement
+        approuvé est aussitôt remis à la ligne : son signal « réentraînement » s'affiche ensuite ici."""
+        import httpx
+
+        if req.decision not in ("approve", "reject"):
+            raise HTTPException(400, "decision : approve ou reject")
+        run = load(run_id)
+        try:
+            r = httpx.post(f"{gateway_url()}/monitoring/decisions/{decision_id}/{req.decision}", timeout=120,
+                           json={"by": f"{req.by} (Terminus)", "comment": req.comment})
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"gateway injoignable ({type(exc).__name__})") from None
+        if r.status_code >= 400:
+            raise HTTPException(409, r.json().get("detail", r.text) if "json" in r.headers.get("content-type", "")
+                                else r.text)
+        body = r.json()
+        handed = req.decision == "approve" and (body.get("outputs") or {}).get("retraining_request")
+        if handed and not is_busy(run.run_dir) and run.status in ("DONE", "CHAMPION_KEPT", "FAILED"):
+            submit(run_id, "monitoring", lambda: Run.load(run_id, runs_dir, saver).monitor())
+        return {"run_id": run_id, "decision": body.get("id"), "status": body.get("status"),
+                "retraining": bool(handed)}
+
     @app.get("/api/decisions")
     def decisions():
         pending, done = [], []
+        watched: set[str] = set()      # une décision de l'Agent 4 s'affiche sur la dernière ligne déployée du projet
         for r in runs():
             if r.get("status") == "STARTING":
                 continue
@@ -419,6 +628,11 @@ def create_app(runs_dir: str = "runs", sync: bool = False) -> FastAPI:
             if g:
                 pending.append({"run_id": run.run_id, "project": r["project"], "gate": g["gate"], "key": g["key"],
                                 "question": g["question"]})
+            if (r.get("served") or {}).get("endpoint") and r["project"] not in watched:
+                watched.add(r["project"])
+                for d in (agent4_live(r["project"]) or {}).get("pending", []):
+                    pending.append({"run_id": run.run_id, "project": r["project"], "gate": "agent4_action",
+                                    "key": d["id"], "question": f"L'Agent 4 propose : {d.get('action')}"})
             done += [{"run_id": run.run_id, "project": r["project"], **d} for d in run.state.get("decisions", [])]
         done.sort(key=lambda d: d.get("at") or "", reverse=True)
         return {"pending": pending, "recent": done[:20]}

@@ -4,8 +4,10 @@ import { api, GATE_TITLES, type RunDetail } from "../api";
 
 const AGENT4 = { console: "http://127.0.0.1:8100/console/", grafana: "http://127.0.0.1:3000", alerts: "http://127.0.0.1:9090/alerts" };
 import { Annonce, Cmd, ErrorLine } from "../components/Bits";
+import { Agent4Card } from "../components/Agent4Card";
 import { GateCard } from "../components/GateCard";
-import { Track } from "../components/Track";
+import { StationPanel } from "../components/StationPanel";
+import { defaultStation, Track } from "../components/Track";
 import { usePoll } from "../hooks";
 import { Etat } from "./Lignes";
 
@@ -62,12 +64,13 @@ function FileViewer({ runId, artifacts }: { runId: string; artifacts: Record<str
 }
 
 /** Ce que l'Agent 4 surveille, sans quitter Terminus : état de la gateway, dernier avis, liens directs. */
-function Surveillance({ r }: { r: RunDetail }) {
+function Surveillance({ r, onDecided }: { r: RunDetail; onDecided: () => void }) {
   const health = usePoll(() => api.health(), 15000);
   const gateway = health.data?.find((h) => h.service === "Gateway Agent 4");
   const notes = r.results?.agent4?.warnings ?? [];
   const project = r.project ?? "";
   const dashboard = `${AGENT4.grafana}/d/${`mlmon-${project}`.slice(0, 40)}`;
+  const live = r.monitoring;
   return (
     <section className="panel" aria-labelledby="surveillance">
       <h2 id="surveillance" className="panel-head">
@@ -83,6 +86,14 @@ function Surveillance({ r }: { r: RunDetail }) {
             <br /><code style={{ overflowWrap: "anywhere" }}>cd agents/agent4 && python -m monitoring_agent gateway {project} --host 0.0.0.0</code>
           </p>
         )}
+        {live && (
+          <p>
+            {live.predictions ?? 0} prédictions · {live.labels ?? 0} labels · {live.windows ?? 0} fenêtres
+            {live.severity ? ` · dernière fenêtre : ${live.severity}` : ""}
+            {live.decider ? <span className="muted"> · décideur {live.decider}</span> : null}
+          </p>
+        )}
+        {live?.pending.map((d) => <Agent4Card key={d.id} runId={r.run_id} d={d} onDecided={onDecided} />)}
         {notes.length > 0 && (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {notes.map((n, i) => <li key={i} style={{ overflowWrap: "anywhere" }}>› {n}</li>)}
@@ -102,10 +113,15 @@ export function Pipeline() {
   const { id = "" } = useParams();
   const run = usePoll(() => api.run(id), 2500, [id]);
   const [monitorError, setMonitorError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<number | null>(null);    // null : la gare où se trouve la loco
+  useEffect(() => setPicked(null), [id]);
   const r = run.data;
 
   if (run.error && !r) return <main className="wrap page"><ErrorLine error={run.error} /></main>;
   if (!r) return <main className="wrap page"><p className="muted">$ terminus ligne {id} …</p></main>;
+
+  const shown = picked != null && picked < r.track.length ? picked : defaultStation(r.track);
+  const station = r.track[shown];
 
   async function monitor() {
     setMonitorError(null);
@@ -138,8 +154,10 @@ export function Pipeline() {
 
       <section className="frame" aria-labelledby="plan">
         <h2 id="plan" className="legend">plan de ligne</h2>
-        <Track stations={r.track} retrainCount={r.retrain_count} />
+        <Track stations={r.track} retrainCount={r.retrain_count} selected={shown} onSelect={setPicked} />
       </section>
+
+      {station && <StationPanel s={station} live={station.status === "running"} />}
 
       <div className="row">
         <section className="grow" aria-labelledby="journal" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -178,7 +196,7 @@ export function Pipeline() {
               </div>
             </section>
           )}
-          {!r.gate && r.served?.endpoint && <Surveillance r={r} />}
+          {!r.gate && r.served?.endpoint && <Surveillance r={r} onDecided={run.reload} />}
         </div>
       </div>
 

@@ -1,23 +1,28 @@
 import { useSearchParams } from "react-router";
 import { api, GATE_TITLES } from "../api";
 import { Annonce, Cmd, ErrorLine } from "../components/Bits";
+import { Agent4Card } from "../components/Agent4Card";
 import { GateCard } from "../components/GateCard";
 import { day, usePoll } from "../hooks";
 
 const FRONT_ONLY = new Set(["repair_review", "validator_override"]);
+const WHERE: Record<string, string> = { agent4_action: "+ console" };
 
 function Selected({ runId, onDecided }: { runId: string; onDecided: () => void }) {
   const run = usePoll(() => api.run(runId), 3000, [runId]);
   if (run.error) return <ErrorLine error={run.error} />;
   if (!run.data) return <p className="muted">…</p>;
-  if (!run.data.gate) return <p className="empty">Cette ligne n'attend plus de décision.</p>;
+  const agent4 = run.data.monitoring?.pending ?? [];
+  if (!run.data.gate && agent4.length === 0) return <p className="empty">Cette ligne n'attend plus de décision.</p>;
+  const done = () => { run.reload(); onDecided(); };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span className="small muted">ligne {run.data.run_id}</span>
         <h2 className="title">{run.data.project}</h2>
       </div>
-      <GateCard gate={run.data.gate} onDecided={() => { run.reload(); onDecided(); }} />
+      {run.data.gate && <GateCard gate={run.data.gate} onDecided={done} />}
+      {agent4.map((d) => <Agent4Card key={d.id} runId={run.data!.run_id} d={d} onDecided={done} />)}
     </div>
   );
 }
@@ -56,7 +61,7 @@ export function Decisions() {
                     font: "inherit", background: active ? "var(--ink)" : "transparent", color: active ? "var(--paper)" : "var(--ink)" }}>
                   <span>{String(i + 1).padStart(2, "0")}</span>
                   <span><strong>{GATE_TITLES[p.gate] ?? p.gate}</strong><br /><span className="tiny">{p.project} · {p.run_id}</span></span>
-                  <span className="tiny">{FRONT_ONLY.has(p.gate) ? "terminus" : "+ slack"}</span>
+                  <span className="tiny">{FRONT_ONLY.has(p.gate) ? "terminus" : WHERE[p.gate] ?? "+ slack"}</span>
                 </button>
               );
             })}

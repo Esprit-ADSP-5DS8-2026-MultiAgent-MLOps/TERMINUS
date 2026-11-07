@@ -39,7 +39,14 @@ function locoIndex(stations: Station[]): number {
   return last;
 }
 
-export function Track({ stations, retrainCount = 0 }: { stations: Station[]; retrainCount?: number }) {
+/** Gare à montrer par défaut : celle où se trouve la loco. */
+export function defaultStation(stations: Station[]): number {
+  return locoIndex(stations);
+}
+
+export function Track({ stations, retrainCount = 0, selected, onSelect }: {
+  stations: Station[]; retrainCount?: number; selected?: number; onSelect?: (i: number) => void;
+}) {
   const n = Math.max(stations.length, 1);
   const idx = locoIndex(stations);
   const prev = useRef(idx);
@@ -91,11 +98,15 @@ export function Track({ stations, retrainCount = 0 }: { stations: Station[]; ret
             margin: "8px 0 0", padding: 0 }}>
             {stations.map((s, i) => (
               <li key={`${s.id}-${i}`} className="station">
-                <span className="name" style={nameStyle(s)}>
-                  {GLYPH[s.status]} {s.label.toUpperCase()}
-                  {s.status === "running" && <span className="blink" aria-hidden="true">…</span>}
-                </span>
-                <span className="sub">{sub(s)}</span>
+                <button type="button" className={`station-btn${selected === i ? " selected" : ""}`}
+                  aria-pressed={selected === i} onClick={() => onSelect?.(i)}
+                  title="voir ce que fait cette gare">
+                  <span className="name" style={nameStyle(s)}>
+                    {GLYPH[s.status]} {s.label.toUpperCase()}
+                    {s.status === "running" && <span className="blink" aria-hidden="true">…</span>}
+                  </span>
+                  <span className="sub">{sub(s)}</span>
+                </button>
               </li>
             ))}
           </ol>

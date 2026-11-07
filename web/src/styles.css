@@ -118,12 +118,21 @@ h1, h2, h3, p { margin: 0; }
 .terrain .inner { display: inline-block; }
 .terrain .inner { animation: voyage 48s linear infinite; animation-play-state: paused; }
 .terrain .inner.travel { animation-play-state: running; }
+.herbe { display: inline-block; animation: herbe 2.6s ease-in-out infinite; }
+@keyframes herbe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 @keyframes voyage { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .smoke { position: absolute; background: var(--soft-line); opacity: 0; animation: fumee 1.2s steps(6) infinite; }
 @keyframes fumee {
   0% { opacity: 0.8; transform: translate(0, 0); }
   100% { opacity: 0; transform: translate(-14px, -30px) scale(1.8); }
 }
+
+/* plan de ligne : chaque gare s'ouvre */
+.station-btn { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; width: 100%;
+  cursor: pointer; padding: 4px 6px 6px; border-bottom: 3px solid transparent; }
+.station-btn:hover { background: var(--panel); }
+.station-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.station-btn.selected { border-bottom-color: var(--ink); background: var(--panel); }
 
 /* registre : billets de train */
 .ticket { display: flex; border: 2px solid var(--ink); background: var(--panel); position: relative; }
@@ -178,7 +187,7 @@ h1, h2, h3, p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .passage { display: none; }
-  .blink, .rolling, .terrain .inner, .smoke { animation: none; }
+  .blink, .rolling, .terrain .inner, .smoke, .herbe { animation: none; }
   .smoke { display: none; }
   .loco-slot { transition: none; }
 }
