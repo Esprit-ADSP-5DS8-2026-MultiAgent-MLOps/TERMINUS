@@ -54,6 +54,8 @@ def _context(report: AnalysisReport) -> dict:
         "train_files": gen.requires_files if gen else [],
         "runtime_files": report.project.runtime_files,
         "supports_proba": report.inference.supports_proba,
+        # type de « prediction » : int (classes entières), str (étiquettes texte), float (régression)
+        "prediction_type": next((f.type for f in report.io.output_schema if f.name == "prediction"), "int"),
         "env_vars": report.existing_app.env_vars,
         "use_compose": bool(report.existing_app.external_services),
         "ignore": report.project.ignorable_paths,

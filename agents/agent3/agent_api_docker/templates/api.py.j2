@@ -42,7 +42,7 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    prediction: int
+    prediction: {{ prediction_type }}
 {% if supports_proba %}
     proba: Optional[float] = None
 {% endif %}
@@ -61,7 +61,7 @@ def predict_route(req: PredictRequest):
         raise HTTPException(status_code=503, detail="Modele non charge")
     data = req.model_dump()
     pred = {{ r.inference.entrypoint.function }}(model, data)[0]
-    out = {"prediction": int(pred)}
+    out = {"prediction": {{ prediction_type }}(pred)}
 {% if supports_proba %}
     out["proba"] = float(model.predict_proba(pd.DataFrame([data]))[0, 1])
 {% endif %}

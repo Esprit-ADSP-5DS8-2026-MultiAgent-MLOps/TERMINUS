@@ -27,6 +27,8 @@ class ExperimentResult(BaseModel):
     validation_score: float | None = None
     test_score: float | None = None
     baseline_test_score: float | None = None
+    champion_test_score: float | None = None     # champion actuel, sur le même jeu de test que le candidat
+    label_classes: list[Any] | None = None       # classification : étiquette de chaque indice prédit
     model_uri: str | None = None
     model_version: str | None = None
     quality_gate: QualityGate | None = None

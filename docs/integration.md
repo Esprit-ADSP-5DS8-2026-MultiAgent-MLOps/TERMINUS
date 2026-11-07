@@ -106,6 +106,11 @@ Fait (branche `integ/agent2`) :
   sqlite:///runs/mlflow/mlflow.db`) ; une expérience et un modèle enregistré par projet ;
 - le candidat reçoit l'alias `candidate` ; il doit battre le seuil, le modèle naïf ET le champion actuel
   (alias `champion`) ; sinon `FAILED` avec la raison ;
+- le champion est rejugé sur **le même jeu de test** que le candidat (rechargé depuis le registre) ; son ancien
+  score, ou sa performance en production, ne sert que si on ne peut pas le faire prédire (colonnes ou classes
+  différentes, avertissement dans le résultat) ;
+- classification : les classes de l'encodeur (`label_classes`) sont enregistrées avec le modèle (metadata du
+  MLmodel et `mlflow_metadata.params`) ; l'Agent 3 s'en sert pour rendre l'étiquette d'origine, même texte ;
 - réentraînement : relancé par l'orchestrateur après la gate `retraining`, sur `new_data_path` s'il existe.
 
 Choix à valider avec Aziz :
