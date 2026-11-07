@@ -23,7 +23,7 @@ function Champion({ c }: { c: Content }) {
   const scale = Math.max(1, ...rows.map(([, v]) => (typeof v === "number" ? Math.abs(v) : 0)));
   return (
     <>
-      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "max-content max-content 1fr", gap: "6px 16px",
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "minmax(0, max-content) max-content minmax(0, 1fr)", gap: "6px 16px",
         fontSize: 14, alignItems: "baseline" }}>
         {rows.map(([label, v, main]) => (
           <div key={label} style={{ display: "contents" }}>
@@ -31,7 +31,8 @@ function Champion({ c }: { c: Content }) {
             <dd style={{ margin: 0, fontWeight: main ? 600 : 400 }}>
               {v == null ? (label === "champion actuel" ? "aucun" : "—") : num(v, label.includes("manifeste") ? 2 : 4)}
             </dd>
-            <dd aria-hidden="true" className={main ? undefined : "muted"} style={{ margin: 0, letterSpacing: 1 }}>
+            <dd aria-hidden="true" className={main ? undefined : "muted"}
+              style={{ margin: 0, letterSpacing: 1, overflow: "hidden", whiteSpace: "nowrap" }}>
               {typeof v === "number" ? bar(v, scale) : ""}
             </dd>
           </div>

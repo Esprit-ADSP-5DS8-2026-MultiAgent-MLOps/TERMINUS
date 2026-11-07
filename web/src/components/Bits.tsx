@@ -37,7 +37,10 @@ const WIDTH = Math.max(...TERRAIN.split("\n").map((l) => l.length));
 const ROWS = TERRAIN.split("\n").map((l) => l.padEnd(WIDTH, " ").repeat(2));
 const SWAYING = 3;   // les 3 lignes du haut (herbes, débris) bougent un peu ; le sol reste fixe
 
-/** Herbes et débris : chaque signe monte et descend d'un pixel, à son rythme (délai tiré de sa position). */
+const GRASS = new Set(["/", "\\", "|", "'", "^", ",", "\""]);   // brins qui se penchent ; le reste : débris qui sautent
+
+/** Herbes et débris : les brins se penchent dans le vent, les débris sautillent, chacun à son rythme
+ * (délai et durée tirés de sa position, donc stables d'un rendu à l'autre). */
 function swaying(row: string, r: number) {
   const out: ReactNode[] = [];
   let plain = "";
@@ -49,8 +52,9 @@ function swaying(row: string, r: number) {
     if (plain) out.push(plain);
     plain = "";
     const seed = (i * 7919 + r * 104729) % 997;
-    out.push(<span key={i} className="herbe" style={{ animationDelay: `${-(seed % 40) / 10}s`,
-      animationDuration: `${2.2 + (seed % 9) / 5}s` }}>{c}</span>);
+    const kind = GRASS.has(c) ? "herbe" : seed % 4 === 0 ? "debris saute" : "debris";
+    out.push(<span key={i} className={kind} style={{ animationDelay: `${-(seed % 40) / 10}s`,
+      animationDuration: `${1.4 + (seed % 9) / 6}s` }}>{c}</span>);
   });
   if (plain) out.push(plain);
   return out;

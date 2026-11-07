@@ -114,12 +114,25 @@ h1, h2, h3, p { margin: 0; }
 @keyframes blink { 50% { opacity: 0; } }
 .rolling { animation: rolling 0.18s steps(2) infinite; }
 @keyframes rolling { 50% { transform: translateY(-2px); } }
-.terrain { margin: 8px -28px 0; font-size: 12px; line-height: 1; overflow: hidden; white-space: pre; user-select: none; }
+.terrain { margin: 8px -28px 0; padding-top: 12px; font-size: 12px; line-height: 1; overflow: hidden; white-space: pre; user-select: none; }
 .terrain .inner { display: inline-block; }
 .terrain .inner { animation: voyage 48s linear infinite; animation-play-state: paused; }
 .terrain .inner.travel { animation-play-state: running; }
-.herbe { display: inline-block; animation: herbe 2.6s ease-in-out infinite; }
-@keyframes herbe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+/* décor vivant : brins penchés par le vent, débris qui sautillent (quelques-uns plus haut) */
+.herbe { display: inline-block; transform-origin: 50% 100%; animation: herbe 2s ease-in-out infinite; }
+@keyframes herbe { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg) translateY(-1px); } }
+.debris { display: inline-block; animation: debris 1.8s ease-in-out infinite; }
+@keyframes debris {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(-1px, -5px); }
+  60% { transform: translate(1px, -2px); }
+}
+.debris.saute { animation-name: saute; }
+@keyframes saute {
+  0%, 55%, 100% { transform: translate(0, 0); }
+  70% { transform: translate(-3px, -11px) rotate(-20deg); }
+  85% { transform: translate(-5px, -3px) rotate(10deg); }
+}
 @keyframes voyage { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .smoke { position: absolute; background: var(--soft-line); opacity: 0; animation: fumee 1.2s steps(6) infinite; }
 @keyframes fumee {
@@ -187,7 +200,7 @@ h1, h2, h3, p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .passage { display: none; }
-  .blink, .rolling, .terrain .inner, .smoke, .herbe { animation: none; }
+  .blink, .rolling, .terrain .inner, .smoke, .herbe, .debris { animation: none; }
   .smoke { display: none; }
   .loco-slot { transition: none; }
 }
