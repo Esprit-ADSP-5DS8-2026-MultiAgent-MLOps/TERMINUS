@@ -41,7 +41,12 @@ MAX_FILE_BYTES = 50_000_000
 MAX_ROWS = 200_000
 MIN_ROWS = 50
 # Quality-gate constants (assumptions to justify in the report, adjust if needed)
-MAX_REL_OVERFIT_GAP = 0.25   # (train - validation) / train, in "higher is better" terms
+# Sur-apprentissage : part du gain apparent sur le modèle naïf (à l'entraînement) qui disparaît en validation.
+# Même échelle pour toutes les métriques (roc_auc, f1, rmse, mae...) : (train - val) / (train - naïf), en
+# « plus haut = mieux ». L'ancienne règle divisait par le score d'entraînement : pour une erreur (rmse), presque
+# nulle sur l'entraînement d'un modèle à arbres, elle rejetait des modèles qui généralisent bien.
+MAX_OVERFIT_SHARE = 0.5
+MAX_REL_OVERFIT_GAP = MAX_OVERFIT_SHARE     # ancien nom, gardé pour compatibilité
 MAX_REL_TEST_DROP = 0.25     # (validation - test) / validation
 MINIMIZE = {"rmse", "mae"}
 # Model selection by k-fold cross-validation on train+validation. With small data (credit_risk:
@@ -221,21 +226,40 @@ def optimize_model(name, metric, X_tr, y_tr, X_val, y_val, pos, n_trials, timeou
 
 # ---------- quality gate ----------
 
-def quality_gate(metric, threshold, train, val, test, baseline) -> QualityGate:
+def overfit_share(metric, train, val, baseline_val) -> float:
+    """Part du gain sur le modèle naïf (mesuré à l'entraînement) perdue en validation ; 0 = aucune perte."""
+    s = _sign(metric)
+    gain = s * train - s * baseline_val
+    if gain <= 1e-9:                    # pas mieux que le modèle naïf même à l'entraînement
+        return float("inf") if s * val < s * baseline_val else 0.0
+    return max(0.0, (s * train - s * val) / gain)
+
+
+def quality_gate(metric, threshold, train, val, test, baseline, baseline_val=None) -> QualityGate:
     s = _sign(metric)
     gt, gv, gs, gb = s * train, s * val, s * test, s * baseline
-    gap = (gt - gv) / max(abs(gt), 1e-9)
+    share = overfit_share(metric, train, val, baseline if baseline_val is None else baseline_val)
     drop = (gv - gs) / max(abs(gv), 1e-9)
     checks = {
         "meets_threshold": True if threshold is None
         else (test <= threshold if metric in MINIMIZE else test >= threshold),
         "beats_baseline": gs > gb,
-        "overfit_gap_ok": gap <= MAX_REL_OVERFIT_GAP,
+        "overfit_gap_ok": share <= MAX_OVERFIT_SHARE,
         "test_consistent_with_validation": drop <= MAX_REL_TEST_DROP,
     }
     return QualityGate(passed=all(checks.values()), checks=checks,
-                       details={"threshold": threshold, "relative_overfit_gap": round(gap, 4),
+                       details={"threshold": threshold, "overfit_share": round(min(share, 99.0), 4),
+                                "relative_overfit_gap": round((gt - gv) / max(abs(gt), 1e-9), 4),
                                 "relative_test_drop": round(drop, 4)})
+
+
+def _generalization(name, params, metric, X_tr, y_tr, X_val, y_val, pos, classification):
+    """Ajuste sur l'entraînement seul : scores train / validation, et le modèle naïf en validation.
+    N'utilise jamais le jeu de test (il reste vu une seule fois, par le modèle retenu)."""
+    pipe = make_pipeline(name, params, X_tr).fit(X_tr, y_tr)
+    dummy = (DummyClassifier(strategy="prior") if classification else DummyRegressor()).fit(X_tr, y_tr)
+    return (compute_metric(metric, pipe, X_tr, y_tr, pos), compute_metric(metric, pipe, X_val, y_val, pos),
+            compute_metric(metric, dummy, X_val, y_val, pos))
 
 
 # ---------- main entry ----------
@@ -359,7 +383,7 @@ def _run(report, plan, paths, tracking_uri, experiment_name, reg_name, warnings,
                            "seed": SEED, "data_sha256": sha[:16], "metric": metric,
                            "selection": f"{CV_FOLDS}-fold cross-validation"})
 
-        best = None  # (name, params, val_score)
+        candidates = []  # (name, params, val_score)
         for name in plan.models:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -371,16 +395,26 @@ def _run(report, plan, paths, tracking_uri, experiment_name, reg_name, warnings,
             if params is None:
                 warnings.append(f"no successful trial for {name}")
                 continue
-            if best is None or _sign(metric) * val > _sign(metric) * best[2]:
-                best = (name, params, val)
-        if best is None:
+            candidates.append((name, params, val))
+        if not candidates:
             raise ExecutionError("no model completed any trial")
 
-        name, params, _ = best
-        # generalization check: fit on train only
-        pipe_tr = make_pipeline(name, params, X_tr).fit(X_tr, y_tr)
-        train_s = compute_metric(metric, pipe_tr, X_tr, y_tr, pos)
-        val_s = compute_metric(metric, pipe_tr, X_val, y_val, pos)
+        # Sélection : le meilleur en validation croisée QUI généralise. Un modèle qui perd plus de la moitié
+        # de son gain en validation est écarté au profit du suivant (ex. un boosting qui apprend par cœur,
+        # alors qu'une ridge proche en validation généralise). Tout se décide sans regarder le test.
+        candidates.sort(key=lambda c: _sign(metric) * c[2], reverse=True)
+        chosen = None
+        for name, params, _ in candidates:
+            train_s, val_s, base_val = _generalization(name, params, metric, X_tr, y_tr, X_val, y_val, pos,
+                                                       classification)
+            share = overfit_share(metric, train_s, val_s, base_val)
+            if chosen is None:
+                chosen = (name, params, train_s, val_s, base_val)      # repli : le meilleur, même s'il sur-apprend
+            if share <= MAX_OVERFIT_SHARE:
+                chosen = (name, params, train_s, val_s, base_val)
+                break
+            warnings.append(f"{name} écarté : sur-apprentissage ({share:.0%} de son gain perdu en validation)")
+        name, params, train_s, val_s, base_val = chosen
         # final model on train+validation; test set is scored exactly once
         X_full, y_full = pd.concat([X_tr, X_val]), pd.concat([y_tr, y_val])
         final = make_pipeline(name, params, X_full).fit(X_full, y_full)
@@ -392,7 +426,7 @@ def _run(report, plan, paths, tracking_uri, experiment_name, reg_name, warnings,
         champ_s = (score_champion(champion_uri, metric, X_test, y_test, classes, pos, warnings)
                    if champion_uri else None)
 
-        gate = quality_gate(metric, report.task.min_primary_metric, train_s, val_s, test_s, base_s)
+        gate = quality_gate(metric, report.task.min_primary_metric, train_s, val_s, test_s, base_s, base_val)
         if report.task.min_primary_metric is None:
             warnings.append("no min_primary_metric given: threshold check skipped")
 

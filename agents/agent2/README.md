@@ -286,10 +286,15 @@ A candidate is eligible only when every applicable check passes:
 |---|---|
 | Minimum metric | Meets `task.min_primary_metric`; skipped if not supplied |
 | Beats baseline | Outperforms a dummy prior/constant baseline |
-| Overfit control | Relative train–validation gap is no greater than 25% |
+| Overfit control | At most half of the model's gain over the naive model (measured on train) is lost on validation: `(train − val) / (train − naive_val)`, same scale for scores and errors (rmse, mae) |
 | Test consistency | Relative validation–test drop is no greater than 25% |
 
 The quality gate is plain deterministic Python. The LLM does not participate in the decision.
+
+Model selection respects the overfit control: models are ranked by cross-validation score, and the best one
+that passes the overfit control is kept (a model that loses more than half of its gain on validation gives way
+to the next one, with a warning). This uses train and validation only: the test set is still scored once, by
+the chosen model.
 
 When the gate passes, the final pipeline is registered in MLflow. When it fails, no model is registered and the result status is `no_eligible_model`.
 

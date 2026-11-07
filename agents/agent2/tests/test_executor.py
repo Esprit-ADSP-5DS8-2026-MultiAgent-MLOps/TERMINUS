@@ -102,3 +102,37 @@ def test_champion_trained_on_other_classes_is_not_compared_blindly(tmp_path, mon
                             experiment_name="test_exp", champion_uri="models:/test_exp-model@champion")
     assert second.champion_test_score is None, (second.status, second.errors)
     assert any("ne connaît pas toutes les classes" in w for w in second.warnings), (second.status, second.errors, second.warnings)
+
+
+def test_overfit_is_measured_on_the_gain_over_the_naive_model():
+    """Même règle pour une erreur (rmse) et un score (roc_auc) : la part du gain perdue en validation."""
+    from mlflow_agent.executor import MAX_OVERFIT_SHARE, overfit_share, quality_gate
+
+    # cas réel (house_prices réentraîné) : rmse train 10, validation 31,5, modèle naïf 100,8 -> il généralise
+    assert overfit_share("rmse", 10.0, 31.46, 100.77) < MAX_OVERFIT_SHARE
+    assert quality_gate("rmse", 40, 10.0, 31.46, 34.92, 100.77, 100.77).passed
+    # l'ancienne règle, (val - train) / train = 2,1, l'aurait rejeté ; un vrai sur-apprentissage reste rejeté
+    assert overfit_share("roc_auc", 1.0, 0.6, 0.5) > MAX_OVERFIT_SHARE
+    assert not quality_gate("roc_auc", 0.55, 1.0, 0.6, 0.6, 0.5, 0.5).checks["overfit_gap_ok"]
+
+
+def test_an_overfitting_best_model_gives_way_to_the_next(tmp_path, monkeypatch):
+    """Le meilleur en validation croisée sur-apprend : le suivant, qui généralise, est retenu."""
+    from mlflow_agent import executor
+
+    plan = ExperimentPlan(models=["logistic_regression", "random_forest"], primary_metric="roc_auc",
+                          search_method="optuna", max_trials=2, rationale="test")
+    real = executor._generalization
+
+    def fake(name, *a, **k):
+        train, val, base = real(name, *a, **k)
+        return (1.0, 0.55, 0.5) if name == "random_forest" else (train, val, base)
+
+    monkeypatch.setattr(executor, "_generalization", fake)
+    monkeypatch.setattr(executor, "optimize_model",
+                        lambda name, *a, **k: ({}, 0.99 if name == "random_forest" else 0.9, 1))
+    monkeypatch.chdir(tmp_path)
+    r = run_experiment(report(0.6), plan, env(tmp_path), tracking_uri=f"sqlite:///{tmp_path}/mlflow.db",
+                       experiment_name="test_exp")
+    assert r.best_model_name == "logistic_regression", (r.errors, r.warnings)
+    assert any("random_forest écarté" in w for w in r.warnings)

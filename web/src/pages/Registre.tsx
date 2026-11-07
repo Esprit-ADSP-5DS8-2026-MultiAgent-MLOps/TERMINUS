@@ -13,11 +13,12 @@ function Barcode({ seed }: { seed: string }) {
   );
 }
 
-const CLASSE: Record<string, string> = { champion: "CHAMPION", challenger: "CHALLENGER" };
+const CLASSE: Record<string, string> = { champion: "CHAMPION", challenger: "CHALLENGER", candidate: "CANDIDAT" };
 
 function Ticket({ v, project }: { v: ModelVersion; project: string }) {
   const champion = v.aliases.includes("champion");
-  const alias = v.aliases[0];
+  // une version peut porter plusieurs alias (candidate puis champion) : le plus fort s'affiche
+  const alias = ["champion", "challenger", "candidate"].find((a) => v.aliases.includes(a)) ?? v.aliases[0];
   const metrics = Object.entries(v.metrics).filter(([k]) => k.startsWith("test_"));
   const base = Object.entries(v.metrics).find(([k]) => k.startsWith("baseline_test_"));
   return (
