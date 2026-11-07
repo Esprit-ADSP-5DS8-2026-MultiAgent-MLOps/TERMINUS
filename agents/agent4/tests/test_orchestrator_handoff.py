@@ -100,3 +100,81 @@ def test_new_model_starts_a_new_monitoring_period(tmp_path, monkeypatch):
     _new_period(old, new, "models:/p/2", warnings)
     assert not new.store_path.exists() and "archivé" in warnings[0]
     assert len(list(new.dir.glob("monitoring_p_v1_*.db"))) == 1 and len(list(new.dir.glob("monitoring_p_v1_*.db-wal"))) == 1
+
+
+def test_concept_scenario_on_a_regression_target():
+    """Régression : la cible des lignes concernées augmente (le marché change), elle ne devient pas « 1 - prix »."""
+    import pandas as pd
+
+    from monitoring_agent.runtime.simulator import CONCEPT_FACTOR, concept_label, is_regression_target
+
+    prices = pd.Series([100.0 + i for i in range(50)])
+    assert is_regression_target(prices) and not is_regression_target(pd.Series([0, 1] * 25))
+    assert concept_label(200.0, regression=True) == 200.0 * CONCEPT_FACTOR
+    assert concept_label(1, regression=False) == 0.0
+
+
+class _Gateway:
+    """Fausse gateway : statut, décisions, décision forcée et réponse humaine."""
+
+    def __init__(self, target_dir, trigger=True, pending=None):
+        self.dir, self.trigger, self.pending, self.calls = target_dir, trigger, pending or [], []
+
+    def get(self, url, timeout=None):
+        self.calls.append(("GET", url))
+        body = self.pending if url.endswith("/decisions") else {}
+        return type("R", (), {"json": lambda _self: body})()
+
+    def post(self, url, timeout=None, json=None):
+        self.calls.append(("POST", url))
+        if url.endswith("/decide"):
+            body = {"id": "D1", "status": "awaiting_human",
+                    "policy": {"proposed_action": "request_retraining", "final_action": "request_retraining",
+                               "mode": "human"}}
+        else:                                    # approbation : la gateway écrit la demande
+            actions = self.dir / "actions"
+            actions.mkdir(parents=True, exist_ok=True)
+            (actions / "retraining_request.json").write_text('{"reason": "performance_drop"}')
+            body = {"id": "D1", "status": "executed"}
+        return type("R", (), {"json": lambda _self: body})()
+
+
+def _status(trigger):
+    return {"project": "p", "agent": {"busy": False}, "last_window": {"window": {"index": 7}, "trigger_agent": trigger}}
+
+
+def test_running_gateway_decides_instead_of_a_second_agent(tmp_path, monkeypatch):
+    """La gateway tourne : son agent décide (il tient la mémoire Qdrant) ; la demande est remise à la ligne."""
+    import httpx
+
+    from monitoring_agent import pipeline
+
+    target = type("T", (), {"dir": tmp_path / "p", "project": "p"})()
+    fake = _Gateway(target.dir)
+    monkeypatch.setattr(httpx, "get", fake.get)
+    monkeypatch.setattr(httpx, "post", fake.post)
+    outputs, warnings = {}, []
+    assert pipeline._decide_in_gateway(target, _status(True), tmp_path, outputs, warnings)
+    assert ("POST", "http://127.0.0.1:8100/monitoring/decide") in fake.calls
+    assert ("POST", "http://127.0.0.1:8100/monitoring/decisions/D1/approve") in fake.calls
+    assert "retraining_request" in outputs and "decision" in outputs
+
+
+def test_gateway_calm_window_or_pending_decision(tmp_path, monkeypatch):
+    import httpx
+
+    from monitoring_agent import pipeline
+
+    target = type("T", (), {"dir": tmp_path / "p", "project": "p"})()
+    calm = _Gateway(target.dir)
+    monkeypatch.setattr(httpx, "get", calm.get)
+    monkeypatch.setattr(httpx, "post", calm.post)
+    warnings = []
+    assert not pipeline._decide_in_gateway(target, _status(False), tmp_path, {}, warnings)
+    assert "sans signal" in warnings[0] and not any(c[0] == "POST" for c in calm.calls)
+
+    waiting = _Gateway(target.dir, pending=[{"id": "D9", "status": "awaiting_human", "action": "request_retraining"}])
+    monkeypatch.setattr(httpx, "get", waiting.get)
+    warnings = []
+    assert pipeline._decide_in_gateway(target, _status(True), tmp_path, {}, warnings)
+    assert "D9" in warnings[0] and not any(c[0] == "POST" for c in waiting.calls)

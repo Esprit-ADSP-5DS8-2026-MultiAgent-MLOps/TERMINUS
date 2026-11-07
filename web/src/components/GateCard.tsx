@@ -8,14 +8,19 @@ function num(v: unknown, digits = 4): string {
   return typeof v === "number" ? v.toFixed(digits) : "—";
 }
 
+const LOWER_IS_BETTER = new Set(["rmse", "mae"]);
+
 function Champion({ c }: { c: Content }) {
   const g: Content = c.quality_gate ?? {};
+  const lower = LOWER_IS_BETTER.has(g.primary_metric);
   const rows: [string, number | null | undefined, boolean][] = [
     [`${g.primary_metric ?? "score"} candidat`, g.value, true],
     ["modèle naïf", g.baseline_value, false],
     ["champion actuel", g.champion_value, false],
-    ["seuil du manifeste", g.min_threshold, false],
+    [lower ? "erreur max. du manifeste" : "seuil du manifeste", g.min_threshold, false],
   ];
+  // barres à l'échelle des valeurs : 0..1 pour roc_auc, f1… ; jusqu'à la plus grande erreur pour rmse / mae
+  const scale = Math.max(1, ...rows.map(([, v]) => (typeof v === "number" ? Math.abs(v) : 0)));
   return (
     <>
       <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "max-content max-content 1fr", gap: "6px 16px",
@@ -24,14 +29,15 @@ function Champion({ c }: { c: Content }) {
           <div key={label} style={{ display: "contents" }}>
             <dt className={main ? undefined : "muted"}>{label}</dt>
             <dd style={{ margin: 0, fontWeight: main ? 600 : 400 }}>
-              {v == null ? (label === "champion actuel" ? "aucun" : "—") : num(v, label.startsWith("seuil") ? 2 : 4)}
+              {v == null ? (label === "champion actuel" ? "aucun" : "—") : num(v, label.includes("manifeste") ? 2 : 4)}
             </dd>
             <dd aria-hidden="true" className={main ? undefined : "muted"} style={{ margin: 0, letterSpacing: 1 }}>
-              {typeof v === "number" ? bar(v) : ""}
+              {typeof v === "number" ? bar(v, scale) : ""}
             </dd>
           </div>
         ))}
       </dl>
+      {lower && <p className="small muted">{g.primary_metric} : plus bas = meilleur (erreur, dans l'unité de la cible).</p>}
       <div className="small muted" style={{ overflowWrap: "anywhere" }}>
         modèle {c.params?.model ?? "?"} · {c.model_uri ?? ""}
       </div>
@@ -110,8 +116,15 @@ function Judge({ j }: { j: Content }) {
   );
 }
 
+// Même liste que validator/contract.py (NEVER_WAIVED) : un humain ne les lève jamais.
+const NEVER_WAIVED = new Set(["C10.DESTRUCTIVE_FS", "C11.BANDIT_HIGH", "C11.DANGEROUS_CALL", "C11.NETWORK_IMPORT",
+  "C11.NETWORK_URL", "C11.PICKLE_USAGE", "C11.SECRET", "C11.SECRET_FILE", "C12.SYMLINK_ESCAPE", "ENGINE.CHECK_CRASHED"]);
+
 function Override({ gate }: { gate: Gate }) {
-  const v1: Content = (gate.validator_v1 as Content)?.handoff ?? {};
+  const report = (gate.validator_v1 as Content) ?? {};
+  const v1: Content = report.handoff ?? {};
+  const blockers: Content[] = (report.findings ?? []).filter((f: Content) => f.severity === "BLOCKER");
+  const codes = [...new Set(blockers.map((f) => f.code as string))];
   const v2: Content = gate.content ?? {};
   const issues: Content[] = v2.issues ?? [];
   return (
@@ -119,6 +132,11 @@ function Override({ gate }: { gate: Gate }) {
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
         <h3 className="cmd">v1 · contrôle d'entrée</h3>
         <p className="small"><span className="st-inverse">{v1.status ?? "BLOCKED"}</span> {v1.reason ?? ""}</p>
+        <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+          {codes.map((c) => (
+            <li key={c}>{c}{NEVER_WAIVED.has(c) && <strong> · ne se lève pas (sécurité)</strong>}</li>
+          ))}
+        </ul>
       </div>
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
         <h3 className="cmd">v2 · diagnostic</h3>
@@ -128,6 +146,10 @@ function Override({ gate }: { gate: Gate }) {
           {issues.length === 0 && <li>aucun problème relevé</li>}
         </ul>
       </div>
+      <p className="small muted" style={{ flex: "1 1 100%" }}>
+        Passer outre : le v1 revalide le projet avec ces bloquants en avertissement, signés de votre nom, puis
+        la ligne continue avec un rapport complet. Un bloquant de sécurité reste bloquant.
+      </p>
     </div>
   );
 }

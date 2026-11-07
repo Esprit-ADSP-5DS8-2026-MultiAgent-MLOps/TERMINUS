@@ -16,6 +16,7 @@ L'agent ne lance jamais le code du projet : il lit le CSV et entraîne ses propr
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -122,11 +123,7 @@ def _production_score(inp: AgentInput, metric: str, warnings: list[str]) -> floa
     if "retraining_request" not in inp.inputs:
         return None
     perf = read_output(inp, "retraining_request").current_performance or {}
-    if metric in perf:
-        warnings.append(f"réentraînement : champion comparé à sa performance mesurée en production "
-                        f"({metric} {perf[metric]:.4f})")
-        return float(perf[metric])
-    return None
+    return float(perf[metric]) if metric in perf else None
 
 
 def _report(spec, df: pd.DataFrame) -> AnalysisReport:
@@ -195,8 +192,18 @@ def run(inp: AgentInput) -> AgentResult:
     production = _production_score(inp, spec.primary_metric, warnings)
     if production is not None and champion is not None:
         champion = production
+    # Le champion est rejugé sur le jeu de test du candidat (même copie corrigée) ; les deux scores
+    # ci-dessus ne servent que de repli si on ne peut pas le recharger ou le faire prédire.
     result = run_experiment(report, plan, paths, tracking_uri=tracking_uri(), experiment_name=name,
-                            registered_model_name=name, warnings_in=warnings)
+                            registered_model_name=name, warnings_in=warnings,
+                            champion_uri=f"models:/{name}@champion" if champion is not None else None)
+    if result.champion_test_score is not None:
+        champion = result.champion_test_score
+        result.warnings.append(f"champion rejugé sur le même jeu de test que le candidat "
+                               f"({spec.primary_metric} {champion:.4f})")
+    elif production is not None and champion is not None:
+        result.warnings.append(f"réentraînement : champion comparé à sa performance mesurée en production "
+                               f"({spec.primary_metric} {production:.4f})")
     outputs = {"experiment_result": str(workdir / "experiment_result.json"),
                "analysis_report": str(workdir / "analysis_report.json")}
     Path(outputs["experiment_result"]).write_text(result.model_dump_json(indent=2), encoding="utf-8")
@@ -235,6 +242,7 @@ def run(inp: AgentInput) -> AgentResult:
                  f"test_{metric}": test, f"baseline_test_{metric}": base},
         params={"model": result.best_model_name or "", "plan_source": source,
                 "training_data": str(training.resolve()),   # référence du monitoring (Agent 4)
+                **({"label_classes": json.dumps(result.label_classes)} if result.label_classes is not None else {}),
                 **{k: str(v) for k, v in result.best_params.items()}},
         instrumentation_diff_path=str(diff),
         quality_gate=QualityGate(primary_metric=metric, value=test, min_threshold=spec.min_threshold,
@@ -246,6 +254,8 @@ def run(inp: AgentInput) -> AgentResult:
     # Le modèle actuel du projet (score vu par le validateur) : comparaison indicative, les découpages
     # train/test diffèrent, donc on informe l'humain sans bloquer.
     current = read_output(inp, "baseline").observed_metrics.get(metric) if "baseline" in inp.inputs else None
+    if "retraining_request" in inp.inputs:
+        current = None      # réentraînement : autres données, le score du projet d'origine ne se compare plus
     note = ""
     if current is not None and sign * test < sign * current:
         note = f" ; attention : moins bon que le modèle actuel du projet ({metric} {current:.4f})"

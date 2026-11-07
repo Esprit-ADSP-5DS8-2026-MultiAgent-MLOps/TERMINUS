@@ -41,7 +41,8 @@ _HANDOFF_TO_STATUS = {
 # ---------------------------------------------------------------------------
 
 
-def run_validator(project_dir: str, report: Path, snapshot_root: Path) -> subprocess.CompletedProcess:
+def run_validator(project_dir: str, report: Path, snapshot_root: Path, waive: list[str] | None = None,
+                  waived_by: str | None = None) -> subprocess.CompletedProcess:
     """Lance le validateur dans un processus séparé (codes de sortie : 0, 10 ou 20)."""
     cmd = [
         sys.executable, "-m", "validator", project_dir,
@@ -49,6 +50,10 @@ def run_validator(project_dir: str, report: Path, snapshot_root: Path) -> subpro
         "--snapshot-dir", str(snapshot_root),
         "-q",
     ]
+    for code in waive or []:
+        cmd += ["--waive", code]
+    if waive and waived_by:
+        cmd += ["--waived-by", waived_by]
     return subprocess.run(cmd, capture_output=True, text=True, timeout=VALIDATOR_TIMEOUT_S)
 
 
@@ -60,17 +65,34 @@ def verify(report: Path, project_dir: str) -> list[str]:
     return [] if check.ok else list(check.reasons)
 
 
+def _override(state: PipelineState) -> tuple[list[str], str | None]:
+    """Bloquants du v1 levés par un humain : ceux du dernier rapport, quand il vient de trancher pour le v2.
+    Gardés ensuite pour toute la ligne (une revalidation après réparation ne les remet pas)."""
+    waived = list(state.get("waived_codes") or [])
+    last = (state.get("decisions") or [{}])[-1]
+    if last.get("gate") == "validator_override" and last.get("decision") == "approve" and state.get("report_path"):
+        try:
+            findings = json.loads(Path(state["report_path"]).read_text(encoding="utf-8")).get("findings", [])
+        except (OSError, ValueError):
+            findings = []
+        waived += [f["code"] for f in findings if f.get("severity") == "BLOCKER" and f["code"] not in waived]
+        return waived, last.get("by")
+    return waived, None
+
+
 def validate(state: PipelineState) -> dict:
     run_dir = Path(state["run_dir"])
     # Après une réparation, on valide la copie corrigée (le projet d'origine n'est jamais modifié).
     project_dir = state.get("repaired_dir") or state["project_dir"]
     repairs = state.get("repair_count", 0)
-    out = run_dir / ("validator" if not repairs else f"validator_after_repair_{repairs}")
+    waived, by = _override(state)
+    name = "validator" if not repairs else f"validator_after_repair_{repairs}"
+    out = run_dir / (f"{name}_override" if waived else name)
     out.mkdir(parents=True, exist_ok=True)
     report = out / "compatibility_report.json"
     started = time.monotonic()
 
-    proc = run_validator(project_dir, report, run_dir / "snapshot")
+    proc = run_validator(project_dir, report, run_dir / "snapshot", waived, by)
 
     if not report.exists():
         result = AgentResult(
@@ -112,8 +134,12 @@ def validate(state: PipelineState) -> dict:
         reasons=reasons,
         warnings=[c.message for c in handoff.carry_forward],
     )
+    if waived:
+        result.warnings.insert(0, f"bloquants du v1 levés par un humain (le v2 ne les confirme pas) : "
+                                  f"{', '.join(waived)}")
     return {
         "report_path": str(report),
+        "waived_codes": waived,
         # les agents lisent la copie figée ; à défaut (pas de snapshot), le projet d'origine
         "snapshot_dir": data.get("snapshot_path") or project_dir,
         "handoff_status": handoff.status.value,

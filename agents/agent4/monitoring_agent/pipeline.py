@@ -11,6 +11,8 @@ Point d'entrée de l'Agent 4 pour l'orchestrateur (contrat : common/schemas.py).
 3. sinon, décision (si la gateway a déjà observé de la production pour ce projet)
    l'agent enquête sur la dernière fenêtre et décide ; une demande de réentraînement produit
    retraining_request.json, que l'orchestrateur soumet à sa propre validation humaine puis à l'Agent 2.
+   Si la gateway tourne pour ce projet, c'est SON agent qui décide (MONITORING_GATEWAY_URL) : une seule
+   instance, qui garde la mémoire d'incidents (Qdrant local ne s'ouvre que dans un processus à la fois).
 
 L'agent n'échoue jamais pour une raison de monitoring : au pire il renvoie WARNING avec l'explication.
 """
@@ -18,6 +20,7 @@ L'agent n'échoue jamais pour une raison de monitoring : au pire il renvoie WARN
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -129,6 +132,56 @@ def _gateway_request(target: MonitoringTarget, workdir: Path, outputs: dict, war
     return True
 
 
+def gateway_url() -> str:
+    return os.environ.get("MONITORING_GATEWAY_URL", "http://127.0.0.1:8100").rstrip("/")
+
+
+def _live_gateway(project: str) -> dict | None:
+    """Statut de la gateway si elle tourne POUR CE projet (sinon None : l'agent décide ici)."""
+    import httpx
+
+    try:
+        st = httpx.get(f"{gateway_url()}/monitoring/status", timeout=3).json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    return st if st.get("project") == project and st.get("agent") else None
+
+
+def _decide_in_gateway(target: MonitoringTarget, status: dict, workdir: Path, outputs: dict, warnings: list) -> bool:
+    """La gateway tourne : c'est SON agent qui décide (une seule instance, propriétaire de la mémoire Qdrant
+    locale, qu'un second processus ne peut pas ouvrir). Renvoie True si une décision a été prise ou remise."""
+    import httpx
+
+    base = gateway_url()
+    pending = [d for d in httpx.get(f"{base}/monitoring/decisions", timeout=5).json()
+               if d.get("status") == "awaiting_human"]
+    if pending:
+        d = pending[0]
+        warnings.append(f"décision {d['id']} de l'agent de la gateway en attente d'un humain ({d.get('action')}) : "
+                        "à valider dans Terminus, la console ou Slack")
+        return True
+    if status["agent"].get("busy"):
+        warnings.append("l'agent de la gateway est déjà en train de décider : relancer dans un instant")
+        return True
+    last = status.get("last_window") or {}
+    if not last.get("trigger_agent"):
+        idx = (last.get("window") or {}).get("index")
+        warnings.append(f"dernière fenêtre ({idx}) sans signal : rien à décider (vu par la gateway)")
+        return False
+    run = httpx.post(f"{base}/monitoring/decide", timeout=600).json()
+    p = run.get("policy") or {}
+    outputs["decision"] = str(workdir / f"decision_{run['id']}.json")
+    Path(outputs["decision"]).write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
+    warnings.append(f"agent (gateway) : {p.get('proposed_action')} -> {p.get('final_action')} "
+                    f"({p.get('mode')}, {run.get('status')})")
+    if p.get("final_action") == "request_retraining" and run.get("status") == "awaiting_human":
+        # comme en local : la gate « retraining » de l'orchestrateur est l'humain qui valide
+        httpx.post(f"{base}/monitoring/decisions/{run['id']}/approve", timeout=600,
+                   json={"by": "orchestrateur (gate humaine en aval)", "comment": ""})
+        _gateway_request(target, workdir, outputs, warnings)
+    return True
+
+
 def _keep_files(src: dict, outputs: dict, warnings: list) -> None:
     """Le contrat attend des chemins dans outputs : le reste (canal de notification...) va dans warnings."""
     for key, value in src.items():
@@ -151,8 +204,15 @@ def run(inp):
     target = _setup(inp, spec, dep, outputs, warnings)
     status = s.AgentStatus.OK
 
+    live = _live_gateway(target.project) if target else None
     if target and _gateway_request(target, Path(inp.workdir), outputs, warnings):
         status = s.AgentStatus.WARNING
+    elif target and live is not None:
+        try:
+            if _decide_in_gateway(target, live, Path(inp.workdir), outputs, warnings):
+                status = s.AgentStatus.WARNING
+        except Exception as exc:  # noqa: BLE001 - gateway injoignable en cours de route
+            warnings.append(f"gateway injoignable pendant la décision ({type(exc).__name__}) : relancer")
     elif target and target.store_path.exists():
         store = Store(target.store_path)
         try:

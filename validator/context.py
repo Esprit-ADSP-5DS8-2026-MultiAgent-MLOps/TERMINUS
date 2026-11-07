@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from .contract import ContractConfig
+from .contract import NEVER_WAIVED, ContractConfig
 from .models import Finding, Manifest, Severity
 
 
@@ -24,6 +24,10 @@ class Context:
     level: str = ""
 
     def add(self, rule, code, severity, message, *, file=None, line=None, hint=None, evidence=None):
+        if severity == Severity.BLOCKER and code in self.cfg.waived_codes and code not in NEVER_WAIVED:
+            # un humain a donné raison au validateur v2 : le problème reste visible, il ne bloque plus
+            severity = Severity.WARNING
+            message = f"{message} [bloquant levé par {self.cfg.waived_by or 'un humain'}]"
         self.findings.append(Finding(
             rule=rule, code=code, severity=severity, level=self.level, message=message,
             file=str(file) if file is not None else None, line=line, hint=hint, evidence=evidence,

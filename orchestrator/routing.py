@@ -27,9 +27,25 @@ def after_validate(state: PipelineState) -> str:
         return "propose_manifest"
     if state.get("handoff_status") == "ERROR":  # panne du validateur, pas un projet rejeté
         return "end_failed"
+    if state.get("waived_codes") and _only_unwaivable(state):
+        return "end_blocked"   # un humain a déjà tranché ; ce qui reste ne se lève pas (sécurité)
     if state.get("handoff_status") in REPAIRABLE and state.get("repair_count", 0) < MAX_REPAIRS:
         return "repair"
     return "end_blocked"
+
+
+def _only_unwaivable(state: PipelineState) -> bool:
+    """Après un désaccord tranché : les bloquants restants sont-ils tous de ceux qu'un humain ne lève pas ?"""
+    import json
+
+    from validator.contract import NEVER_WAIVED
+
+    try:
+        findings = json.loads(Path(state["report_path"]).read_text(encoding="utf-8")).get("findings", [])
+    except (KeyError, OSError, ValueError):
+        return False
+    codes = {f["code"] for f in findings if f.get("severity") == "BLOCKER"}
+    return bool(codes) and codes <= NEVER_WAIVED
 
 
 def after_repair(state: PipelineState) -> str:
@@ -49,8 +65,10 @@ def after_gate_repair_review(state: PipelineState) -> str:
 
 
 def after_gate_validator_override(state: PipelineState) -> str:
-    # L'humain donne raison au v2 : la ligne continue sur le projet d'origine.
-    return "agent1" if last_decision(state) == "approve" else "end_blocked"
+    # L'humain donne raison au v2 : on revalide avec les bloquants du v1 levés (rapportés en avertissement).
+    # Les agents reçoivent ainsi un rapport complet (tâche, cible, métriques observées) qui trace la décision,
+    # au lieu d'un rapport BLOCKED sans manifeste.
+    return "validate" if last_decision(state) == "approve" else "end_blocked"
 
 
 def after_propose_manifest(state: PipelineState) -> str:

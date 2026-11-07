@@ -27,10 +27,14 @@ def main(argv=None) -> int:
     ap.add_argument("--snapshot-dir", default=None, help="copie en lecture seule du projet validé (si le passage de relais est autorisé)")
     ap.add_argument("--confirmed-by", default=None, help="nom de la personne qui a confirmé le manifest (trace, ne change pas le verdict)")
     ap.add_argument("--confirm-note", default=None)
+    ap.add_argument("--waive", action="append", default=[], metavar="CODE",
+                    help="bloquant levé par un humain (désaccord v1/v2) : rapporté en avertissement")
+    ap.add_argument("--waived-by", default=None, help="qui a levé les bloquants (trace)")
     ap.add_argument("-q", "--quiet", action="store_true")
     a = ap.parse_args(argv)
 
-    cfg = ContractConfig(allow_frameworks=frozenset(norm_dist(x) for x in a.allow_framework))
+    cfg = ContractConfig(allow_frameworks=frozenset(norm_dist(x) for x in a.allow_framework),
+                         waived_codes=frozenset(a.waive), waived_by=a.waived_by)
     rep = validate(a.project, cfg, snapshot_dir=a.snapshot_dir, confirmed_by=a.confirmed_by, confirm_note=a.confirm_note, dynamic=not a.no_dynamic, sandbox=a.sandbox, determinism=not a.no_determinism,
                    bandit=not a.no_bandit, timeout=a.timeout, env=a.env, cache_dir=a.cache_dir)
     if a.json:

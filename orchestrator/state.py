@@ -36,6 +36,7 @@ class PipelineState(TypedDict, total=False):
     retrain_count: int
     repair_count: int       # tentatives de réparation déjà faites (boucle du validateur v2)
     repaired_dir: str       # copie corrigée du projet, validée à la place de l'original
+    waived_codes: list[str]  # bloquants du v1 levés par un humain (désaccord v1/v2 tranché pour le v2)
     final_status: str       # DONE, BLOCKED, FAILED, REJECTED, MANIFEST_PROPOSED, CHAMPION_KEPT
 
     # --- superviseur -----------------------------------------------------------

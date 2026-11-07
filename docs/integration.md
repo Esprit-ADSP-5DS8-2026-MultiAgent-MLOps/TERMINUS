@@ -49,7 +49,9 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
   revalidation de la copie, 2 tentatives au plus, sans gate humaine. Le projet d'origine n'est jamais
   modifié. Nombre de tentatives et gate à confirmer avec Sarra.
 - Superviseur : `gemini` par défaut (`ORCH_SUPERVISOR`), règles si aucune clé.
-- `SCHEMA_VERSION = "0.2"`.
+- `SCHEMA_VERSION = "0.3"` (validé avec Ahmed) : gates `repair_review` et `validator_override`, décidées dans
+  Terminus ; après `validator_override` approuvé, revalidation avec les bloquants du v1 levés (voir
+  `docs/terminus.md`).
 
 ### 2. Agent 1 (Yacine) : `feature/agent-code-data-analysis`
 
@@ -106,6 +108,11 @@ Fait (branche `integ/agent2`) :
   sqlite:///runs/mlflow/mlflow.db`) ; une expérience et un modèle enregistré par projet ;
 - le candidat reçoit l'alias `candidate` ; il doit battre le seuil, le modèle naïf ET le champion actuel
   (alias `champion`) ; sinon `FAILED` avec la raison ;
+- le champion est rejugé sur **le même jeu de test** que le candidat (rechargé depuis le registre) ; son ancien
+  score, ou sa performance en production, ne sert que si on ne peut pas le faire prédire (colonnes ou classes
+  différentes, avertissement dans le résultat) ;
+- classification : les classes de l'encodeur (`label_classes`) sont enregistrées avec le modèle (metadata du
+  MLmodel et `mlflow_metadata.params`) ; l'Agent 3 s'en sert pour rendre l'étiquette d'origine, même texte ;
 - réentraînement : relancé par l'orchestrateur après la gate `retraining`, sur `new_data_path` s'il existe.
 
 Choix à valider avec Aziz :
@@ -151,14 +158,27 @@ Fait (branche `integ/agent3`) :
 À voir avec Syrine :
 - deux tests échouaient déjà sur sa branche (Syrine : à laisser tels quels) : `test_low_confidence_stops` (dossier `eval/expected_reports/`
   absent) et `test_push_requires_approval` (`docker_push` a un argument `source_ref` en plus) ;
-- `api.py.j2` renvoie `prediction: int` : la régression n'est pas servie (l'adaptateur s'arrête avec la raison) ;
+- régression servie : `prediction` est un `float` (et une chaîne pour des étiquettes texte), le type vient du
+  rapport (`io.output_schema`) ; les tests générés comparent les nombres à 1e-6 près (aller-retour JSON) ;
 - publication Docker Hub : `AGENT3_PUSH=1` + `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (et `DOCKER_IMAGE_NAMESPACE`)
   dans `agents/agent3/.env` ; l'approbation est la gate `champion_replacement`. Dépôt public par défaut sur Docker Hub.
   En ligne de commande interactive, comme le CLI de Syrine : destination affichée, choix du compte (Entrée = compte
   du `.env`, sinon un autre compte et son token), confirmation du push.
 
-À voir avec Aziz : `executor.py` encode la cible (`LabelEncoder`) sans garder l'encodeur dans le modèle ; le modèle
-prédit l'indice de la classe. L'adaptateur de l'Agent 3 rétablit les étiquettes ; à corriger à la source.
+Encodeur des étiquettes : corrigé à la source (Agent 2) ; l'adaptateur lit les classes enregistrées avec le modèle.
+
+#### Régression de bout en bout
+
+Projet de test : `eval/projects/house_prices` (prix de logements, données synthétiques générées par
+`eval/make_house_prices.py`, métrique `rmse`, `min_threshold` = erreur maximale acceptée). Ce qui a changé :
+- validateur v1 : pour `rmse` / `mae`, un score SOUS le seuil est bon (avant : avertissement à tort) ;
+- Agent 1 : pas de `NO_STRATIFY` sur une régression ;
+- Agent 3 : `prediction: float` ;
+- Agent 4 : le scénario `concept` augmente la cible de 50 % au-delà de la médiane (au lieu de `1 - prix`) ;
+- Terminus : barres à l'échelle de l'erreur, « plus bas = meilleur ».
+
+Boucle vérifiée : validateur → Agents 1, 2, 3 → Agent 4 (gateway, concept drift, réentraînement demandé) →
+Agent 2 sur les nouvelles données (champion rejugé sur le même jeu de test) → nouveau champion → Agent 3.
 
 ### 5. Agent 4 (Mohamed) : déjà conforme (`check-agent agent4 monitoring_agent.pipeline:run`)
 

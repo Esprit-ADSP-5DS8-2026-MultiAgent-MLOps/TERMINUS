@@ -111,3 +111,52 @@ def test_registry_history_shows_the_champion_alias(tmp_path, monkeypatch):
     c.set_registered_model_alias("projet", "champion", "2")
     history = api_module.model_history("projet")
     assert [(v["version"], v["aliases"]) for v in history] == [(2, ["champion"]), (1, [])]
+
+
+def test_each_station_says_what_it_did(api):
+    """Chaque gare du plan porte ses faits (lus dans les fichiers de CETTE exécution)."""
+    run_id = _start(api)
+    track = api.get(f"/api/runs/{run_id}").json()["track"]
+    validator = next(s for s in track if s["id"] == "validator")
+    facts = dict(validator["details"]["facts"])
+    assert facts["verdict"].startswith("ACCEPTED") and "dynamic ✓" in facts["niveaux"]
+    assert all("details" in s for s in track if s["status"] not in ("todo", "waiting", "running")
+               and not s.get("decided_by"))
+
+
+def test_v1_v2_comparison():
+    from orchestrator.api import compare_validators
+
+    v1 = {"findings": [{"code": "C6.UNPINNED", "severity": "BLOCKER", "message": "non épinglé"},
+                       {"code": "C10.ABSOLUTE_PATH", "severity": "BLOCKER", "message": "chemin absolu"},
+                       {"code": "C9.MISSING_SEED", "severity": "WARNING", "message": "graine"}]}
+    v2 = {"status": "REPAIR_REQUIRED", "next_action": "REPAIR",
+          "checks": [{"check_id": "ENV.DEPENDENCIES_PINNED", "status": "FAIL"}, {"check_id": "IO.PATHS", "status": "PASS"}],
+          "issues": [{"check_id": "ENV.DEPENDENCIES_PINNED", "description": "x"},
+                     {"check_id": "ML.REPRODUCIBILITY", "description": "pas de graine"}]}
+    c = compare_validators(v1, v2)
+    assert [(r["v1"], r["verdict"]) for r in c["rows"]] == [("C6.UNPINNED", "confirme"), ("C10.ABSOLUTE_PATH", "ne confirme pas")]
+    assert [i["v2"] for i in c["only_v2"]] == ["ML.REPRODUCIBILITY"]
+    assert c["summary"].startswith("1/2 bloquant(s) du v1 confirmé(s)")
+
+
+def test_agent4_live_reads_the_gateway_of_this_project(monkeypatch):
+    import httpx
+
+    from orchestrator import api as api_module
+
+    pages = {"/monitoring/status": {"project": "credit_risk", "predictions": 1600, "labels": 1400, "windows": 8,
+                                    "agent": {"decider": "mlx"}, "last_window": {"severity": "critical", "signals": ["x"]}},
+             "/monitoring/decisions": [{"id": "D1", "status": "awaiting_human", "action": "request_retraining"},
+                                       {"id": "D0", "status": "executed", "action": "increase_monitoring"}],
+             "/monitoring/decisions/D1": {"samples": [{"root_cause": "concept_drift", "summary": "s", "evidence": []}],
+                                          "policy": {"final_action": "request_retraining"}}}
+
+    def get(url, timeout=None):
+        path = url.removeprefix("http://127.0.0.1:8100")
+        return type("R", (), {"json": lambda _self: pages[path]})()
+
+    monkeypatch.setattr(httpx, "get", get)
+    live = api_module.agent4_live("credit_risk")
+    assert [d["id"] for d in live["pending"]] == ["D1"] and live["pending"][0]["root_cause"] == "concept_drift"
+    assert live["windows"] == 8 and api_module.agent4_live("autre_projet") is None
