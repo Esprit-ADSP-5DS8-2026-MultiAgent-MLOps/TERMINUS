@@ -47,7 +47,11 @@ MIN_ROWS = 50
 # nulle sur l'entraînement d'un modèle à arbres, elle rejetait des modèles qui généralisent bien.
 MAX_OVERFIT_SHARE = 0.5
 MAX_REL_OVERFIT_GAP = MAX_OVERFIT_SHARE     # ancien nom, gardé pour compatibilité
-MAX_REL_TEST_DROP = 0.25     # (validation - test) / validation
+# Cohérence validation -> test, sur la même échelle : part du gain sur le modèle naïf (en validation) perdue
+# au test. L'ancienne règle, (validation - test) / validation, refusait pour une erreur (rmse) un écart de
+# 8 points sur un modèle naïf à 101 (house_prices réentraîné : 28,5 -> 36,6, champion à 56,5).
+MAX_TEST_SHARE = 0.5
+MAX_REL_TEST_DROP = MAX_TEST_SHARE          # ancien nom, gardé pour compatibilité
 MINIMIZE = {"rmse", "mae"}
 # Model selection by k-fold cross-validation on train+validation. With small data (credit_risk:
 # 200 validation rows) one validation split is too noisy: it picked gradient boosting (val 0.812,
@@ -238,18 +242,21 @@ def overfit_share(metric, train, val, baseline_val) -> float:
 def quality_gate(metric, threshold, train, val, test, baseline, baseline_val=None) -> QualityGate:
     s = _sign(metric)
     gt, gv, gs, gb = s * train, s * val, s * test, s * baseline
-    share = overfit_share(metric, train, val, baseline if baseline_val is None else baseline_val)
+    base_v = baseline if baseline_val is None else baseline_val
+    share = overfit_share(metric, train, val, base_v)
+    test_share = overfit_share(metric, val, test, base_v)    # même calcul : du gain en validation au test
     drop = (gv - gs) / max(abs(gv), 1e-9)
     checks = {
         "meets_threshold": True if threshold is None
         else (test <= threshold if metric in MINIMIZE else test >= threshold),
         "beats_baseline": gs > gb,
         "overfit_gap_ok": share <= MAX_OVERFIT_SHARE,
-        "test_consistent_with_validation": drop <= MAX_REL_TEST_DROP,
+        "test_consistent_with_validation": test_share <= MAX_TEST_SHARE,
     }
     return QualityGate(passed=all(checks.values()), checks=checks,
                        details={"threshold": threshold, "overfit_share": round(min(share, 99.0), 4),
                                 "relative_overfit_gap": round((gt - gv) / max(abs(gt), 1e-9), 4),
+                                "test_share": round(min(test_share, 99.0), 4),
                                 "relative_test_drop": round(drop, 4)})
 
 

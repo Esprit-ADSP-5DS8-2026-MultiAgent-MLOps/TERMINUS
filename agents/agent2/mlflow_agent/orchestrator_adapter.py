@@ -54,7 +54,7 @@ CHECK_LABELS = {
     "meets_threshold": "score de test sous le seuil du manifeste",
     "beats_baseline": "ne bat pas le modèle naïf",
     "overfit_gap_ok": "sur-apprentissage : plus de la moitié du gain sur le modèle naïf perdue en validation",
-    "test_consistent_with_validation": "score de test trop bas par rapport à la validation",
+    "test_consistent_with_validation": "test incohérent avec la validation : plus de la moitié du gain sur le modèle naïf perdue",
 }
 
 

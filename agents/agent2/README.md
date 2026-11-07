@@ -287,7 +287,7 @@ A candidate is eligible only when every applicable check passes:
 | Minimum metric | Meets `task.min_primary_metric`; skipped if not supplied |
 | Beats baseline | Outperforms a dummy prior/constant baseline |
 | Overfit control | At most half of the model's gain over the naive model (measured on train) is lost on validation: `(train − val) / (train − naive_val)`, same scale for scores and errors (rmse, mae) |
-| Test consistency | Relative validation–test drop is no greater than 25% |
+| Test consistency | At most half of the validation gain over the naive model is lost on test: `(val − test) / (val − naive_val)` |
 
 The quality gate is plain deterministic Python. The LLM does not participate in the decision.
 

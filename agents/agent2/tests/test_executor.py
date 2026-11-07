@@ -112,6 +112,9 @@ def test_overfit_is_measured_on_the_gain_over_the_naive_model():
     assert overfit_share("rmse", 10.0, 31.46, 100.77) < MAX_OVERFIT_SHARE
     assert quality_gate("rmse", 40, 10.0, 31.46, 34.92, 100.77, 100.77).passed
     # l'ancienne règle, (val - train) / train = 2,1, l'aurait rejeté ; un vrai sur-apprentissage reste rejeté
+    # validation -> test, même échelle : 28,5 -> 36,6 sur un modèle naïf à 101 reste cohérent (réel, 2e passage)
+    assert quality_gate("rmse", 40, 10.0, 28.54, 36.61, 101.10, 101.10).checks["test_consistent_with_validation"]
+    assert not quality_gate("rmse", 90, 10.0, 28.54, 80.0, 101.10, 101.10).checks["test_consistent_with_validation"]
     assert overfit_share("roc_auc", 1.0, 0.6, 0.5) > MAX_OVERFIT_SHARE
     assert not quality_gate("roc_auc", 0.55, 1.0, 0.6, 0.6, 0.5, 0.5).checks["overfit_gap_ok"]
 
