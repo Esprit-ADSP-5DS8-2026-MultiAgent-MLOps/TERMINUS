@@ -82,7 +82,8 @@ def test_retraining_reads_agent4_parquet_and_compares_to_production(tmp_path):
     from common.schemas import AgentInput, RetrainingRequest, write_output
 
     new = tmp_path / "new_data.parquet"
-    pd.DataFrame({"amount": [1.0, 2.0], "target": [0, 1]}).to_parquet(new)
+    # labels de production : réels 0.0 / 1.0 (table SQLite de la gateway) ; on reprend le type du projet
+    pd.DataFrame({"amount": [1.0, 2.0], "target": [0.0, 1.0]}).to_parquet(new)
     wd = tmp_path / "agent2"
     wd.mkdir()
     req_inp = AgentInput(run_id="r", project_dir=str(CREDIT_RISK), report_path="", workdir=str(tmp_path),
@@ -93,8 +94,9 @@ def test_retraining_reads_agent4_parquet_and_compares_to_production(tmp_path):
     inp = AgentInput(run_id="r", project_dir=str(CREDIT_RISK), report_path="", workdir=str(wd),
                      inputs={"retraining_request": path})
     warnings = []
-    spec = type("S", (), {"data_path": "data.csv"})()
+    spec = type("S", (), {"data_path": "data.csv", "target": "target"})()
     data = _dataset(inp, spec, warnings)
     assert pd.read_csv(data).to_dict("list") == {"amount": [1.0, 2.0], "target": [0, 1]}
+    assert [line.split(",")[1] for line in data.read_text().splitlines()[1:]] == ["0", "1"]
     assert _production_score(inp, "roc_auc", warnings) == 0.64
     assert _production_score(inp, "f1", []) is None

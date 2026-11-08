@@ -299,8 +299,12 @@ def _log_and_register(pipe, registered_name: str | None, label_classes: list | N
 
 
 def _plain(values) -> list:
-    """Étiquettes en types Python simples (JSON) : numpy.int64 -> int, etc."""
-    return [v.item() if hasattr(v, "item") else v for v in values]
+    """Étiquettes en types Python simples (JSON) : numpy.int64 -> int, 1.0 -> 1 (les labels revenus de la
+    production via la gateway sont des réels : la classe « 1 » doit rester l'entier 1)."""
+    out = [v.item() if hasattr(v, "item") else v for v in values]
+    if out and all(isinstance(v, float) and v.is_integer() for v in out):
+        out = [int(v) for v in out]
+    return out
 
 
 def label_classes_of(model_uri: str) -> list | None:
