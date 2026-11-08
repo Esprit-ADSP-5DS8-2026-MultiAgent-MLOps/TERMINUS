@@ -378,6 +378,8 @@ def run(inp: AgentInput) -> AgentResult:
         try:
             _export_mlflow_model(meta, build)
             stored = None if regression else _model_classes(meta)
+            if stored is not None and all(isinstance(c, float) and c.is_integer() for c in stored):
+                stored = [int(c) for c in stored]   # modèle réentraîné sur des labels 0.0 / 1.0 (avant le correctif)
             if stored is not None:
                 classes = stored        # celles de l'entraînement, même si les données du projet ont changé
             elif not regression:

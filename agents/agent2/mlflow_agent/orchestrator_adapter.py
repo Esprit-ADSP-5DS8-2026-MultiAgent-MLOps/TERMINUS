@@ -111,7 +111,14 @@ def _dataset(inp: AgentInput, spec, warnings: list[str]) -> Path:
     dest = Path(inp.workdir) / "data" / "train.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
     if src.suffix.lower() in {".parquet", ".pq"}:   # nouvelles données de l'Agent 4
-        pd.read_parquet(src).to_csv(dest, index=False)
+        new = pd.read_parquet(src)
+        # labels de production stockés en réels (0.0 / 1.0) : on reprend le type de la cible du projet
+        original = pd.read_csv(Path(inp.project_dir) / spec.data_path, usecols=[spec.target])[spec.target]
+        y = new[spec.target] if spec.target in new else None
+        if (y is not None and pd.api.types.is_integer_dtype(original) and pd.api.types.is_float_dtype(y)
+                and y.dropna().apply(float.is_integer).all()):
+            new[spec.target] = y.astype("Int64")
+        new.to_csv(dest, index=False)
     else:
         shutil.copyfile(src, dest)
     return dest

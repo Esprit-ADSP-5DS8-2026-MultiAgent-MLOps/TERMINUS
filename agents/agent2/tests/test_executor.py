@@ -139,3 +139,16 @@ def test_an_overfitting_best_model_gives_way_to_the_next(tmp_path, monkeypatch):
                        experiment_name="test_exp")
     assert r.best_model_name == "logistic_regression", (r.errors, r.warnings)
     assert any("random_forest écarté" in w for w in r.warnings)
+
+
+def test_float_labels_from_production_stay_integer_classes(tmp_path, monkeypatch):
+    """Réentraînement : la gateway rend les labels en 0.0 / 1.0 ; les classes enregistrées restent 0 et 1
+    (sinon l'API servait « 1 » en texte et ses tests échouaient)."""
+    X, y = make_classification(n_samples=400, n_features=8, n_informative=5, random_state=0)
+    df = pd.DataFrame(X, columns=[f"f{i}" for i in range(8)])
+    df["churn"] = y.astype(float)
+    csv = tmp_path / "train.csv"
+    df.to_csv(csv, index=False)
+    r = run(tmp_path, monkeypatch, report(0.6), ResolvedPaths(tmp_path, csv, None))
+    assert r.status == "success", r.errors
+    assert r.label_classes == [0, 1] and all(type(c) is int for c in r.label_classes)
