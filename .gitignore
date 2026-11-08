@@ -36,7 +36,7 @@ mlartifacts/
 # Agent 3 : dossiers de travail générés à chaque exécution (fixes/ reste versionné)
 agents/agent3/workspaces/
 
-# Modèles fine-tunés (fusionnés, GGUF) : hébergés sur Hugging Face, jamais dans git
+# Modèles fine-tunés (adaptateurs, fusionnés, GGUF) : jamais dans git
 *.gguf
 *.safetensors
 
@@ -49,3 +49,4 @@ agents/validator/results_*.json
 # interface web Terminus
 web/node_modules/
 web/dist/
+web/.vite/

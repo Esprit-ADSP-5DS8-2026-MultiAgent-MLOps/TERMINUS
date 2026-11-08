@@ -33,7 +33,7 @@ elle devient `main` et remplace `feature/contract-validator` comme branche par d
 | 6 | Sarra | validateur v2, réparation, juge : nœud `repair` | intégré, à valider avec Sarra |
 | 6b | tout le groupe | validations humaines dans Slack (`python -m orchestrator slack`, docs/slack.md) | intégré, listes de validation à remplir |
 | 6c | Mohamed | Terminus : API (`python -m orchestrator api`, docs/terminus.md), validations réparation et désaccord v1/v2 | intégré, front React à faire |
-| 7 | tout le groupe | démo complète, README, `main` | à faire |
+| 7 | tout le groupe | démo complète, README, `main` | fait |
 
 ## Fiche de chaque meet
 
